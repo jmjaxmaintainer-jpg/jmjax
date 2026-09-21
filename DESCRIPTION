@@ -2,8 +2,8 @@ Package: jmjax
 Type: Package
 Title: Joint Models for Longitudinal and Survival Data via 'JAX'
 Version: 0.2.0
-Authors@R: person("FIRSTNAME", "LASTNAME", email = "gcbn25@hotmail.com",
-                  role = c("aut", "cre"))
+Authors@R: person("Changbin", "Guo", email = "jmjax.maintainer@gmail.com",
+                  role = c("aut", "cre", "cph"))
 Description: Fits shared-parameter joint models (linear mixed-effects
     longitudinal submodel + relative-risk survival submodel with Weibull or
     spline-approximated baseline hazard) using a 'JAX'/'NumPyro' backend for
