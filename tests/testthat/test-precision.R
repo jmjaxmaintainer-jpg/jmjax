@@ -77,7 +77,14 @@ test_that("a fit records the precision that produced it", {
   expect_true("sampling_time_sec" %in% names(fit$convergence))
 
   # ...and be visible without digging into the object.
-  out <- paste(utils::capture.output(print(fit)), collapse = "\n")
+  #
+  # suppressWarnings because print.jmjax warns when max R-hat exceeds its
+  # threshold, and 100 warmup / 100 samples is deliberately too small to
+  # converge - this test is about what gets RECORDED, not about fit
+  # quality, and paying for convergence here would add a minute to the
+  # suite to assert something three other files already assert.
+  out <- suppressWarnings(
+    paste(utils::capture.output(print(fit)), collapse = "\n"))
   expect_match(out, "Precision: float64")
 })
 

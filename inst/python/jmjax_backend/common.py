@@ -47,7 +47,13 @@ def guard_initial_theta(neg_log_lik, data, theta_prefit, theta_default):
     def _probe(th):
         """Objective AND gradient - L-BFGS-B needs both to be finite."""
         try:
-            t = jnp.asarray(th, dtype=jnp.float32)
+            # NOT dtype=jnp.float32. This probe decides whether the prefit
+            # starting values are usable, so it must ask that question in
+            # the SAME arithmetic the optimizer will actually use - a
+            # finiteness check run in single precision can disagree with
+            # the double-precision run it is vouching for. result_type(float)
+            # is float64 when x64 is on and float32 when it is not.
+            t = jnp.asarray(th, dtype=jnp.result_type(float))
             v = float(neg_log_lik(t, data))
             g = np.asarray(jax.grad(lambda z: neg_log_lik(z, data))(t))
             return v, g

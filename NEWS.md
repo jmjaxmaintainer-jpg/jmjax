@@ -1,5 +1,76 @@
 # jmjax (development)
 
+## Warm start
+
+* **The MCMC warm start now supplies the spline baseline hazard**, and under
+  `spline_prior = "penalized"` this fixes a defect that made the warm start
+  worse than useless on that prior.
+
+  The warm start supplied `beta`, `sigma_e`, `sigma_b`, `L_corr` and
+  `b_std` from the `lme()` pre-fit, and left the spline block to
+  `init_to_uniform`. Under `independent` that is harmless, because `W` is
+  sampled directly. Under `penalized` it is not: `W01 ~ Normal(0, 10)` is
+  initialised uniformly on `[-2, 2]`, so the implied slope
+  `W01[2] - W01[1]` can be 4, and the RW2 construction extrapolates it
+  linearly - `w_rest[k] = W01[2] + k*(W01[2] - W01[1])` reaches about 22 by
+  the fifth coefficient. The hazard is `exp(B W)`, and `exp(22)` is 3.6e9.
+
+  Measured on the same data with the same supplied sites:
+
+  | `spline_prior` | potential at warm start | at uniform start | accepted |
+  |---|---|---|---|
+  | `independent` | 860.2 | 2087.5 | yes |
+  | `penalized` | 1,533,123,067 | 10,763.9 | no |
+
+  The warm start is now seeded from the same Weibull-projected spline
+  coefficients the maximum-likelihood path already used
+  (`survreg` → log hazard at the event times → `lm.fit` onto the spline
+  basis). Under `penalized` the RW2 construction is inverted so that the
+  sampled sites `W01`, `z_step` and `tau_w` reproduce those coefficients
+  exactly, with `sigma_w` chosen as the SD of the second differences so
+  `z_step` starts on the unit scale its `N(0, 1)` prior expects.
+
+  `alpha` is now supplied as 0 for the same class of reason: the hazard
+  carries `exp(alpha * m)`, and a uniform-random `alpha` multiplying a
+  correctly warm-started trajectory blows up the same way `W01` did.
+
+  This was found only because enabling float64 changed the fixed PRNG draws
+  in the self-check and the accident stopped holding. Under float32 the
+  penalized warm start was accepted by a margin of 7.6% (2139.0 against
+  2316.1) where it should have been better by a factor of two or more.
+
+* **`control$init_values` supplied by the caller is no longer overwritten.**
+  `jm_fit()` replaced it unconditionally with its own `lme` warm start, so
+  user-supplied starting values were silently discarded and
+  `fit$convergence$warm_start` then reported on sites the caller had never
+  supplied. The warm start now only runs when no starting values were given.
+
+* **The warm-start rejection test asserts on the fit object, not on a
+  warning.** It wrapped the call in
+  `expect_warning(regexp = "warm start REJECTED")`, but that warning comes
+  from Python's `warnings.warn` inside the backend and arrives on stderr
+  rather than as an R condition - so the text appeared in the test log
+  while the expectation failed. `fit$convergence$warm_start$used` exists
+  for exactly this, and the test now also checks that the corrupted values
+  actually reached the model (`sites` is `beta`, `sigma_e` and nothing
+  else), which was not true while `init_values` was being overwritten.
+
+* **`test-scale-time.R` compares against Monte Carlo error** rather than a
+  fixed 2% relative tolerance. The old bar was a statement about sampler
+  noise rather than about reparameterization invariance, and whether it
+  passed depended on how large a parameter happened to be in the generated
+  data - `alpha` near -0.13 made 2% into 0.0026, well below what 250
+  warmup / 250 samples can resolve. The bound is now
+  `4 * sqrt(mcse_0^2 + mcse_1^2)` with `mcse = SD / sqrt(ESS)`, which
+  cannot fail from noise alone while a genuine scaling bug (a ratio of 5 or
+  25) misses it by orders of magnitude.
+
+* **Three hardcoded `jnp.float32` casts removed** from the backend, now that
+  it runs in double precision. The consequential one was in `common.py`: the
+  probe that decides whether the pre-fit starting values are usable was
+  evaluating finiteness in single precision on behalf of a double-precision
+  optimizer.
+
 ## Numerical precision
 
 * **The Python backend now runs in double precision (float64) by default.**

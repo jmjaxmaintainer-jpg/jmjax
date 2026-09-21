@@ -163,6 +163,26 @@ test_that("the warm start is built, accepted, and better than a cold start", {
   expect_true("b_std" %in% unlist(ws$sites))
   expect_true("beta" %in% unlist(ws$sites))
 
+  # The SPLINE BLOCK, which is what made this test meaningful rather than
+  # lucky. Before these sites were supplied, the warm start left W01,
+  # z_step and tau_w to init_to_uniform - and W01 ~ Normal(0, 10) drawn
+  # uniformly on [-2, 2] gives an implied slope of up to 4, which the RW2
+  # construction extrapolates linearly (w_rest[k] = W01[2] + k*(W01[2] -
+  # W01[1])) to about 22 by the fifth coefficient. The hazard is exp(B W).
+  #
+  # Measured at the time: potential 1,533,123,067 at the warm start
+  # against 10,763.9 at a uniform one. The test still passed under float32,
+  # by a margin of 7.6% (2139.0 vs 2316.1), because the two precisions draw
+  # different numbers from the same PRNG key. It was reading a coin landing
+  # on its edge, and asserting `used` alone could not tell the difference.
+  expect_true("W01" %in% unlist(ws$sites))
+  expect_true("z_step" %in% unlist(ws$sites))
+
+  # And a margin that a re-roll of the unsupplied sites cannot flip. The
+  # warm start should be better by a wide factor, not by 7%.
+  expect_lt(as.numeric(ws$potential_warm),
+            0.5 * as.numeric(ws$potential_uniform))
+
   # Lower potential energy is higher log-density. The margin is large when
   # the transform is right; this only asserts the direction.
   expect_lt(as.numeric(ws$potential_warm), as.numeric(ws$potential_uniform))
@@ -178,23 +198,75 @@ test_that("a warm start on the wrong scale is rejected rather than used", {
   # collectively far worse than random.
   sim <- simulate_joint_data_re2(n = 150, seed = 3)
 
-  expect_warning(
-    fit <- jm_fit(
-      long_formula = y ~ time,
-      surv_formula = survival::Surv(time, event) ~ 1,
-      data_long = sim$data_long, data_surv = sim$data_surv,
-      id_var = "id", time_var = "time",
-      method = "spline-PH-mcmc", random_effects = "intercept_slope",
-      random_formula = ~ time,
-      control = list(spline_prior = "penalized",
-                     init_values = list(beta = c(500, 500), sigma_e = 0.01),
-                     num_warmup = 100, num_samples = 100, num_chains = 1,
-                     progress_bar = FALSE)
-    ),
-    regexp = "warm start REJECTED"
-  )
+  # ASSERTED ON THE FIT OBJECT, NOT ON A WARNING. The first version of this
+  # test wrapped the call in expect_warning(regexp = "warm start REJECTED").
+  # That warning is raised by Python's warnings.warn inside the backend and
+  # arrives on stderr rather than as an R condition, so expect_warning()
+  # cannot see it - the text appears in the test log while the expectation
+  # fails, which is a confusing way to be wrong.
+  #
+  # convergence$warm_start exists precisely so a rejection is visible in the
+  # object rather than only in a message a non-interactive run would
+  # swallow. That is the channel to assert on.
+  fit <- suppressWarnings(jm_fit(
+    long_formula = y ~ time,
+    surv_formula = survival::Surv(time, event) ~ 1,
+    data_long = sim$data_long, data_surv = sim$data_surv,
+    id_var = "id", time_var = "time",
+    method = "spline-PH-mcmc", random_effects = "intercept_slope",
+    random_formula = ~ time,
+    control = list(spline_prior = "penalized",
+                   init_values = list(beta = c(500, 500), sigma_e = 0.01),
+                   num_warmup = 100, num_samples = 100, num_chains = 1,
+                   progress_bar = FALSE)
+  ))
 
-  expect_false(isTRUE(as.logical(fit$convergence$warm_start$used)))
+  ws <- fit$convergence$warm_start
+  expect_false(is.null(ws))
+  expect_false(isTRUE(as.logical(ws$used)))
+
+  # The corrupted values must actually have REACHED the model - which they
+  # did not before jm_fit() stopped overwriting control$init_values, so this
+  # test was passing while exercising something else entirely.
+  expect_identical(sort(unlist(ws$sites)), c("beta", "sigma_e"))
+
+  # And be rejected on the merits, not by accident.
+  expect_gt(as.numeric(ws$potential_warm), as.numeric(ws$potential_uniform))
+
   # Rejected, not fatal: the fit still completes from the default start.
   expect_true(all(is.finite(unlist(fit$diagnostics$rhat))))
+})
+
+test_that("user-supplied init_values are not replaced by the lme warm start", {
+  skip_if_no_backend()
+  skip_if_slow_mcmc()
+
+  # jm_fit() used to overwrite control$init_values with its own lme warm
+  # start unconditionally, so a caller who supplied starting values had
+  # them silently discarded - and fit$convergence$warm_start then reported
+  # on sites they had never supplied, which is worse than ignoring them
+  # quietly. It also meant the rejection test above was not exercising the
+  # values it thought it was.
+  sim <- simulate_joint_data_re2(n = 150, seed = 3)
+
+  fit <- suppressWarnings(jm_fit(
+    long_formula = y ~ time,
+    surv_formula = survival::Surv(time, event) ~ 1,
+    data_long = sim$data_long, data_surv = sim$data_surv,
+    id_var = "id", time_var = "time",
+    method = "spline-PH-mcmc", random_effects = "intercept_slope",
+    random_formula = ~ time,
+    control = list(spline_prior = "penalized",
+                   init_values = list(sigma_e = 0.42),
+                   num_warmup = 100, num_samples = 100, num_chains = 1,
+                   progress_bar = FALSE)
+  ))
+
+  ws <- fit$convergence$warm_start
+  expect_false(is.null(ws))
+
+  # Exactly what was handed in, and nothing else. b_std would mean the lme
+  # warm start ran anyway; W01 would mean the spline block was folded into
+  # someone else's starting values without being asked.
+  expect_identical(sort(unlist(ws$sites)), "sigma_e")
 })

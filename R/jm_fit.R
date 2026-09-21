@@ -1811,8 +1811,15 @@ jm_fit <- function(long_formula,
   # The backend then runs its own check - comparing the potential energy at
   # this start against a uniform one - and rejects it if it is not actually
   # better.
+  #
+  # `.ws_auto` records whether the values in control$init_values are ours or
+  # the caller's, which decides later whether we may add the spline block to
+  # them. A caller who supplied their own starting values asked for those
+  # values, not for ours quietly folded in alongside.
+  .ws_auto <- FALSE
   if (method %in% c("spline-PH-mcmc", "weibull-PH-mcmc") &&
-      isTRUE(control$mcmc_warm_start %||% TRUE)) {
+      isTRUE(control$mcmc_warm_start %||% TRUE) &&
+      is.null(control$init_values)) {
     .ws <- tryCatch({
       .lme_ws <- if (inherits(control$.lme_object, "lme")) {
         control$.lme_object
@@ -1878,7 +1885,17 @@ jm_fit <- function(long_formula,
               conditionMessage(e), "); using the default start.")
       NULL
     })
-    if (!is.null(.ws)) control$init_values <- .ws
+    # Previously this overwrote control$init_values unconditionally, so a
+    # caller who supplied their own starting values had them silently
+    # discarded and replaced by the lme warm start - with no warning, and
+    # with fit$convergence$warm_start reporting on values they never
+    # supplied. The `is.null(control$init_values)` guard above is the fix;
+    # this assignment is now only ever reached when there was nothing to
+    # overwrite.
+    if (!is.null(.ws)) {
+      control$init_values <- .ws
+      .ws_auto <- TRUE
+    }
   }
   # ---- Time-scale consistency check -----------------------------------
   # The joint model evaluates the longitudinal trajectory AT the survival
@@ -1943,12 +1960,35 @@ jm_fit <- function(long_formula,
     # negation converts survreg's AFT parameterisation to PH; the
     # conversion below does that explicitly instead.)
     #
-    # MLE only for now: the MCMC path's penalized RW2 prior places its own
-    # structure on these coefficients, and seeding NUTS was separately
-    # measured to be unhelpful - it already recovers scales unaided.
-    if (method == "spline-PH-aGH" &&
-        isTRUE(control$init_from_prefit %||% TRUE) &&
-        is.null(control$init_spline)) {
+    # This projection is now used by BOTH paths. The comment here used to
+    # read "MLE only for now: ... seeding NUTS was separately measured to be
+    # unhelpful - it already recovers scales unaided", and that was true of
+    # the case it was measured on: NUTS starting from init_to_uniform
+    # EVERYWHERE does recover the baseline scale by itself.
+    #
+    # It stopped being true when mcmc_warm_start arrived, because that
+    # creates a case nobody measured - beta, sigma_e, sigma_b and b_std at
+    # the lme optimum while the spline block is still a uniform draw. Under
+    # spline_prior = "penalized" that combination is catastrophic, and the
+    # arithmetic says why. W01 ~ Normal(0, 10) is initialised uniformly on
+    # [-2, 2], so the implied slope W01[2] - W01[1] can be 4, and the RW2
+    # construction extrapolates it linearly: w_rest[k] = W01[2] +
+    # k*(W01[2] - W01[1]), reaching ~22 by the fifth coefficient. The
+    # hazard is exp(B W), and exp(22) is 3.6e9.
+    #
+    # Measured, on the same data and the same supplied sites:
+    #
+    #   spline_prior   potential at warm start   at uniform start   used
+    #   independent                      860.2             2087.5   TRUE
+    #   penalized                1,533,123,067           10,763.9   FALSE
+    #
+    # The independent prior was fine because its W is sampled directly, so
+    # a uniform draw of it is merely mediocre rather than explosive.
+    .want_spline_init <- isTRUE(control$init_from_prefit %||% TRUE) &&
+      (method == "spline-PH-aGH" ||
+       (method == "spline-PH-mcmc" && isTRUE(.ws_auto)))
+
+    if (.want_spline_init && is.null(control$init_spline)) {
       control$init_spline <- tryCatch({
         .sr <- survival::survreg(surv_formula, data = data_surv, dist = "weibull")
         # survreg fits log(T) = mu + sigma * W (extreme value), so in PH terms
@@ -1961,6 +2001,67 @@ jm_fit <- function(long_formula,
         .co <- stats::lm.fit(as.matrix(backend_args$B_T), .logh0)$coefficients
         if (any(!is.finite(.co))) NULL else unname(.co)
       }, error = function(e) NULL, warning = function(w) NULL)
+    }
+
+    # ---- Hand those coefficients to the MCMC warm start -----------------
+    # Only when a warm start was actually built above; without one the
+    # spline block is left alone, which is the configuration the original
+    # "unhelpful" measurement covered and which still holds.
+    if (method == "spline-PH-mcmc" && isTRUE(.ws_auto) &&
+        !is.null(control$init_spline)) {
+      .w <- as.numeric(control$init_spline)
+      .ns <- as.integer(spline_info$n_splines)
+      .prior <- control$spline_prior %||% "independent"
+
+      if (length(.w) == .ns && all(is.finite(.w))) {
+        if (identical(.prior, "penalized")) {
+          # Invert the RW2 construction so the sampled sites reproduce .w
+          # EXACTLY, rather than approximating it. The model builds
+          #   W = c(W01, W01[2] + k*(W01[2]-W01[1]) + sigma_w*cumsum(cumsum(z)))
+          # so W01 is the first two coefficients, and z is recovered by
+          # second-differencing what is left after the linear part.
+          #
+          # sigma_w is then chosen as the SD of those second differences,
+          # which puts z on the unit scale its N(0,1) prior expects - the
+          # alternative, fixing sigma_w and letting z absorb the scale,
+          # starts the chain in the tail of z's own prior.
+          .nr <- .ns - 2L
+          if (.nr >= 1L) {
+            .k <- seq_len(.nr)
+            .lin <- .w[2] + .k * (.w[2] - .w[1])
+            .res <- .w[-(1:2)] - .lin
+            .c1 <- c(.res[1], diff(.res))
+            .zr <- c(.c1[1], diff(.c1))
+            .sw <- if (.nr > 1L) stats::sd(.zr) else 1
+            if (!is.finite(.sw) || .sw < 1e-6) .sw <- 1
+            .sw <- min(max(.sw, 1e-3), 1e3)
+            control$init_values$W01 <- .w[1:2]
+            control$init_values$z_step <- .zr / .sw
+            control$init_values$tau_w <- 1 / .sw^2
+          }
+        } else {
+          control$init_values$W <- .w
+        }
+      }
+
+      # alpha was omitted for the same reason the spline block was: lme
+      # has no association parameter to report. But omitting it leaves it
+      # uniform on [-2, 2], and the hazard carries exp(alpha * m) where m
+      # is the fitted trajectory - so a random alpha multiplies a
+      # warm-started, correctly-scaled m and can blow up exactly as W01
+      # does. Zero is the neutral value, not a guess: it is the null of no
+      # association, and NUTS moves off it immediately.
+      #
+      # All four names are supplied because which ones EXIST depends on
+      # functional_forms: plain `alpha` with no channel, otherwise
+      # `alpha_value` plus one of alpha_delta / alpha_area / alpha_area_avg.
+      # Names the model does not sample are simply never looked up by the
+      # init strategy, so listing them all is safe and avoids duplicating
+      # the backend's channel-selection logic here, where it would rot.
+      for (.an in c("alpha", "alpha_value", "alpha_delta",
+                    "alpha_area", "alpha_area_avg")) {
+        if (is.null(control$init_values[[.an]])) control$init_values[[.an]] <- 0
+      }
     }
 
     # IMPORTANT: build this with an explicit loop, not apply()+array()

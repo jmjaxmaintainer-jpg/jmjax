@@ -58,12 +58,51 @@ test_that("scale_time leaves every reported parameter unchanged", {
 
   # A KNOWN divisor, so a failure lands on a recognisable multiple: a ratio
   # of 5 means the correction never fired, 25 means it fired backwards.
+  #
+  # TOLERANCE IS MONTE CARLO ERROR, NOT A FIXED PERCENTAGE. The original
+  # version asserted a 2% RELATIVE tolerance on every parameter, which is
+  # not a statement about reparameterization invariance - it is a statement
+  # about sampler noise, and it fails or passes depending on how large the
+  # parameter happens to be in the generated data. alpha here is around
+  # -0.13, so 2% is 0.0026, which is far below what 250 warmup / 250
+  # samples can resolve. It passed for a while and then stopped, and the
+  # thing that changed was arithmetic precision - not the scaling code the
+  # test exists to protect.
+  #
+  # Two independent chains estimating the same posterior mean differ by
+  # roughly sqrt(mcse_0^2 + mcse_1^2), where mcse = posterior SD / sqrt(ESS).
+  # Four of those is a wide but finite bar: it cannot fail from noise alone,
+  # and a genuine scaling bug misses it by orders of magnitude (a ratio of
+  # 5 on a parameter of 0.13 is an error of 0.5, against a tolerance here
+  # of order 0.01).
+  mcse <- function(f, nm) {
+    s <- suppressWarnings(as.numeric(f$se[[nm]]))
+    e <- suppressWarnings(as.numeric(unlist(f$diagnostics$ess)[[nm]]))
+    if (!length(s) || !length(e) || !is.finite(s) || !is.finite(e) || e <= 0) {
+      return(NA_real_)
+    }
+    s / sqrt(e)
+  }
+
   for (nm in c("beta_0", "beta_1", "beta_2", "sigma_e",
                "sigma_b0", "sigma_b1", "alpha")) {
-    expect_equal(f1$estimates[[nm]], f0$estimates[[nm]], tolerance = 0.02,
-                 label = sprintf("%s: off %.6f vs on %.6f (ratio %.4f)", nm,
-                                 f0$estimates[[nm]], f1$estimates[[nm]],
-                                 f1$estimates[[nm]] / f0$estimates[[nm]]))
+    m0 <- mcse(f0, nm); m1 <- mcse(f1, nm)
+    d  <- abs(f1$estimates[[nm]] - f0$estimates[[nm]])
+
+    # Fall back to the old relative bar if ESS is unavailable for a
+    # parameter, so a missing diagnostic weakens the check rather than
+    # silently skipping it.
+    tol <- if (is.na(m0) || is.na(m1)) {
+      0.02 * max(abs(f0$estimates[[nm]]), 1e-8)
+    } else {
+      4 * sqrt(m0^2 + m1^2)
+    }
+
+    expect_lt(d, tol,
+              label = sprintf(
+                "%s: off %.6f vs on %.6f (ratio %.4f, |diff| %.5f, tol %.5f)",
+                nm, f0$estimates[[nm]], f1$estimates[[nm]],
+                f1$estimates[[nm]] / f0$estimates[[nm]], d, tol))
   }
 })
 

@@ -172,7 +172,11 @@ def build_model(p, q, n_splines, max_obs, alpha_prior_sd=2.0,
             # jm_fit_prefit(), which has a coxph object to read; the formula
             # interface has none, so it falls back to zero-centred.
             if gamma_prior_mean is not None:
-                _gm = jnp.atleast_1d(jnp.array(gamma_prior_mean, dtype=jnp.float32))
+                # result_type(float), not float32: a float32 prior mean in
+                # an otherwise float64 model silently truncates the
+                # coxph coefficient it exists to carry.
+                _gm = jnp.atleast_1d(jnp.array(gamma_prior_mean,
+                                               dtype=jnp.result_type(float)))
                 if _gm.shape[0] == n_gamma:
                     gamma = numpyro.sample("gamma", dist.Normal(_gm, gamma_prior_sd))
                 else:
@@ -1115,7 +1119,8 @@ def fit_nuts(X_long, y_long, n_obs, X_time_surv, X_time_quad,
     beta_se = control.get("beta_se", None)
     if control.get("seed_mass_matrix", False) and beta_se is not None:
         try:
-            beta_se_arr = jnp.atleast_1d(jnp.array(beta_se, dtype=jnp.float32))
+            beta_se_arr = jnp.atleast_1d(jnp.array(beta_se,
+                                                   dtype=jnp.result_type(float)))
             # LENGTH CHECK: beta_se comes from the lme() pre-fit, which uses
             # long_formula - the same formula X_long is built from, so the
             # lengths SHOULD match. But a silent mismatch would produce a
