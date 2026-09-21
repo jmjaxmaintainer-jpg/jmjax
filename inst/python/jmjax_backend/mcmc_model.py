@@ -1,0 +1,1444 @@
+"""
+Full Bayesian (NUTS) fit of the spline-baseline joint model.
+
+Unlike the two MLE backends, this supports multivariate random effects
+(random intercept + slope) because NUTS samples the random effects directly
+as parameters rather than marginalizing them via quadrature.
+
+Return-value design (this is the piece that was refactored from the first
+working version): population-level parameters (beta, sigma_e, sigma_b,
+alpha, W) and per-subject random effects (b) are kept SEPARATE, rather than
+flattened into one estimates vector - a fit with 300 subjects would
+otherwise produce a 300+ element "estimates" table dominated by individual
+subject effects, burying the parameters actually of interest. Convergence
+is assessed via NumPyro's real split-R-hat and effective sample size
+diagnostics (numpyro.diagnostics.summary), not a placeholder.
+"""
+import time
+import warnings
+import numpy as np
+import jax
+import jax.numpy as jnp
+import numpyro
+import numpyro.distributions as dist
+from numpyro.infer import MCMC, NUTS, HMCGibbs
+from numpyro.infer.util import log_density as numpyro_log_density
+from numpyro.diagnostics import summary as numpyro_summary
+from numpyro.contrib.control_flow import scan as numpyro_scan
+
+RHAT_CONVERGED_THRESHOLD = 1.05
+
+
+def build_model(p, q, n_splines, max_obs, alpha_prior_sd=2.0,
+                 sigma_e_prior_mean=None, sigma_e_prior_shape=5.0,
+                 lkj_concentration=3.0,
+                 gamma_prior_mean=None, gamma_prior_sd=2.0,
+                 baseline_hazard="spline",
+                 spline_prior="independent",
+                 spline_penalty_shape=5.0, spline_penalty_rate=0.5,
+                 beta_prior_mean=None, beta_prior_sd=None,
+                 sigma_b_prior_mean=None, sigma_b_prior_shape=5.0,
+                 random_effects_corr=True,
+                 random_effects_method="nuts",
+                 rw2_implementation="scan"):
+    """
+    Factory for the joint-model log-density, shared by fit_nuts() (which
+    runs NUTS against it) and evaluate_log_density() (which evaluates it at
+    arbitrary parameter values, e.g. the true simulation parameters, for
+    diagnostic purposes). Extracting this ensures both code paths use the
+    EXACT same model - a hand-reimplemented formula for diagnostic purposes
+    would risk a subtle mismatch that defeats the point of a rigorous check.
+
+    baseline_hazard:
+      "spline" (default) - B-spline approximated log baseline hazard, per
+        spline_prior below. B_T/B_quad must be real spline basis matrices.
+      "weibull" - closed-form Weibull baseline hazard (log(shape) +
+        (shape-1)*log(t) + log_lambda0), matching the ALREADY-VALIDATED MLE
+        Weibull backend's parameterization exactly (weibull_model.py) -
+        added specifically to isolate whether an alpha discrepancy seen
+        under the spline model is about spline/quadrature specifics or
+        something more fundamental in the random-effects/association
+        mechanism, by removing splines from the picture entirely. B_T/B_quad
+        are accepted but IGNORED in this branch (pass trivial placeholders).
+
+    spline_prior, spline_penalty_shape/rate: only used when
+    baseline_hazard="spline" - see spline-specific docs below.
+      "independent" - W ~ iid Normal(0, 3), no smoothing at all.
+      "penalized" - RW2 + Gamma precision hyperprior, matching JMbayes2's
+        P-spline approach (shape=5.0, rate=0.5 CONFIRMED to match JMbayes2's
+        actual defaults via fit$priors$A_tau_bs_gammas/$B_tau_bs_gammas).
+
+    beta_prior_mean/sd, sigma_b_prior_mean/shape: EMPIRICAL-BAYES prior
+    centering, matching JMbayes2's confirmed approach (see fit$priors$
+    D_sds_mean, $gamma_prior_D_sds - directly verified against a real
+    JMbayes2 fit during development). Applies regardless of baseline_hazard.
+    If None, falls back to jmjax's original uninformative priors
+    (Normal(0,5) for beta, HalfNormal(2) for sigma_b).
+
+    NOTE: evaluate_log_density()/find_map_b_std() (used in the profile-
+    likelihood diagnostic work) currently only support baseline_hazard=
+    "spline" with spline_prior="independent" and no empirical-Bayes
+    centering - extend those functions if a similarly rigorous check is
+    needed under other settings.
+    """
+    def model(X_long, y_long, n_obs, X_time_surv, X_time_quad,
+              T_surv, event, t_quad, gk_weights, B_T, B_quad,
+              Z_long, Z_time_surv, Z_time_quad, N_sub,
+              X_delta_surv=None, X_delta_quad=None,
+              X_area_surv=None, X_area_quad=None,
+              X_area_avg_surv=None, X_area_avg_quad=None,
+              Z_delta_surv=None, Z_delta_quad=None,
+              Z_area_surv=None, Z_area_quad=None,
+              Z_area_avg_surv=None, Z_area_avg_quad=None,
+              W_surv=None):
+        if beta_prior_mean is not None:
+            beta = numpyro.sample("beta", dist.Normal(jnp.atleast_1d(jnp.array(beta_prior_mean)),
+                                                        jnp.atleast_1d(jnp.array(beta_prior_sd))))
+        else:
+            beta = numpyro.sample("beta", dist.Normal(0.0, 5.0).expand([p]))
+        # sigma_e: empirical-Bayes Gamma centred on the lme() pre-fit's
+        # residual SD, matching JMbayes2's construction exactly. Verified
+        # against a fitted jm object's $priors:
+        #     gamma_prior_sigmas = TRUE, sigmas_shape = 5,
+        #     sigmas_mean = 0.349  (= the lme residual SD)
+        # A Gamma(shape=a, rate=a/m) has mean m and CV 1/sqrt(a), so
+        # shape 5 gives a ~45% CV centred on the pre-fit estimate - the
+        # same parameterisation already used for sigma_b below.
+        #
+        # Previously HalfNormal(2.0), which ignored the data scale
+        # entirely. Falls back to that when no pre-fit value is available
+        # (empirical_bayes_prior = FALSE, or the internal lme() failed).
+        if sigma_e_prior_mean is not None:
+            _se_mean = jnp.maximum(jnp.array(float(sigma_e_prior_mean)), 1e-8)
+            sigma_e = numpyro.sample(
+                "sigma_e",
+                dist.Gamma(sigma_e_prior_shape, sigma_e_prior_shape / _se_mean))
+        else:
+            sigma_e = numpyro.sample("sigma_e", dist.HalfNormal(2.0))
+
+        # Split into alpha_value/alpha_<channel> when an extra channel is
+        # present, matching the MLE backends' naming convention exactly -
+        # a pure config-time check on whether real data was passed for
+        # one of the X_*_surv arrays, not a per-element JAX tracing
+        # conditional (each is either a real array or None for the WHOLE
+        # call, decided once by the R side before tracing begins; the
+        # R side guards against combining more than one channel at once,
+        # so at most one of these three is ever non-None).
+        if X_delta_surv is not None:
+            channel_name = "delta"
+        elif X_area_surv is not None:
+            channel_name = "area"
+        elif X_area_avg_surv is not None:
+            channel_name = "area_avg"
+        else:
+            channel_name = None
+
+        if channel_name is not None:
+            alpha_value = numpyro.sample("alpha_value", dist.Normal(0.0, alpha_prior_sd))
+            alpha_extra = numpyro.sample(f"alpha_{channel_name}", dist.Normal(0.0, alpha_prior_sd))
+        else:
+            alpha = numpyro.sample("alpha", dist.Normal(0.0, alpha_prior_sd))
+
+        # Baseline (time-constant) covariates in the SURVIVAL submodel -
+        # gamma'W_i, a per-subject CONSTANT contribution to the log-hazard,
+        # added identically to the event-time hazard and every quadrature
+        # node (same formula as the already-validated MLE backends'
+        # baseline-covariates functions - see weibull_model.py's
+        # _fit_mle_with_baseline_covariates). n_gamma is read directly off
+        # W_surv's own (static, trace-time-known) shape rather than a
+        # separate factory parameter, since nothing before this point
+        # needs to know it.
+        #
+        # Two separate shapes are needed: gamma_term (flat [N_sub], added
+        # to the event-time hazard) and gamma_term_quad ([N_sub, 1], added
+        # to the [N_sub, n_quad]-shaped quadrature-node hazard - a genuine
+        # bug caught after an initial version used gamma_term directly in
+        # both places: [N_sub, n_quad] + [N_sub] fails to broadcast,
+        # since alignment happens from the RIGHT, trying to match n_quad
+        # against N_sub). When W_surv is None, gamma_term stays the plain
+        # Python scalar 0.0, which broadcasts safely against ANY shape
+        # with no reshaping needed at all - gamma_term_quad is set to the
+        # SAME scalar 0.0 in that case (0.0[:, None] would itself error,
+        # since a plain float isn't subscriptable).
+        gamma_term = 0.0
+        gamma_term_quad = 0.0
+        if W_surv is not None:
+            n_gamma = W_surv.shape[-1]
+            # gamma_prior_mean centres the survival-covariate prior on the
+            # coxph() pre-fit's coefficients, matching JMbayes2's
+            # mean_gammas (verified: coef(coxph) = -0.06697697 against
+            # JMbayes2's mean_gammas = -0.067 on the same fit). The SD of 2
+            # already matches JMbayes2's Tau_gammas = 0.25. Supplied only by
+            # jm_fit_prefit(), which has a coxph object to read; the formula
+            # interface has none, so it falls back to zero-centred.
+            if gamma_prior_mean is not None:
+                _gm = jnp.atleast_1d(jnp.array(gamma_prior_mean, dtype=jnp.float32))
+                if _gm.shape[0] == n_gamma:
+                    gamma = numpyro.sample("gamma", dist.Normal(_gm, gamma_prior_sd))
+                else:
+                    warnings.warn(
+                        f"gamma_prior_mean has length {_gm.shape[0]} but the model "
+                        f"has {n_gamma} baseline covariate(s); ignoring it and "
+                        "using a zero-centred prior.", RuntimeWarning)
+                    gamma = numpyro.sample("gamma", dist.Normal(0.0, gamma_prior_sd).expand([n_gamma]))
+            else:
+                gamma = numpyro.sample("gamma", dist.Normal(0.0, gamma_prior_sd).expand([n_gamma]))
+            gamma_term = jnp.einsum("ng,g->n", W_surv, gamma)
+            gamma_term_quad = gamma_term[:, None]
+
+        if baseline_hazard == "weibull":
+            # Matches weibull_model.py's MLE parameterization exactly:
+            # log h0(t) = log(shape) + (shape-1)*log(t) + log_lambda0.
+            log_lambda0 = numpyro.sample("log_lambda0", dist.Normal(-2.0, 2.0))
+            log_shape = numpyro.sample("log_shape", dist.Normal(0.0, 1.0))
+            shape = numpyro.deterministic("shape", jnp.exp(log_shape))
+        elif spline_prior == "penalized":
+            tau_w = numpyro.sample("tau_w", dist.Gamma(spline_penalty_shape, spline_penalty_rate))
+            sigma_w = 1.0 / jnp.sqrt(tau_w)
+            # First two coefficients are unpenalized (an order-2 difference
+            # penalty has a 2-dimensional null space - constant and linear
+            # trends in the coefficient sequence - matching how P-splines
+            # are always specified: only *changes in slope* of the
+            # coefficient sequence are penalized).
+            W01 = numpyro.sample("W01", dist.Normal(0.0, 10.0).expand([2]))
+
+            # NON-CENTERED reparameterization: sample a unit-scale z_step and
+            # scale by sigma_w afterward, rather than sampling w_next
+            # directly with mean/scale both depending on sigma_w. The
+            # centered version creates classic "funnel" geometry (NUTS needs
+            # a very different step size depending on whether tau_w is large
+            # or small), which showed up empirically as unusually variable
+            # ESS/second across benchmark scenarios (13.9 to 61.7 ESS/sec
+            # for the same model on different datasets) - a hallmark of
+            # funnel-driven sampling inefficiency. This is the standard fix
+            # (Betancourt & Girolami; standard NumPyro/Stan practice for
+            # hierarchical scale parameters).
+            if rw2_implementation == "vectorized":
+                # VECTORIZED closed-form RW2 construction, replacing the
+                # sequential scan below. Derivation: the recursion
+                #   W_k = 2*W_{k-1} - W_{k-2} + sigma_w*z_k   (k=3..K)
+                # has closed-form solution (verified by direct
+                # substitution/induction):
+                #   W_k = W_2 + (k-2)*(W_2-W_1) + sigma_w * S2_k
+                # where S2_k is the DOUBLE cumulative sum of the
+                # innovations z_3,...,z_K (i.e. cumsum(cumsum(z))).
+                # Mathematically IDENTICAL to the scan version - same
+                # linear recursion, solved in closed form instead of
+                # stepped through sequentially - but replaces an O(K)
+                # sequential dependency chain (with per-step
+                # numpyro.sample bookkeeping overhead) with two vectorized
+                # jnp.cumsum calls, letting XLA use its optimized
+                # (parallelizable, prefix-sum) execution instead of a
+                # strictly sequential loop.
+                n_rest = n_splines - 2
+                z_step = numpyro.sample("z_step", dist.Normal(0.0, 1.0).expand([n_rest]))
+                s2 = jnp.cumsum(jnp.cumsum(z_step))
+                k_offset = jnp.arange(1, n_rest + 1)  # (k-2) for k=3..K -> 1,2,...,n_rest
+                w_rest = W01[1] + k_offset * (W01[1] - W01[0]) + sigma_w * s2
+            else:
+                def rw2_step(carry, _):
+                    w_prev2, w_prev1 = carry
+                    z_step = numpyro.sample("z_step", dist.Normal(0.0, 1.0))
+                    w_next = 2.0 * w_prev1 - w_prev2 + sigma_w * z_step
+                    return (w_prev1, w_next), w_next
+
+                _, w_rest = numpyro_scan(rw2_step, (W01[0], W01[1]), None, length=n_splines - 2)
+            # Registered as a deterministic site so it appears in
+            # get_samples() under "W" uniformly regardless of which prior
+            # branch was used - _package_result()'s extraction logic and
+            # everything downstream doesn't need to know which branch ran.
+            W = numpyro.deterministic("W", jnp.concatenate([W01, w_rest]))
+        else:
+            W = numpyro.sample("W", dist.Normal(0.0, 3.0).expand([n_splines]))
+
+        if q == 1:
+            if sigma_b_prior_mean is not None:
+                # jnp.atleast_1d guards against sigma_b_prior_mean arriving as
+                # a 0-dimensional array - a length-1 R vector (the q=1 case,
+                # e.g. sqrt(diag(getVarCov(lme_fit))) for a 1x1 matrix) can
+                # convert via reticulate to a plain Python scalar rather than
+                # a length-1 array, and jnp.array(scalar)[0] then fails with
+                # "Too many indices: array is 0-dimensional".
+                rate = sigma_b_prior_shape / jnp.atleast_1d(jnp.array(sigma_b_prior_mean))[0]
+                sigma_b = numpyro.sample("sigma_b", dist.Gamma(sigma_b_prior_shape, rate))
+            else:
+                sigma_b = numpyro.sample("sigma_b", dist.HalfNormal(2.0))
+            with numpyro.plate("subjects", N_sub):
+                b = numpyro.sample("b", dist.Normal(0.0, sigma_b))
+            b = b[:, None]
+        else:
+            if random_effects_method == "wishart_gibbs":
+                # NEW, EXPERIMENTAL: D (the full q x q random-effects
+                # covariance matrix, jointly encoding sigma_b0, sigma_b1,
+                # AND rho) is sampled via a Wishart-conjugate GIBBS update
+                # (see the matching gibbs_fn in fit_nuts()) instead of
+                # NUTS exploring an LKJCholesky-parameterized L_corr via
+                # gradients. This mirrors JMbayes2's own documented
+                # approach (Rizopoulos 2016, JSS: "for the random effects
+                # precision matrix D^-1 ... the posterior conditional is
+                # a Wishart distribution") - D_inv is a closed-form draw
+                # from a known distribution given the current b's, with
+                # ZERO gradient evaluations needed for this parameter
+                # block, unlike the LKJCholesky+HMC approach.
+                #
+                # D_inv is still declared as a numpyro.sample site (with
+                # the SAME Wishart prior used in the Gibbs update below)
+                # so NUTS's conditional log-density for the OTHER sites
+                # correctly includes its contribution - HMCGibbs
+                # substitutes the Gibbs-drawn value here rather than
+                # letting NUTS sample it via gradients.
+                #
+                # b is sampled DIRECTLY (centered parameterization) rather
+                # than via a non-centered b_std @ L.T transform - safe
+                # here specifically because D is held FIXED (substituted
+                # by the Gibbs step) during each NUTS sub-step, so the
+                # classic funnel-geometry problem (which requires JOINT
+                # exploration of a variance parameter and the effects
+                # that depend on it) doesn't arise the way it would if D
+                # were being explored via HMC simultaneously.
+                nu0 = float(q + 1)  # minimal weakly-informative Wishart df
+
+                # S0 (the Wishart prior's scale matrix) controls WHERE the
+                # prior on D sits. The original default is S0 = I, which
+                # ignores the data scale entirely - a known problem: the
+                # inverse-Wishart family is documented to bias variances
+                # UPWARD and correlations toward zero when the true
+                # variance is small relative to the prior mean, with the
+                # bias persisting even at large n. For a random slope with
+                # true sd ~0.2 (variance 0.04) against an S0=I prior mean
+                # near 1, that is a ~25x mismatch.
+                #
+                # wishart_eb_scale = TRUE instead centers the prior on the
+                # lme() pre-fit's own variance estimates, the same
+                # empirical-Bayes information jmjax's DEFAULT path already
+                # uses for its Gamma priors on sigma_b (and that JMbayes2
+                # uses for its D_sds_mean - confirmed by direct inspection
+                # of a fitted jm object's $priors).
+                #
+                # Math: for D^-1 ~ Wishart(nu0, S0), E[D^-1] = nu0 * S0, so
+                # E[D] ~= S0^-1 / (nu0 - q - 1) for nu0 > q + 1. With the
+                # minimal nu0 = q + 1 that expectation is undefined (the
+                # boundary case), so for the EB-scaled version we use
+                # nu0 = q + 2, the smallest df giving a finite prior mean,
+                # and set S0 = (D_hat * (nu0 - q - 1))^-1 = D_hat^-1 so
+                # that E[D] = D_hat exactly.
+                if bool(control.get("wishart_eb_scale", False)) and sigma_b_prior_mean is not None:
+                    nu0 = float(q + 2)  # smallest df with a finite prior mean for D
+                    sd_hat = jnp.atleast_1d(jnp.array(sigma_b_prior_mean))
+                    # Diagonal D_hat from the pre-fit SDs (correlation is
+                    # deliberately NOT imposed here - the prior should be
+                    # centered on the right SCALE without also asserting a
+                    # correlation direction).
+                    D_hat = jnp.diag(sd_hat ** 2)
+                    S0 = jnp.linalg.inv(D_hat)
+                else:
+                    S0 = jnp.eye(q)     # original fixed prior scale (default)
+
+                D_inv = numpyro.sample("D_inv", dist.Wishart(concentration=nu0, scale_matrix=S0))
+                D = jnp.linalg.inv(D_inv)
+                D_sym = 0.5 * (D + D.T)  # numerical symmetry safety
+                with numpyro.plate("subjects", N_sub):
+                    b = numpyro.sample("b", dist.MultivariateNormal(jnp.zeros(q), covariance_matrix=D_sym))
+            elif random_effects_method == "wishart_gibbs_centered":
+                # EXPERIMENTAL, ADD-ON VARIANT - fully separate from
+                # "wishart_gibbs" above (which is left entirely untouched).
+                # Addresses a diagnosed, near-perfect posterior anti-
+                # correlation (-0.95, confirmed empirically) between beta_0
+                # and mean(b_i0) across subjects - a classic location-
+                # degeneracy: the data only constrain beta_0 + mean(b_i0),
+                # not the two separately, so NUTS spends real exploration
+                # effort tracing out a narrow ridge between them (the
+                # mechanistic reason beta_0 consistently showed the lowest
+                # ESS of any parameter across every random-effects
+                # configuration tested).
+                #
+                # Fix: the RAW sampled random effects (b_raw) are exactly
+                # what the Wishart-Gibbs update (see the matching gibbs_fn
+                # in fit_nuts(), which reads hmc_sites["b_raw"] for this
+                # branch specifically) needs - left unconstrained, exactly
+                # as in the "wishart_gibbs" branch. But the value actually
+                # used in the LIKELIHOOD is a deterministic transform that
+                # subtracts the current sample's own mean from the
+                # intercept column only, forcing mean(b_i0) = 0 EXACTLY at
+                # every posterior draw - not just encouraged toward zero by
+                # the prior. This removes the beta_0/mean(b_i0) degeneracy
+                # by construction: with mean(b_i0) pinned at zero, all
+                # population-level intercept information must flow through
+                # beta_0 alone, with nothing left to trade off against.
+                # The slope column (if q=2) is left unchanged, since the
+                # diagnosed coupling was specific to the intercept.
+                #
+                # This is a deterministic, differentiable transform of an
+                # already-valid latent variable - HMC gradients flow
+                # through it without issue, and the (singular) implied
+                # marginal prior on the centered b is a valid distribution
+                # confined to the sum-to-zero hyperplane for its intercept
+                # component.
+                nu0 = float(q + 1)
+                S0 = jnp.eye(q)
+                D_inv = numpyro.sample("D_inv", dist.Wishart(concentration=nu0, scale_matrix=S0))
+                D = jnp.linalg.inv(D_inv)
+                D_sym = 0.5 * (D + D.T)
+                with numpyro.plate("subjects", N_sub):
+                    b_raw = numpyro.sample("b_raw", dist.MultivariateNormal(jnp.zeros(q), covariance_matrix=D_sym))
+                b0_centered = b_raw[:, 0] - jnp.mean(b_raw[:, 0])
+                b = numpyro.deterministic("b", jnp.concatenate([b0_centered[:, None], b_raw[:, 1:]], axis=1))
+            else:
+                if sigma_b_prior_mean is not None:
+                    rate_vec = sigma_b_prior_shape / jnp.atleast_1d(jnp.array(sigma_b_prior_mean))
+                    sigma_b = numpyro.sample("sigma_b", dist.Gamma(sigma_b_prior_shape, rate_vec))
+                else:
+                    sigma_b = numpyro.sample("sigma_b", dist.HalfNormal(2.0).expand([q]))
+                if random_effects_corr:
+                    # concentration=3.0 matches JMbayes2's D_L_etaLKJ = 3,
+                    # verified against a fitted jm object's $priors. For
+                    # q=2 the density is proportional to (1 - rho^2)^(eta-1),
+                    # so eta=3 gives Var(rho) = 1/(2*eta - 1) = 0.2 against
+                    # 0.333 at the previous eta=2 - modestly more shrinkage
+                    # toward zero correlation.
+                    L_corr = numpyro.sample("L_corr", dist.LKJCholesky(q, concentration=lkj_concentration))
+                    L = sigma_b[:, None] * L_corr
+                    with numpyro.plate("subjects", N_sub):
+                        b_std = numpyro.sample("b_std", dist.Normal(0.0, 1.0).expand([q]).to_event(1))
+                    b = numpyro.deterministic("b", b_std @ L.T)
+                else:
+                    # Simpler alternative: intercept and slope sampled
+                    # INDEPENDENTLY (no LKJCholesky prior, no b_std @ L.T
+                    # matrix multiply, no rho parameter at all - matching a
+                    # common simpler mixed-model specification that assumes
+                    # zero correlation between random intercept and slope).
+                    # Found via a direct empirical comparison against an
+                    # external NumPyro prototype using this simpler structure
+                    # - genuinely worth offering as an option, not just a
+                    # performance shortcut, since the correlated model's
+                    # extra parameter (rho) and coupling between b0/b1's
+                    # gradients can add real geometric difficulty for NUTS
+                    # beyond just the matrix multiply's own compute cost, and
+                    # a user with a genuine substantive reason to assume
+                    # independence pays no cost for modeling a correlation
+                    # they don't believe exists.
+                    with numpyro.plate("subjects", N_sub):
+                        b = numpyro.sample("b", dist.Normal(0.0, sigma_b).to_event(1))
+
+        mu_long = jnp.einsum("nop,p->no", X_long, beta) + jnp.einsum("noq,nq->no", Z_long, b)
+        mask = jnp.arange(max_obs)[None, :] < n_obs[:, None]
+        # BUG FIX (see NEWS/commit history): previously used
+        #   numpyro.sample("y_obs", dist.Normal(mu_long, sigma_e), obs=jnp.where(mask, y_long, y_long))
+        # which was a no-op mask, scoring padded zero-slots as real
+        # zero-residual observations and systematically deflating sigma_e.
+        log_p_y = dist.Normal(mu_long, sigma_e).log_prob(y_long)
+        numpyro.factor("y_obs", jnp.sum(jnp.where(mask, log_p_y, 0.0)))
+
+        if baseline_hazard == "weibull":
+            log_h0_T = jnp.log(shape) + (shape - 1.0) * jnp.log(T_surv) + log_lambda0
+            log_h0_quad = jnp.log(shape) + (shape - 1.0) * jnp.log(t_quad) + log_lambda0
+        else:
+            log_h0_T = jnp.dot(B_T, W)
+            log_h0_quad = jnp.dot(B_quad, W)
+
+        m_T = jnp.einsum("np,p->n", X_time_surv, beta) + jnp.einsum("nq,nq->n", Z_time_surv, b)
+        m_quad = (jnp.einsum("nkp,p->nk", X_time_quad, beta)
+                  + jnp.einsum("nkq,nq->nk", Z_time_quad, b))
+
+        if channel_name is not None:
+            if channel_name == "delta":
+                X_extra_surv, X_extra_quad = X_delta_surv, X_delta_quad
+                Z_extra_surv, Z_extra_quad = Z_delta_surv, Z_delta_quad
+            elif channel_name == "area":
+                X_extra_surv, X_extra_quad = X_area_surv, X_area_quad
+                Z_extra_surv, Z_extra_quad = Z_area_surv, Z_area_quad
+            else:  # area_avg
+                X_extra_surv, X_extra_quad = X_area_avg_surv, X_area_avg_quad
+                Z_extra_surv, Z_extra_quad = Z_area_avg_surv, Z_area_avg_quad
+
+            if Z_extra_surv is not None:
+                # GENERAL rule (q=2, or any q where the R side has
+                # computed Z_extra explicitly): m_extra(t) = X_extra(t) @
+                # beta + Z_extra(t) @ b - the SAME rule already validated
+                # on the MLE side's q=2 extension
+                # (weibull_model.py's _fit_mle_q2_extra_channel).
+                m_extra_T = (jnp.einsum("np,p->n", X_extra_surv, beta)
+                             + jnp.einsum("nq,nq->n", Z_extra_surv, b))
+                m_extra_quad = (jnp.einsum("nkp,p->nk", X_extra_quad, beta)
+                                 + jnp.einsum("nkq,nq->nk", Z_extra_quad, b))
+            else:
+                # q=1-specific shortcuts (Z_extra not computed/passed by R
+                # for q=1 - see jm_fit.R's channel-construction code,
+                # which only builds Z_delta/Z_area/Z_area_avg when q>1) -
+                # each already validated against its MLE counterpart, and
+                # each a special case of the general rule above: delta's Z
+                # has a zero first column -> no b term at all; area's is
+                # t -> b_i*t; area_avg's is 1 -> plain b_i.
+                b_scalar = b[:, 0]
+                if channel_name == "delta":
+                    m_extra_T = jnp.einsum("np,p->n", X_extra_surv, beta)
+                    m_extra_quad = jnp.einsum("nkp,p->nk", X_extra_quad, beta)
+                elif channel_name == "area":
+                    m_extra_T = jnp.einsum("np,p->n", X_extra_surv, beta) + b_scalar * T_surv
+                    m_extra_quad = (jnp.einsum("nkp,p->nk", X_extra_quad, beta)
+                                     + b_scalar[:, None] * t_quad)
+                else:  # area_avg
+                    m_extra_T = jnp.einsum("np,p->n", X_extra_surv, beta) + b_scalar
+                    m_extra_quad = jnp.einsum("nkp,p->nk", X_extra_quad, beta) + b_scalar[:, None]
+
+            log_hazard = log_h0_T + gamma_term + alpha_value * m_T + alpha_extra * m_extra_T
+            hazard_quad = jnp.exp(log_h0_quad + gamma_term_quad + alpha_value * m_quad + alpha_extra * m_extra_quad)
+        else:
+            log_hazard = log_h0_T + gamma_term + alpha * m_T
+            hazard_quad = jnp.exp(log_h0_quad + gamma_term_quad + alpha * m_quad)
+
+        cum_hazard = T_surv * jnp.sum(hazard_quad * gk_weights[None, :], axis=1)
+
+        surv_log_prob = event * log_hazard - cum_hazard
+        numpyro.factor("surv_log_prob", surv_log_prob)
+
+    return model
+
+
+def find_map_b_std(X_long, y_long, n_obs, X_time_surv, X_time_quad,
+                    T_surv, event, t_quad, gk_weights,
+                    B_T, B_quad, Z_long, Z_time_surv, Z_time_quad,
+                    beta, sigma_e, alpha, W, sigma_b, L_corr,
+                    n_newton_steps=20):
+    """
+    For FIXED population parameters theta, find the per-subject b_std_i (in
+    the model's b = b_std @ L.T reparameterization) that maximizes the
+    joint conditional log-density - i.e. the MAP random effect given theta.
+
+    Why this exists: comparing log-density at (theta_true, b_true_simulated)
+    vs (theta_hat, b_hat_posterior_mean) is NOT a fair comparison, even when
+    theta_true is exactly correct - b_true_simulated is one random draw
+    from its prior, while b_hat_posterior_mean is effectively tuned to fit
+    the data well. A fair, theta-vs-theta comparison requires optimizing b
+    EQUALLY for both candidates: profile_log_density(theta) =
+    joint_log_density(theta, b = find_map_b_std(theta)). This function
+    computes that optimal b_std via per-subject 2D Newton steps (a
+    generalization of the scalar Newton mode-finding already used in the
+    adaptive-GH MLE backend, common.py's find_mode_and_tau, to a correlated
+    2D random intercept+slope).
+
+    Uses symmetrized-and-eigenvalue-clipped Hessians for numerical safety
+    (guards against a non-negative-definite Hessian derailing the Newton
+    step, generalizing common.py's scalar clipping to the 2x2 case).
+    """
+    beta = jnp.array(beta)
+    sigma_e = jnp.array(sigma_e)
+    alpha = jnp.array(alpha)
+    W = jnp.array(W)
+    sigma_b = jnp.array(sigma_b)
+    L_corr = jnp.array(L_corr)
+    L = sigma_b[:, None] * L_corr
+    q = L.shape[0]
+
+    X_long = jnp.array(X_long)
+    y_long = jnp.array(y_long)
+    n_obs = jnp.array(n_obs)
+    X_time_surv = jnp.array(X_time_surv)
+    X_time_quad = jnp.array(X_time_quad)
+    T_surv = jnp.array(T_surv)
+    event = jnp.array(event)
+    t_quad = jnp.array(t_quad)
+    gk_weights = jnp.array(gk_weights)
+    B_T = jnp.array(B_T)
+    B_quad = jnp.array(B_quad)
+    Z_long = jnp.array(Z_long)
+    Z_time_surv = jnp.array(Z_time_surv)
+    Z_time_quad = jnp.array(Z_time_quad)
+    max_obs = X_long.shape[1]
+
+    def h_subject(b_std_i, X_long_i, y_i, n_i, X_time_surv_i, X_time_quad_i,
+                  T_i, event_i, t_quad_i, B_T_i, B_quad_i,
+                  Z_long_i, Z_time_surv_i, Z_time_quad_i):
+        b_i = L @ b_std_i
+
+        mu = X_long_i @ beta + Z_long_i @ b_i
+        log_p_y_terms = -0.5 * jnp.log(2.0 * jnp.pi) - jnp.log(sigma_e) - 0.5 * ((y_i - mu) / sigma_e) ** 2
+        mask = jnp.arange(max_obs) < n_i
+        log_p_y = jnp.sum(jnp.where(mask, log_p_y_terms, 0.0))
+
+        log_h0_T = jnp.dot(B_T_i, W)
+        m_T = X_time_surv_i @ beta + Z_time_surv_i @ b_i
+        log_h_T = log_h0_T + alpha * m_T
+
+        log_h0_quad = jnp.dot(B_quad_i, W)
+        m_quad = X_time_quad_i @ beta + Z_time_quad_i @ b_i
+        hazard_quad = jnp.exp(log_h0_quad + alpha * m_quad)
+        cum_H = T_i * jnp.sum(gk_weights * hazard_quad)
+
+        log_p_surv = event_i * log_h_T - cum_H
+
+        # Standard normal prior on b_std (matches the model exactly: the
+        # theta-dependent covariance is entirely captured by L above).
+        log_prior_bstd = -0.5 * jnp.sum(b_std_i ** 2) - 0.5 * q * jnp.log(2.0 * jnp.pi)
+
+        return log_p_y + log_p_surv + log_prior_bstd
+
+    grad_fn = jax.grad(h_subject, argnums=0)
+    hess_fn = jax.hessian(h_subject, argnums=0)
+
+    def newton_step(b_std_i, subj_args, eps=1e-6):
+        g = grad_fn(b_std_i, *subj_args)
+        H = hess_fn(b_std_i, *subj_args)
+        H_sym = 0.5 * (H + H.T)
+        eigvals, eigvecs = jnp.linalg.eigh(H_sym)
+        eigvals_safe = jnp.minimum(eigvals, -eps)  # ensure negative definite
+        H_safe = eigvecs @ jnp.diag(eigvals_safe) @ eigvecs.T
+        delta = jnp.linalg.solve(H_safe, g)
+        return b_std_i - delta
+
+    def newton_solve(subj_args):
+        def step(b, _):
+            return newton_step(b, subj_args), None
+        b_final, _ = jax.lax.scan(step, jnp.zeros(q), None, length=n_newton_steps)
+        return b_final
+
+    b_std_map = jax.vmap(lambda *args: newton_solve(args))(
+        X_long, y_long, n_obs, X_time_surv, X_time_quad,
+        T_surv, event, t_quad, B_T, B_quad, Z_long, Z_time_surv, Z_time_quad
+    )
+
+    return np.asarray(b_std_map)  # [N_sub, q]
+
+
+def evaluate_log_density(X_long, y_long, n_obs, X_time_surv, X_time_quad,
+                          T_surv, event, t_quad, gk_weights,
+                          B_T, B_quad, n_splines,
+                          Z_long, Z_time_surv, Z_time_quad,
+                          beta, sigma_e, alpha, W, sigma_b, b_std,
+                          L_corr=None, random_effects="intercept_slope",
+                          alpha_prior_sd=2.0):
+    """
+    Evaluate the EXACT joint log-density (log-likelihood + log-prior, same
+    quantity NUTS's potential energy is built from) at a given, fully
+    specified parameter point - via numpyro.infer.util.log_density, not a
+    hand-reimplemented formula. Used to rigorously check whether a
+    posterior that converged (good R-hat) to a value far from the true
+    simulation parameters is because the data genuinely supports that value
+    more than the truth (a real, if unlucky, statistical outcome - not a
+    bug), or because something is wrong (the true parameters would score
+    HIGHER density than what NUTS converged to, despite good diagnostics -
+    which would point to a real remaining implementation issue).
+
+    All arguments except b_std/L_corr/sigma_b/random_effects/alpha_prior_sd
+    match fit_nuts()'s data arguments exactly. Parameter arguments (beta,
+    sigma_e, alpha, W, sigma_b, b_std, L_corr) must be given as VALUES in
+    the model's natural (constrained) parameter space - e.g. sigma_e > 0
+    directly, not a log/unconstrained transform - matching what
+    numpyro.infer.util.log_density expects.
+
+    Returns the scalar joint log-density (float) - directly comparable
+    between two calls with different parameter values on the SAME data.
+    """
+    N_sub, max_obs, p = np.asarray(X_long).shape
+    q = 1 if random_effects == "intercept" else 2
+
+    model = build_model(p, q, n_splines, max_obs, alpha_prior_sd=alpha_prior_sd)
+
+    params = {
+        "beta": jnp.array(beta),
+        "sigma_e": jnp.array(sigma_e),
+        "alpha": jnp.array(alpha),
+        "W": jnp.array(W),
+        "sigma_b": jnp.array(sigma_b),
+    }
+    if q == 1:
+        params["b"] = jnp.array(b_std)  # for q=1, "b" is sampled directly
+    else:
+        if L_corr is None:
+            raise ValueError("L_corr is required when random_effects != 'intercept'")
+        params["L_corr"] = jnp.array(L_corr)
+        params["b_std"] = jnp.array(b_std)
+
+    model_kwargs = dict(
+        X_long=jnp.array(X_long), y_long=jnp.array(y_long), n_obs=jnp.array(n_obs),
+        X_time_surv=jnp.array(X_time_surv), X_time_quad=jnp.array(X_time_quad),
+        T_surv=jnp.array(T_surv), event=jnp.array(event), t_quad=jnp.array(t_quad),
+        gk_weights=jnp.array(gk_weights), B_T=jnp.array(B_T), B_quad=jnp.array(B_quad),
+        Z_long=jnp.array(Z_long), Z_time_surv=jnp.array(Z_time_surv), Z_time_quad=jnp.array(Z_time_quad),
+        N_sub=N_sub,
+    )
+
+    log_joint, _ = numpyro_log_density(model, (), model_kwargs, params)
+    return float(log_joint)
+
+
+def fit_nuts(X_long, y_long, n_obs, X_time_surv, X_time_quad,
+             T_surv, event, t_quad, gk_weights,
+             B_T, B_quad, n_splines,
+             Z_long=None, Z_time_surv=None, Z_time_quad=None,
+             X_delta_surv=None, X_delta_quad=None,
+             X_area_surv=None, X_area_quad=None,
+             X_area_avg_surv=None, X_area_avg_quad=None,
+             Z_delta_surv=None, Z_delta_quad=None,
+             Z_area_surv=None, Z_area_quad=None,
+             Z_area_avg_surv=None, Z_area_avg_quad=None,
+             W_surv=None,
+             random_effects="intercept",
+             init_theta=None, control=None):
+    control = control or {}
+    N_sub, max_obs, p = X_long.shape
+    q = 1 if random_effects == "intercept" else 2
+
+    if Z_long is None:
+        Z_long = X_long[:, :, :q]
+        Z_time_surv = X_time_surv[:, :q]
+        Z_time_quad = X_time_quad[:, :, :q]
+
+    alpha_prior_sd = float(control.get("alpha_prior_sd", 2.0))
+    baseline_hazard = control.get("baseline_hazard", "spline")
+    spline_prior = control.get("spline_prior", "independent")
+    spline_penalty_shape = float(control.get("spline_penalty_shape", 5.0))
+    spline_penalty_rate = float(control.get("spline_penalty_rate", 0.5))
+    beta_prior_mean = control.get("beta_prior_mean", None)
+    beta_prior_sd = control.get("beta_prior_sd", None)
+    sigma_b_prior_mean = control.get("sigma_b_prior_mean", None)
+    sigma_b_prior_shape = float(control.get("sigma_b_prior_shape", 5.0))
+    sigma_e_prior_mean = control.get("sigma_e_prior_mean", None)
+    sigma_e_prior_shape = float(control.get("sigma_e_prior_shape", 5.0))
+    lkj_concentration = float(control.get("lkj_concentration", 3.0))
+    gamma_prior_mean = control.get("gamma_prior_mean", None)
+    gamma_prior_sd = float(control.get("gamma_prior_sd", 2.0))
+    random_effects_corr = bool(control.get("random_effects_corr", True))
+    random_effects_method = control.get("random_effects_method", "nuts")
+    # DEFAULT CHANGED from "scan" to "vectorized".
+    #
+    # "scan" is UNUSABLE on the stack this package pins. numpyro's
+    # scan_wrapper builds its carry with device_put((0, rng_key, init)) -
+    # device_put applied to a TUPLE containing a Python int - which yields a
+    # weakly-typed int32. From jax 0.4.30 onward that carry element's tangent
+    # is float0 on one side of lax.scan's backward pass and int32 on the
+    # other, so any gradient through the scan dies with
+    #
+    #   TypeError: body_fun output and input must have identical types
+    #   ... ShapedArray(int32[], weak_type=True) vs ShapedArray(float0[])
+    #
+    # This is jax-ml/jax#22045, present in jax >= 0.4.30. jmjax pins jax
+    # 0.4.30 and numpyro 0.15.0, so EVERY correct install of this package
+    # hits it: spline_prior="penalized" could not run at all. numpyro fixed
+    # its side in 4704656 ("remove unnecessary device_put"), first released
+    # in numpyro 0.17.0, but that is a stack upgrade needing its own
+    # revalidation rather than something to do quietly here.
+    #
+    # The vectorized branch is not a workaround with a cost attached. It
+    # solves the SAME linear recursion in closed form - verified against the
+    # sequential version over 200 random cases (K in [3,30]), worst relative
+    # difference 4.9e-15 - and the replication that introduced it measured
+    # both at an identical 63.0 mean leapfrog steps. It also avoids an O(K)
+    # sequential dependency chain, so if anything it should be faster.
+    #
+    # "scan" remains selectable for anyone on numpyro >= 0.17.0 who wants it.
+    rw2_implementation = control.get("rw2_implementation", "vectorized")
+    model = build_model(p, q, n_splines, max_obs, alpha_prior_sd=alpha_prior_sd,
+                         baseline_hazard=baseline_hazard,
+                         spline_prior=spline_prior,
+                         spline_penalty_shape=spline_penalty_shape,
+                         spline_penalty_rate=spline_penalty_rate,
+                         beta_prior_mean=beta_prior_mean, beta_prior_sd=beta_prior_sd,
+                         sigma_b_prior_mean=sigma_b_prior_mean,
+                         sigma_b_prior_shape=sigma_b_prior_shape,
+                         sigma_e_prior_mean=sigma_e_prior_mean,
+                         sigma_e_prior_shape=sigma_e_prior_shape,
+                         lkj_concentration=lkj_concentration,
+                         gamma_prior_mean=gamma_prior_mean,
+                         gamma_prior_sd=gamma_prior_sd,
+                         random_effects_corr=random_effects_corr,
+                         random_effects_method=random_effects_method,
+                         rw2_implementation=rw2_implementation)
+
+    # Targeted dense_mass for the spline coefficients specifically -
+    # distinct from the global control$dense_mass (which covers EVERY
+    # continuous site including the ~1000-dimensional b_std and made
+    # things dramatically worse, ~12.5x slower, when tried earlier).
+    # This restricts the dense mass matrix to just the small (~7-9
+    # dimensional) spline-innovation block, directly informed by the
+    # non-diagonal RW2 penalty structure - cheap to invert at this size,
+    # and targets specifically where a diagonal mass matrix can't
+    # represent the known correlation between neighboring spline
+    # coefficients that the RW2 prior implies.
+    #
+    # DEFAULT since replication testing: 3 seeds x 2 sample sizes showed
+    # ~2.1x faster wall-clock and ~2.3x ESS/sec, consistent in direction
+    # across every single run, with R-hat and truth recovery unaffected.
+    # It was the only one of three performance candidates to pass those
+    # pre-registered criteria. Set control$dense_mass_spline = FALSE to
+    # restore the previous (diagonal mass matrix) behavior.
+    #
+    # Only meaningful when spline_prior="penalized" (there is no RW2
+    # structure to exploit otherwise). NOTE: an earlier version of this
+    # comment claimed it additionally required rw2_implementation=
+    # "vectorized", on the assumption that scan produces many separate
+    # scalar z_step sites that couldn't form one dense block. That was
+    # WRONG - numpyro's scan COLLECTS per-iteration samples into a single
+    # stacked site of the same shape the vectorized branch produces
+    # directly. Directly tested: both implementations reach an identical
+    # 63.0 mean leapfrog steps with this enabled (down from 255.0 and
+    # 232.5 respectively), so the two options are independent.
+    # The W01/z_step sites this targets only EXIST when the baseline is a
+    # spline AND spline_prior="penalized" (see build_model: the weibull
+    # branch samples log_lambda0/log_shape instead, and the independent
+    # spline branch samples a plain "W" vector). Requesting a dense mass
+    # block over sites that don't exist raises KeyError: 'W01' - which is
+    # exactly what happened when this default was first flipped to TRUE
+    # without this guard, breaking every weibull-PH-mcmc fit and every
+    # spline fit using the default spline_prior="independent". The
+    # replication study that justified the default change used
+    # spline_prior="penalized" throughout, so it never exercised this path.
+    dense_mass_arg = bool(control.get("dense_mass", False))
+    _penalized_spline = (baseline_hazard != "weibull") and (spline_prior == "penalized")
+    _blocks = []
+    if _penalized_spline and control.get("dense_mass_spline", True):
+        # ------------------------------------------------------------------
+        # EXPERIMENTAL, opt-in: include `alpha` in the spline dense block.
+        #
+        # MOTIVATION: a cross-block correlation diagnostic found that alpha
+        # is strongly correlated with the spline coefficients - alpha<->W01
+        # measured -0.730 (standardized covariate) and -0.858 (raw-scale),
+        # the largest cross-block correlation anywhere in the model. The
+        # default block ("W01", "z_step") EXCLUDES alpha, so a diagonal
+        # mass entry is used for it and that correlation is forced to zero
+        # by construction.
+        #
+        # WHY alpha SPECIFICALLY: the log-hazard is
+        #     log h_i(t) = B(t).W + alpha * m_i(t)
+        # so B(t).W and alpha*m_i(t) compete additively. With m_i(t) ~ 2 on
+        # average, raising alpha by d lifts the log-hazard by ~2d, which
+        # lowering W offsets exactly - a direct ridge. Note beta_0 sits in
+        # the same algebraic position but is NOT correlated with W in
+        # practice (measured ~0.02): the longitudinal likelihood has
+        # thousands of y observations pinning beta_0 down, leaving it no
+        # freedom to trade against the baseline hazard, while alpha appears
+        # only in the survival submodel and is free to move. An earlier
+        # derivation predicted beta_0 <-> W and was wrong for exactly this
+        # reason.
+        #
+        # WHY IT MIGHT MATTER MORE THAN THE COVARIATE-SCALE WORK: alpha is
+        # the parameter ESS is measured on, and the correlation is strong
+        # in BOTH covariate-scale conditions - so this is a general
+        # inefficiency in every penalized-spline fit, not a raw-scale-only
+        # problem.
+        #
+        # TEMPERED BY TRACK RECORD: dense_mass_beta was also well-motivated
+        # (it targeted a confirmed -0.977 correlation) and produced a null
+        # result, apparently because that geometry was not the bottleneck.
+        # A large correlation is necessary but evidently not sufficient.
+        # Opt-in pending the same replication discipline as everything else.
+        # ------------------------------------------------------------------
+        if control.get("dense_mass_alpha", False):
+            _blocks.append(("W01", "z_step", "alpha"))
+        else:
+            _blocks.append(("W01", "z_step"))
+
+    # ------------------------------------------------------------------
+    # EXPERIMENTAL, opt-in: a dense mass block over `beta`.
+    #
+    # MOTIVATION: with an UNCENTERED covariate, the posterior correlation
+    # between the intercept and that covariate's coefficient is severe. For
+    # a design with an intercept and x ~ N(xbar, s):
+    #
+    #     corr(beta_0, beta_x)  ~=  -xbar / sqrt(xbar^2 + s^2)
+    #
+    # For x ~ N(50, 10) that is about -0.98; for standardized x (xbar = 0)
+    # it is exactly 0. That single difference tracks the whole covariate-
+    # scale effect measured earlier (jmjax 2-4x FASTER than JMbayes2 with
+    # standardized covariates, 1.4-2.8x SLOWER with raw-scale ones).
+    #
+    # A DIAGONAL mass matrix cannot represent correlation at all, however
+    # well-scaled its entries are, so NUTS is forced along a near-
+    # degenerate ridge. This is the same pathology dense_mass_spline fixes
+    # for the RW2 block, where neighboring spline coefficients are
+    # correlated by construction - and that option cut leapfrog steps
+    # 255 -> 63 and passed replication at ~2.1x.
+    #
+    # NOTE this supersedes an earlier attempt (control$seed_mass_matrix,
+    # still present but default FALSE and NOT recommended) which seeded a
+    # DIAGONAL mass matrix from the lme() pre-fit's standard errors. A
+    # diagnostic showed NUTS's own adaptation already recovers essentially
+    # those same scales unaided (adapted [0.00122, 0.00031, 0.00136] vs
+    # lme se^2 [0.00147, 0.00026, 0.00144]), so seeding added nothing -
+    # and it failed catastrophically on 1 of 4 test datasets. Scale was
+    # never the problem; correlation is.
+    #
+    # Only meaningful when p >= 2 - a "dense" 1x1 block is just a diagonal
+    # entry. Kept opt-in pending the same replication discipline applied
+    # to every other performance option in this package.
+    # ------------------------------------------------------------------
+    if control.get("dense_mass_beta", False) and p >= 2:
+        _blocks.append(("beta",))
+
+    if _blocks:
+        dense_mass_arg = _blocks
+
+    # ------------------------------------------------------------------
+    # EXPERIMENTAL, opt-in: seed NUTS's inverse mass matrix for `beta`
+    # from the internal lme() pre-fit's standard errors.
+    #
+    # MOTIVATION: a replicated experiment (4 seeds, no overlap between
+    # conditions) found jmjax is 1.4-2.8x SLOWER than JMbayes2 with
+    # raw-scale covariates (ESS/sec ratio 0.36-0.70x) while being 2-4x
+    # FASTER with standardized ones. JMbayes2 is nearly scale-invariant
+    # because it seeds its MCMC proposals from the covariance matrix of
+    # its MLE pre-fits; NUTS has no equivalent and must learn each
+    # coordinate's scale during warmup, which evidently does not fully
+    # succeed when scales differ by orders of magnitude.
+    #
+    # MECHANISM: for a coordinate with posterior sd s, a well-scaled
+    # diagonal inverse mass matrix entry is s^2. The lme() pre-fit already
+    # estimates exactly that for beta, as sqrt(diag(vcov(lme_prefit))) -
+    # passed through as control$beta_se by the R side.
+    #
+    # ADAPTATION IS LEFT ON deliberately (adapt_mass_matrix defaults to
+    # True). A probe confirmed numpyro honors a seed verbatim when
+    # adaptation is disabled - but the lme() pre-fit knows nothing about
+    # the survival submodel, the spline coefficients, or alpha, so
+    # freezing its scales would likely help beta while hurting everything
+    # else. Seeding-plus-adaptation is strictly more informed than the
+    # current generic start, with no obvious downside.
+    #
+    # HONEST EXPECTATION: this is a PARTIAL fix at best. NUTS must still
+    # adapt every other block, and beta is only part of the raw-scale
+    # problem. Whether it meaningfully closes the 0.36-0.70x gap is an
+    # empirical question this option exists to answer, not a claim.
+    # ------------------------------------------------------------------
+    nuts_kwargs = {"dense_mass": dense_mass_arg}
+
+    # Sampler knobs, previously left at NumPyro's defaults (max_tree_depth
+    # 10 -> 1023 steps, target_accept_prob 0.8). Exposed so the tree-depth
+    # wall can be raised, and the step size allowed to grow, as an
+    # ALTERNATIVE to reparameterizing the model.
+    #
+    # Worth testing against scale_time rather than assuming: raising the
+    # depth to 12 permits 4095 steps per iteration, so if the sampler still
+    # needs a deep tree it costs ~65x the 63 steps that scaling achieves.
+    # Whether it converges at all on a badly conditioned target is the
+    # actual question, and the answer decides whether the much simpler
+    # sampler-level fix can replace the formula machinery.
+    if control.get("max_tree_depth") is not None:
+        # NumPyro accepts a tuple (d1, d2): d1 caps the tree depth during
+        # WARM-UP, d2 afterwards. Worth having separately, because a poor
+        # adaptation can spend the whole warm-up building 543-step
+        # trajectories and never recover - capping the warm-up depth stops
+        # it burning the budget there while leaving sampling unrestricted.
+        _mtd = control["max_tree_depth"]
+        if isinstance(_mtd, (list, tuple)) and len(_mtd) == 2:
+            nuts_kwargs["max_tree_depth"] = (int(_mtd[0]), int(_mtd[1]))
+        else:
+            nuts_kwargs["max_tree_depth"] = int(_mtd)
+    if control.get("target_accept_prob") is not None:
+        nuts_kwargs["target_accept_prob"] = float(control["target_accept_prob"])
+
+    # find_heuristic_step_size: NumPyro's pre-adaptation heuristic, which
+    # picks a starting step size at the beginning of each adaptation window
+    # rather than letting dual averaging search from an arbitrary one.
+    #
+    # Worth exposing because the step size that dual averaging settles on
+    # is itself random - it depends on the draws the chain happens to take
+    # during warm-up - and a poor one persists for the whole sampling
+    # phase, since warm-up is over by then. Measured on one dataset at
+    # n = 8,000, three sampler seeds gave 127, 63 and 543 leapfrog steps
+    # per draw, with the last failing R-hat at 1.544 on rho and running
+    # four times as long.
+    # init_strategy: where the chains START.
+    #
+    # NumPyro's default is init_to_uniform, which draws each parameter
+    # uniformly on [-2, 2] in unconstrained space. For a joint model that
+    # means every one of several thousand random effects starts at an
+    # independent random point, and the chain spends early warm-up draws
+    # travelling from there to the typical set - draws that dual averaging
+    # then uses to estimate the step size.
+    #
+    # That is a plausible root of the seed dependence observed here: three
+    # chain seeds on identical data at n = 8,000 gave 63, 127 and 543
+    # leapfrog steps per draw, with the last failing R-hat. A starting
+    # point closer to the typical set should leave adaptation with better
+    # information and less to vary over.
+    #
+    # init_to_median draws a few samples from the prior and takes their
+    # median - more central, and much less variable between seeds than a
+    # uniform draw. init_to_feasible only guarantees finite log-density.
+    # init_to_median is NOT the fix it sounds like, and the geometry says
+    # why. The dominant block of the unconstrained space is b_std, whose
+    # prior is standard normal. In d dimensions a standard normal's typical
+    # set is a thin shell at radius sqrt(d): at n = 8,000 with q = 2 that is
+    # 16,000 dimensions and a shell at radius ~126, with essentially no mass
+    # near the origin. init_to_median puts every coordinate at its prior
+    # median - i.e. AT THE ORIGIN, radius ~0 - while init_to_uniform's
+    # U(-2,2) has variance 4/3 and lands at radius ~146, only 15% outside
+    # the shell. The default is accidentally well suited to this model and
+    # "start at the median" is the intuition that fails hardest here.
+    #
+    # Measured, and consistent with that: heuristic + init_to_median
+    # rescued two seeds at n = 2,000 (shell radius 45, where the origin is
+    # survivable) and at n = 8,000 produced R-hat 32.7 with ESS 3, far
+    # worse than the defaults' 1.544.
+    _is = control.get("init_strategy")
+    if _is is not None:
+        from numpyro.infer import initialization as _init
+        _map = {"uniform": _init.init_to_uniform,
+                "median": _init.init_to_median,
+                "feasible": _init.init_to_feasible,
+                "sample": _init.init_to_sample}
+        _fn = _map.get(str(_is))
+        if _fn is None:
+            warnings.warn(
+                f"unknown init_strategy '{_is}'; using NumPyro's default. "
+                f"Valid: {', '.join(sorted(_map))}.", RuntimeWarning)
+        else:
+            nuts_kwargs["init_strategy"] = _fn
+
+    # The model's data arguments, built ONCE. mcmc.run() below consumes
+    # this same dict, so the warm-start self-check cannot drift out of sync
+    # with what is actually sampled - a duplicated copy would go stale the
+    # first time an argument was added in one place and not the other.
+    model_kwargs = dict(
+        X_long=jnp.array(X_long), y_long=jnp.array(y_long), n_obs=jnp.array(n_obs),
+        X_time_surv=jnp.array(X_time_surv), X_time_quad=jnp.array(X_time_quad),
+        T_surv=jnp.array(T_surv), event=jnp.array(event), t_quad=jnp.array(t_quad),
+        gk_weights=jnp.array(gk_weights), B_T=jnp.array(B_T), B_quad=jnp.array(B_quad),
+        Z_long=jnp.array(Z_long), Z_time_surv=jnp.array(Z_time_surv),
+        Z_time_quad=jnp.array(Z_time_quad), N_sub=N_sub,
+        X_delta_surv=jnp.array(X_delta_surv) if X_delta_surv is not None else None,
+        X_delta_quad=jnp.array(X_delta_quad) if X_delta_quad is not None else None,
+        X_area_surv=jnp.array(X_area_surv) if X_area_surv is not None else None,
+        X_area_quad=jnp.array(X_area_quad) if X_area_quad is not None else None,
+        X_area_avg_surv=jnp.array(X_area_avg_surv) if X_area_avg_surv is not None else None,
+        X_area_avg_quad=jnp.array(X_area_avg_quad) if X_area_avg_quad is not None else None,
+        Z_delta_surv=jnp.array(Z_delta_surv) if Z_delta_surv is not None else None,
+        Z_delta_quad=jnp.array(Z_delta_quad) if Z_delta_quad is not None else None,
+        Z_area_surv=jnp.array(Z_area_surv) if Z_area_surv is not None else None,
+        Z_area_quad=jnp.array(Z_area_quad) if Z_area_quad is not None else None,
+        Z_area_avg_surv=jnp.array(Z_area_avg_surv) if Z_area_avg_surv is not None else None,
+        Z_area_avg_quad=jnp.array(Z_area_avg_quad) if Z_area_avg_quad is not None else None,
+        W_surv=jnp.array(W_surv) if W_surv is not None else None,
+    )
+
+    # ---- warm start from the R-side lme pre-fit -------------------------
+    #
+    # control["init_values"] carries constrained-space starting values for
+    # whichever sample sites R could supply - typically beta, sigma_e,
+    # sigma_b, L_corr, alpha and, the one that matters at scale, b_std
+    # derived from the lme() BLUPs. Sites not supplied fall back to
+    # init_to_uniform, which is fine: the ~20 population parameters were
+    # never the problem, the 16,000 random effects were.
+    #
+    # This mirrors JMbayes2, which initialises betas, sigmas, D, the
+    # per-subject b and gammas from the lme/coxph objects it is handed
+    # (R/jm.R) and jitters per chain (R/jm_fit.R). Note the consequence,
+    # which applies to both packages: chains that start together make R-hat
+    # LESS sensitive, because Gelman-Rubin assumes overdispersed starts.
+    # That is the price of a warm start, and it should be stated rather
+    # than quietly enjoyed.
+    #
+    # THE JITTER IS APPLIED IN UNCONSTRAINED SPACE, unlike JMbayes2's,
+    # which perturbs constrained values and must exclude D to avoid
+    # breaking positive-definiteness. Going through biject_to means every
+    # constraint survives automatically - sigmas stay positive, L_corr
+    # stays a valid Cholesky factor - with no special cases.
+    _init_vals = control.get("init_values")
+    if _init_vals:
+        from numpyro.infer import initialization as _init
+        from numpyro.distributions.transforms import biject_to
+        from functools import partial as _partial
+
+        _jit_scale = float(control.get("warm_start_jitter", 0.1))
+        _vals = {str(k): jnp.asarray(v) for k, v in dict(_init_vals).items()}
+
+        def _init_to_value_jittered(site=None, values=None, scale=0.1):
+            if site is None:
+                return _partial(_init_to_value_jittered, values=values, scale=scale)
+            if (site["type"] == "sample" and not site["is_observed"]
+                    and not site["fn"].support.is_discrete):
+                nm = site["name"]
+                if values is not None and nm in values:
+                    tf = biject_to(site["fn"].support)
+                    u = tf.inv(values[nm].astype(jnp.result_type(float)))
+                    key = site["kwargs"].get("rng_key")
+                    if key is not None and scale > 0:
+                        u = u + scale * jax.random.normal(key, jnp.shape(u), dtype=u.dtype)
+                    return tf(u)
+            return _init.init_to_uniform(site)
+
+        _warm = _init_to_value_jittered(values=_vals, scale=_jit_scale)
+
+        # SELF-CHECK, and the reason this can be enabled without auditing
+        # every scaling path by hand. Between R's lme() and the model as
+        # sampled sit standardize_covariates and scale_time, either of
+        # which can put the pre-fit's coefficients on a different scale
+        # than the site expects; the non-centred b_std transform is another
+        # chance to be wrong. Rather than reason through each, evaluate the
+        # potential energy at the warm start and at a uniform start and
+        # compare. A correct warm start is enormously better; a wrong one
+        # is worse, and is discarded here rather than silently degrading
+        # the fit.
+        try:
+            from numpyro.infer.util import initialize_model as _init_model
+
+            def _pe(strategy, key_int):
+                st = _init_model(jax.random.PRNGKey(key_int), model,
+                                 model_args=(), model_kwargs=model_kwargs,
+                                 init_strategy=strategy, dynamic_args=False)
+                return float(st[1](st[0].z))
+
+            _pe_warm = _pe(_warm, 0)
+            _pe_unif = min(_pe(_init.init_to_uniform, k) for k in (1, 2, 3))
+            if np.isfinite(_pe_warm) and _pe_warm < _pe_unif:
+                nuts_kwargs["init_strategy"] = _warm
+                warm_start_check = {
+                    "used": True,
+                    "potential_warm": _pe_warm,
+                    "potential_uniform": _pe_unif,
+                    "sites": sorted(_vals),
+                }
+            else:
+                warnings.warn(
+                    "warm start REJECTED: its log-density is not better than a "
+                    f"uniform start (potential {_pe_warm:.1f} vs {_pe_unif:.1f}). "
+                    "This usually means the supplied values are on a different "
+                    "scale than the model expects - check standardize_covariates "
+                    "and scale_time. Falling back to the default start.",
+                    RuntimeWarning)
+                warm_start_check = {
+                    "used": False,
+                    "potential_warm": _pe_warm,
+                    "potential_uniform": _pe_unif,
+                    "sites": sorted(_vals),
+                }
+        except Exception as _e:                       # noqa: BLE001
+            warnings.warn(f"warm-start self-check failed ({_e}); using the "
+                          "default start.", RuntimeWarning)
+            warm_start_check = {"used": False, "error": str(_e)}
+    else:
+        warm_start_check = None
+
+    if control.get("find_heuristic_step_size") is not None:
+        nuts_kwargs["find_heuristic_step_size"] = bool(
+            control["find_heuristic_step_size"])
+    beta_se = control.get("beta_se", None)
+    if control.get("seed_mass_matrix", False) and beta_se is not None:
+        try:
+            beta_se_arr = jnp.atleast_1d(jnp.array(beta_se, dtype=jnp.float32))
+            # LENGTH CHECK: beta_se comes from the lme() pre-fit, which uses
+            # long_formula - the same formula X_long is built from, so the
+            # lengths SHOULD match. But a silent mismatch would produce a
+            # wrongly-shaped mass matrix rather than an error, so verify
+            # rather than assume. p is X_long.shape[-1], the beta dimension.
+            if beta_se_arr.shape[0] != p:
+                warnings.warn(
+                    f"seed_mass_matrix: beta_se has length {beta_se_arr.shape[0]} "
+                    f"but the model's beta has dimension {p} - skipping mass-matrix "
+                    "seeding for this fit. The fit itself is unaffected.",
+                    RuntimeWarning,
+                )
+            elif bool(jnp.all(jnp.isfinite(beta_se_arr))) and bool(jnp.all(beta_se_arr > 0)):
+                nuts_kwargs["inverse_mass_matrix"] = {("beta",): beta_se_arr ** 2}
+        except Exception:
+            # Never let a seeding failure abort a fit - the unseeded
+            # kernel is a perfectly valid fallback.
+            pass
+
+    inner_kernel = NUTS(model, **nuts_kwargs)
+
+    if q == 2 and random_effects_method == "wishart_gibbs":
+        # EXPERIMENTAL: hybridize a closed-form Wishart-conjugate Gibbs
+        # update for D_inv (the random-effects precision matrix) with
+        # NUTS for everything else - see build_model()'s matching branch
+        # for the full derivation. Must use the EXACT SAME prior
+        # (nu0, S0) as build_model()'s D_inv site above, or the two would
+        # be sampling from inconsistent distributions - including the
+        # wishart_eb_scale branch, mirrored here deliberately.
+        #
+        # NOTE: an earlier comment here credited this to "JMbayes2's
+        # documented approach". That was WRONG - JMbayes2 uses a
+        # separation strategy (Gamma priors on SDs centered on the lme()
+        # pre-fit, plus a separate LKJ prior on correlation), confirmed by
+        # direct inspection of a fitted jm object's $priors. The Wishart
+        # conjugacy result comes from Rizopoulos 2016 JSS, which describes
+        # the PREDECESSOR package JMbayes, and concerns conjugacy
+        # mechanics rather than prior specification.
+        if bool(control.get("wishart_eb_scale", False)) and sigma_b_prior_mean is not None:
+            nu0 = float(q + 2)
+            sd_hat = jnp.atleast_1d(jnp.array(sigma_b_prior_mean))
+            D_hat = jnp.diag(sd_hat ** 2)
+            S0 = jnp.linalg.inv(D_hat)
+        else:
+            nu0 = float(q + 1)
+            S0 = jnp.eye(q)
+        S0_inv = jnp.linalg.inv(S0)
+
+        def _gibbs_fn(rng_key, gibbs_sites, hmc_sites):
+            b_current = hmc_sites["b"]  # [N_sub, q]
+            n_sub_current = b_current.shape[0]
+            new_scale_inv = S0_inv + b_current.T @ b_current
+            new_scale = jnp.linalg.inv(new_scale_inv)
+            new_scale_sym = 0.5 * (new_scale + new_scale.T)
+            new_df = nu0 + n_sub_current
+            d_inv_new = dist.Wishart(concentration=new_df, scale_matrix=new_scale_sym).sample(rng_key)
+            return {"D_inv": d_inv_new}
+
+        kernel = HMCGibbs(inner_kernel, gibbs_fn=_gibbs_fn, gibbs_sites=["D_inv"])
+    elif q == 2 and random_effects_method == "wishart_gibbs_centered":
+        # EXPERIMENTAL, ADD-ON - fully separate from the "wishart_gibbs"
+        # branch above (not modified). Identical Gibbs update, but reads
+        # hmc_sites["b_raw"] (the RAW, uncentered latent variable that is
+        # actually part of the HMC state) rather than hmc_sites["b"] (which
+        # in this branch is a numpyro.deterministic transform of b_raw, not
+        # itself a sampled site, and so is not exposed via hmc_sites at all).
+        nu0 = float(q + 1)
+        S0 = jnp.eye(q)
+        S0_inv = jnp.linalg.inv(S0)
+
+        def _gibbs_fn_centered(rng_key, gibbs_sites, hmc_sites):
+            b_raw_current = hmc_sites["b_raw"]  # [N_sub, q] - the raw, uncentered latent
+            n_sub_current = b_raw_current.shape[0]
+            new_scale_inv = S0_inv + b_raw_current.T @ b_raw_current
+            new_scale = jnp.linalg.inv(new_scale_inv)
+            new_scale_sym = 0.5 * (new_scale + new_scale.T)
+            new_df = nu0 + n_sub_current
+            d_inv_new = dist.Wishart(concentration=new_df, scale_matrix=new_scale_sym).sample(rng_key)
+            return {"D_inv": d_inv_new}
+
+        kernel = HMCGibbs(inner_kernel, gibbs_fn=_gibbs_fn_centered, gibbs_sites=["D_inv"])
+    else:
+        kernel = inner_kernel
+
+    mcmc = MCMC(
+        kernel,
+        num_warmup=int(control.get("num_warmup", 500)),
+        num_samples=int(control.get("num_samples", 1000)),
+        num_chains=int(control.get("num_chains", 1)),
+        progress_bar=control.get("progress_bar", True),
+    )
+
+    seed = int(control.get("seed", 2026))
+    start = time.perf_counter()
+    # extra_fields=("num_steps",) is only requested for plain NUTS - under
+    # HMCGibbs wrapping (random_effects_method="wishart_gibbs"), the
+    # internal state structure differs and requesting this broke the
+    # previously-validated wishart_gibbs path entirely (a real bug caught
+    # by testing, not just theorized). This diagnostic is nice-to-have,
+    # not essential - better to skip it than let it break core
+    # functionality that's already been validated to work.
+    using_hmc_gibbs = q == 2 and random_effects_method in ("wishart_gibbs", "wishart_gibbs_centered")
+    # "diverging" alongside "num_steps". A divergence means the leapfrog
+    # integrator lost energy conservation - the step size was too large
+    # for the local curvature - and the sampler may be silently skipping
+    # a region of the posterior rather than exploring it.
+    #
+    # This matters for any change to target_accept_prob. Lowering it grows
+    # the adapted step size, which raises ESS by making consecutive draws
+    # less correlated (measured: 0.8 -> 0.65 roughly DOUBLED alpha's ESS on
+    # epileptic, 2260 -> 4385, at fewer steps). But a higher ESS from a
+    # chain that is quietly under-exploring is worse than a lower one from
+    # a chain that is not, and divergence counts are what distinguishes
+    # them. Without this field the comparison cannot be made honestly.
+    run_kwargs = {} if using_hmc_gibbs else {
+        "extra_fields": ("num_steps", "diverging")}
+
+    mcmc.run(
+        jax.random.PRNGKey(seed),
+        # Same dict the warm-start self-check above evaluated against.
+        **model_kwargs,
+        **run_kwargs,
+    )
+    # JAX dispatches computation ASYNCHRONOUSLY - mcmc.run() can return as
+    # soon as the computation is dispatched to the device, without
+    # waiting for it to actually finish executing. Measuring `elapsed`
+    # immediately here without forcing completion first would capture
+    # only DISPATCH time, not real completion time - the actual wait
+    # would then show up LATER, wherever the code first tries to read a
+    # value (confirmed via direct profiling during development:
+    # numpyro's own diagnostic math takes milliseconds; the actual delay
+    # was jax.device_get() blocking on the real mcmc.run() computation
+    # finally finishing, whenever a value was first read). Forcing
+    # completion here, before measuring elapsed, makes sampling_time_sec
+    # accurate.
+    jax.block_until_ready(mcmc.get_samples())
+    elapsed = time.perf_counter() - start
+
+    # Diagnostic: mean/max leapfrog steps per iteration - lets us directly
+    # confirm (rather than just theorize) whether "penalized" forces
+    # deeper NUTS trees than "independent". Wrapped defensively since
+    # extra_fields access under HMCGibbs wrapping is less thoroughly
+    # exercised elsewhere in this codebase than plain NUTS.
+    try:
+        _xf = mcmc.get_extra_fields()
+        num_steps = np.asarray(_xf["num_steps"])
+        mean_num_steps = float(np.mean(num_steps))
+        max_num_steps = float(np.max(num_steps))
+        if "diverging" in _xf:
+            _div = np.asarray(_xf["diverging"])
+            n_divergences = int(_div.sum())
+            divergence_rate = float(_div.mean())
+        else:
+            n_divergences = divergence_rate = None
+    except Exception:
+        mean_num_steps = None
+        max_num_steps = None
+        n_divergences = divergence_rate = None
+
+    samples = mcmc.get_samples(group_by_chain=False)
+    samples_by_chain = mcmc.get_samples(group_by_chain=True)
+
+    # Derive rho (and, for wishart_gibbs, sigma_b itself) from the raw
+    # matrix-valued site actually sampled, injecting them as their own
+    # named entries so they get PROPER R-hat/ESS diagnostics (computed on
+    # the actual derived-quantity trace, not just inherited from the raw
+    # matrix) and get picked up automatically by population_sites below -
+    # "sigma_b" already has a size>1 naming rule (sigma_b0/sigma_b1);
+    # "rho" is added there explicitly.
+    if "D_inv" in samples:
+        # wishart_gibbs: D_inv -> D -> sigma_b0, sigma_b1, rho. This also
+        # fixes what was otherwise a silent reporting gap for this new
+        # path - without this, sigma_b/rho would never appear in
+        # fit$estimates despite being the entire point of q=2.
+        D_inv_flat = np.asarray(samples["D_inv"])
+        D_flat = np.linalg.inv(D_inv_flat)
+        sigma_b0_flat = np.sqrt(D_flat[:, 0, 0])
+        sigma_b1_flat = np.sqrt(D_flat[:, 1, 1])
+        rho_flat = D_flat[:, 0, 1] / (sigma_b0_flat * sigma_b1_flat)
+        samples["sigma_b"] = np.stack([sigma_b0_flat, sigma_b1_flat], axis=-1)
+        samples["rho"] = rho_flat
+
+        D_inv_bc = np.asarray(samples_by_chain["D_inv"])
+        D_bc = np.linalg.inv(D_inv_bc)
+        sigma_b0_bc = np.sqrt(D_bc[..., 0, 0])
+        sigma_b1_bc = np.sqrt(D_bc[..., 1, 1])
+        rho_bc = D_bc[..., 0, 1] / (sigma_b0_bc * sigma_b1_bc)
+        samples_by_chain["sigma_b"] = jnp.stack([jnp.array(sigma_b0_bc), jnp.array(sigma_b1_bc)], axis=-1)
+        samples_by_chain["rho"] = jnp.array(rho_bc)
+    elif "L_corr" in samples:
+        # Existing LKJCholesky-based correlated case - rho was previously
+        # NEVER extracted/reported at all (a genuine pre-existing gap,
+        # found and fixed here rather than left as-is): for a 2x2
+        # correlation Cholesky factor, L_corr[1,0] IS rho directly (no
+        # further transform needed - L_corr @ L_corr.T is the correlation
+        # matrix itself, whose off-diagonal element is rho by definition).
+        L_corr_flat = np.asarray(samples["L_corr"])
+        samples["rho"] = L_corr_flat[:, 1, 0]
+        L_corr_bc = np.asarray(samples_by_chain["L_corr"])
+        samples_by_chain["rho"] = jnp.array(L_corr_bc[..., 1, 0])
+
+    # "b" (q=1's directly-sampled site, or q=2's deterministic b_std @
+    # L.T transform, or q=2 wishart_gibbs's directly-sampled site) and
+    # "b_std" (q=2 LKJCholesky case's actual per-subject sampled site for
+    # the non-centered parameterization) are both sampled/computed
+    # per-subject ([N_sub] or [N_sub, q]) - excluded here since neither
+    # is ever included in population_sites below, so computing their
+    # full R-hat/ESS diagnostics would be wasted work. Both sites' raw
+    # samples remain fully available via `samples` above for ranef().
+    _per_subject_sites = {"b", "b_std", "b_raw", "z_step"}
+    samples_by_chain_for_diag = {k: v for k, v in samples_by_chain.items() if k not in _per_subject_sites}
+    diag = numpyro_summary(samples_by_chain_for_diag, group_by_chain=True)
+
+    return _package_result(samples, diag, p, q, n_splines, N_sub, elapsed,
+                            mean_num_steps=mean_num_steps, max_num_steps=max_num_steps,
+                            n_divergences=n_divergences,
+                            divergence_rate=divergence_rate,
+                            warm_start_check=warm_start_check)
+
+
+# Explicit naming per site, matching the MLE backends' convention
+# (beta_0/beta_1..., W0/W1..., sigma_e/sigma_b/alpha as bare scalars) so
+# results are comparable/interchangeable across all three methods.
+def _site_names(site, size):
+    if site == "beta":
+        return [f"beta_{i}" for i in range(size)]
+    if site == "W":
+        return [f"W{i}" for i in range(size)]
+    if site == "sigma_b" and size > 1:
+        return [f"sigma_b{i}" for i in range(size)]
+    if site == "gamma":
+        return [f"gamma_{i}" for i in range(size)]
+    return [site]  # scalar sites: sigma_e, alpha, sigma_b (q=1), L_corr handled separately
+
+
+def _package_result(samples, diag, p, q, n_splines, N_sub, elapsed,
+                     mean_num_steps=None, max_num_steps=None,
+                     n_divergences=None, divergence_rate=None,
+                     warm_start_check=None):
+    # gamma's size isn't a fixed factory parameter like p/q/n_splines (it
+    # depends on how many baseline covariates were in surv_formula, which
+    # build_model() never needed to know ahead of time - W_surv's shape
+    # was read directly at trace time) - inferred here from the actual
+    # samples instead, defaulting to 0 (site simply absent) when no
+    # baseline covariates were used.
+    n_gamma = np.asarray(samples["gamma"]).shape[-1] if "gamma" in samples else 0
+
+    population_sites = [("beta", p), ("sigma_e", 1), ("alpha", 1), ("W", n_splines), ("sigma_b", q),
+                         ("rho", 1),  # only present when q=2 (either correlated LKJ or wishart_gibbs)
+                         ("tau_w", 1),        # only present when spline_prior="penalized"
+                         ("log_lambda0", 1), ("shape", 1),  # only present when baseline_hazard="weibull"
+                         ("alpha_value", 1), ("alpha_delta", 1),
+                         ("alpha_area", 1), ("alpha_area_avg", 1),  # only present when the corresponding channel is used (alpha absent in that case)
+                         ("gamma", n_gamma)]  # only present when surv_formula has baseline covariates
+
+    estimates, se, rhat, ess = {}, {}, {}, {}
+
+    for site, size in population_sites:
+        if site not in samples:
+            continue
+        arr = np.asarray(samples[site])
+        mean = np.atleast_1d(arr.mean(axis=0))
+        sd = np.atleast_1d(arr.std(axis=0))
+        site_diag = diag.get(site, {})
+        r_hat = np.atleast_1d(np.asarray(site_diag.get("r_hat", np.full(size, np.nan))))
+        n_eff = np.atleast_1d(np.asarray(site_diag.get("n_eff", np.full(size, np.nan))))
+
+        names = _site_names(site, size)
+        for i, name in enumerate(names):
+            estimates[name] = float(mean[i])
+            se[name] = float(sd[i])
+            rhat[name] = float(r_hat[i]) if i < len(r_hat) else float("nan")
+            ess[name] = float(n_eff[i]) if i < len(n_eff) else float("nan")
+
+    # --- Per-subject random effects, kept separate from population estimates ---
+    random_effects = {"subject_index": list(range(1, N_sub + 1))}
+    if "b" in samples:
+        b_arr = np.asarray(samples["b"])  # [n_samples, N_sub] or [n_samples, N_sub, q]
+        b_mean = b_arr.mean(axis=0)
+        b_sd = b_arr.std(axis=0)
+        if b_mean.ndim == 1:
+            random_effects["b_mean"] = b_mean.tolist()
+            random_effects["b_sd"] = b_sd.tolist()
+        else:
+            for j in range(b_mean.shape[1]):
+                random_effects[f"b{j}_mean"] = b_mean[:, j].tolist()
+                random_effects[f"b{j}_sd"] = b_sd[:, j].tolist()
+
+    max_rhat = float(np.nanmax(list(rhat.values()))) if rhat else float("nan")
+    converged = bool(max_rhat < RHAT_CONVERGED_THRESHOLD) if not np.isnan(max_rhat) else True
+    message = (f"NUTS completed in {elapsed:.2f}s; "
+               f"max split R-hat across population parameters = {max_rhat:.4f}")
+    if not converged:
+        message += (f" (>= {RHAT_CONVERGED_THRESHOLD} threshold - consider more warmup/samples "
+                     f"or checking for a multimodal/poorly-identified posterior)")
+
+    return {
+        "estimates": estimates,
+        "se": se,
+        "vcov": None,
+        "loglik": None,  # would need a separate log-density evaluation at, e.g., posterior means
+        "convergence": {"converged": converged, "message": message, "n_iter": None,
+                         "sampling_time_sec": elapsed,  # NUTS-only time, comparable to
+                                                          # JMbayes2's running_time["elapsed"] -
+                                                          # excludes R-side data prep / reticulate
+                                                          # marshaling on both sides for a fair
+                                                          # timing comparison in the benchmark.
+                         "mean_num_steps": mean_num_steps, "max_num_steps": max_num_steps,
+                         # Divergences: a non-zero count means the leapfrog
+                         # integrator lost energy conservation somewhere, and
+                         # the chain may be skipping a region of the posterior
+                         # rather than exploring it. R-hat and ESS will NOT
+                         # necessarily show that - a chain can mix well across
+                         # the part of the space it does reach.
+                         "n_divergences": n_divergences,
+                         "divergence_rate": divergence_rate,
+                         # NULL unless control$init_values was supplied.
+                         # "used" is FALSE when the self-check rejected the
+                         # warm start, so a rejection is visible in the
+                         # fitted object rather than only in a warning that
+                         # a non-interactive run would swallow.
+                         "warm_start": warm_start_check},
+        "diagnostics": {"rhat": rhat, "ess": ess},
+        "random_effects": random_effects,
+        "posterior_samples": {k: np.asarray(v).tolist() for k, v in samples.items()},
+    }

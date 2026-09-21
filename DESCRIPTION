@@ -1,0 +1,39 @@
+Package: jmjax
+Type: Package
+Title: Joint Models for Longitudinal and Survival Data via 'JAX'
+Version: 0.2.0
+Authors@R: person("FIRSTNAME", "LASTNAME", email = "gcbn25@hotmail.com",
+                  role = c("aut", "cre"))
+Description: Fits shared-parameter joint models (linear mixed-effects
+    longitudinal submodel + relative-risk survival submodel with Weibull or
+    spline-approximated baseline hazard) using a 'JAX'/'NumPyro' backend for
+    maximum likelihood (adaptive Gauss-Hermite quadrature) and full Bayesian
+    (NUTS) estimation. R provides the formula interface, design-matrix
+    construction, and summary/reporting; 'Python' (via 'reticulate') provides
+    the numerical fitting. Cross-validated against the 'JM' and 'JMbayes2'
+    packages; see the package vignettes for methodology and benchmark
+    results.
+License: MIT + file LICENSE
+Encoding: UTF-8
+Language: en-US
+RoxygenNote: 7.3.1
+SystemRequirements: Python (>= 3.9) with jax (0.4.30), jaxlib (0.4.30),
+    numpyro (0.15.0), numpy (1.26.4) and scipy (1.13.0). Call
+    jmjax::jmjax_setup() once to create a dedicated 'r-jmjax' virtualenv
+    with these pinned versions, or point reticulate at an existing
+    environment that already has them.
+Imports:
+    reticulate (>= 1.24),
+    survival,
+    nlme,
+    splines,
+    stats,
+    parallel
+Suggests:
+    testthat (>= 3.0.0),
+    JM,
+    JMbayes2,
+    knitr,
+    rmarkdown
+Config/testthat/edition: 3
+VignetteBuilder: knitr

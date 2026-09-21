@@ -1,0 +1,24 @@
+^\.github$
+^\.gitignore$
+^\.Rbuildignore$
+^\.Rproj\.user$
+^.*\.Rproj$
+^dev$
+^\.venvs$
+^\.virtualenvs$
+^.*__pycache__$
+^LICENSE\.md$
+^README\.Rmd$
+# Research output. The study scripts write results to getwd(), which is the
+# package root when they are run from there, so an .rds of benchmark results
+# ended up inside the built tarball - and added a spurious R >= 3.5.0
+# dependency, because serialize version 3 cannot be read by older R.
+# Anchored to the top level ([^/]*) so inst/extdata data files are unaffected.
+^[^/]*\.rds$
+^[^/]*\.csv$
+^[^/]*\.log$
+^n8000_rho_
+^generator_misspec_
+^warm_start_
+^warm\.log$
+^n8000.*\.log$

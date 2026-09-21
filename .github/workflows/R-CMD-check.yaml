@@ -1,0 +1,130 @@
+# ==============================================================================
+# R CMD check with the Python backend actually present.
+#
+# WHY THE EXPLICIT SETUP STEP. jmjax's backend tests call
+# skip_if_no_backend(), which skips rather than fails when jax/numpyro
+# cannot be imported - a missing environment is not a code regression. That
+# is the right behaviour locally and a trap in CI: without a Python step the
+# job goes green while ~79 tests, i.e. every integration test in the suite,
+# quietly skip. So the venv is built BEFORE the check, in its own R process,
+# and the "no tests were skipped for the wrong reason" step below fails the
+# job if it was not.
+#
+# Note that declaring the Python dependencies via the DESCRIPTION field
+# Config/reticulate would NOT remove the need for this step. reticulate acts
+# on that field from configure_environment(), which returns early in
+# non-interactive R sessions unless NOT_CRAN=true is set AND it is called
+# with force=TRUE - so it never fires under R CMD check or devtools::test().
+# It is a convenience for interactive users, not a provisioning mechanism.
+# ==============================================================================
+
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+  workflow_dispatch:
+
+name: R-CMD-check
+
+jobs:
+  R-CMD-check:
+    runs-on: ${{ matrix.config.os }}
+    name: ${{ matrix.config.os }} (R ${{ matrix.config.r }})
+
+    strategy:
+      fail-fast: false
+      matrix:
+        config:
+          - {os: ubuntu-latest,  r: 'release'}
+          - {os: macos-latest,   r: 'release'}
+          - {os: windows-latest, r: 'release'}
+
+    env:
+      GITHUB_PAT: ${{ secrets.GITHUB_TOKEN }}
+      R_KEEP_PKG_SOURCE: yes
+      NOT_CRAN: true
+      # Pin where the venv lives so one cache path is correct on all three
+      # runners. reticulate's default (~/.virtualenvs) resolves differently
+      # under R on Windows, where "~" is the Documents folder, than it does
+      # for actions/cache.
+      RETICULATE_VIRTUALENV_ROOT: ${{ github.workspace }}/.venvs
+      # The suite's MCMC correctness tests dominate its ~21 minute runtime.
+      # Run the fast subset on pull requests, the whole thing on main.
+      JMJAX_SKIP_SLOW_TESTS: ${{ github.event_name == 'pull_request' }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: r-lib/actions/setup-r@v2
+        with:
+          r-version: ${{ matrix.config.r }}
+          use-public-rspm: true
+
+      # jax 0.4.30 publishes wheels for CPython 3.9-3.12; 3.11 is the safe
+      # middle. Pinning the minor version keeps the cache key meaningful.
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - uses: r-lib/actions/setup-r-dependencies@v2
+        with:
+          extra-packages: any::rcmdcheck
+          needs: check
+
+      # jax + jaxlib is a ~150MB download. Key on the pinned versions so the
+      # cache is invalidated the moment jmjax_setup()'s pins change.
+      - name: Cache the r-jmjax virtualenv
+        uses: actions/cache@v4
+        with:
+          path: ${{ github.workspace }}/.venvs/r-jmjax
+          key: ${{ matrix.config.os }}-py3.11-jmjax-jax0.4.30-numpyro0.15.0
+
+      # Runs in its own R process, before the check. R CMD check starts a
+      # fresh session for the tests, which finds the venv on disk at load
+      # time - this is what lets .get_backend() bind to it instead of to
+      # whatever Python happens to be on PATH.
+      - name: Build the Python backend environment
+        run: |
+          py <- reticulate::virtualenv_python("r-jmjax")
+          ok <- reticulate::virtualenv_exists("r-jmjax") &&
+                system2(py, c("-c", shQuote("import jax, numpyro")),
+                        stdout = FALSE, stderr = FALSE) == 0L
+          if (ok) {
+            cat("cache hit - reusing", py, "\n")
+          } else {
+            reticulate::virtualenv_create(
+              "r-jmjax",
+              python = Sys.which("python"),
+              packages = c("numpy==1.26.4", "scipy==1.13.0",
+                           "jax==0.4.30", "jaxlib==0.4.30", "numpyro==0.15.0")
+            )
+          }
+          # Fail the job here, where the cause is obvious, rather than
+          # letting the suite skip its way to a green check.
+          stopifnot(system2(py, c("-c", shQuote("import jax, numpyro"))) == 0L)
+          cat("backend deps present in", py, "\n")
+        shell: Rscript {0}
+
+      - uses: r-lib/actions/check-r-package@v2
+        with:
+          upload-snapshots: true
+          args: 'c("--no-manual", "--as-cran")'
+
+      # A green check that skipped every backend test is not a green check.
+      # testthat writes the reason into the check log; if the backend was
+      # unavailable, say so loudly rather than passing.
+      - name: Fail if the backend tests were skipped
+        if: always()
+        run: |
+          logs <- list.files("check", pattern = "testthat[.]Rout.*$",
+                             recursive = TRUE, full.names = TRUE)
+          if (!length(logs)) quit(status = 0)
+          txt <- unlist(lapply(logs, readLines, warn = FALSE))
+          hit <- grep("Python backend not available", txt, value = TRUE)
+          if (length(hit)) {
+            cat("The Python backend was not available to the test suite:\n")
+            cat(unique(hit), sep = "\n")
+            quit(status = 1)
+          }
+          cat("Backend tests ran.\n")
+        shell: Rscript {0}

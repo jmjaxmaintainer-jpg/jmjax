@@ -1,0 +1,40 @@
+# R
+.Rproj.user
+.Rhistory
+.RData
+.Ruserdata
+*.Rproj
+.Rcheck/
+*.tar.gz
+src/*.o
+src/*.so
+src/*.dll
+
+# roxygen/pkgdown build output
+docs/
+inst/doc/
+
+# Python backend
+.virtualenvs/
+.venvs/
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+*.egg-info/
+.pytest_cache/
+.ipynb_checkpoints/
+
+# JAX/XLA caches
+.jax_cache/
+jax_cache/
+
+# scratch work that should not be committed
+*.Rout
+benchmark_results/
+*.rds
+!inst/extdata/*.rds
+
+# OS
+.DS_Store
+Thumbs.db

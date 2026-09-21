@@ -1,0 +1,583 @@
+---
+title: "jmjax: Validation Methodology and Benchmark Results"
+output: rmarkdown::html_vignette
+vignette: >
+  %\VignetteIndexEntry{jmjax: Validation Methodology and Benchmark Results}
+  %\VignetteEngine{knitr::rmarkdown}
+  %\VignetteEncoding{UTF-8}
+---
+
+```{r, include = FALSE}
+knitr::opts_chunk$set(
+  collapse = TRUE,
+  comment = "#>"
+)
+```
+
+## Purpose of this document
+
+jmjax's estimation code was cross-validated against R's `JM` and
+`JMbayes2` packages throughout development, using real fitted objects
+from both (not documentation alone) as ground truth wherever possible.
+This document records that methodology, the concrete bugs it found and
+fixed, and the final benchmark results - both as a record of what has
+been checked, and as a reference for extending the validation further as
+the package grows.
+
+## Validation philosophy
+
+Two principles guided this work:
+
+1. **Verify against real fitted objects, not documentation.** Several
+   points below were resolved by directly inspecting a fitted `JM` or
+   `JMbayes2` object's internal fields (`fit$control$knots`,
+   `fit$priors$D_sds_mean`, etc.) or by reading the package's internal
+   source (`JMbayes2:::knots`) rather than trusting a guessed
+   hyperparameter or an assumed formula. Two separate hyperparameter
+   guesses in this project turned out to be wrong by large margins (a
+   spline-precision prior mean off by 200x; a knot-boundary formula
+   confusing multiplicative and additive padding) - both caught only by
+   checking the real fitted object.
+2. **Distinguish "hard data" from "real bug" rigorously, not by
+   inspection.** A model that converges (clean R-hat, multiple chains
+   agreeing) to an estimate far from the true simulation value is not
+   necessarily wrong - Bayesian inference is only guaranteed correct *on
+   average* across repeated draws, and any single hard dataset can
+   legitimately support a different answer than the one that generated
+   it. This was resolved with a **profile log-density check**: for two
+   candidate parameter sets (the true values, and the fitted values),
+   find the random effects that maximize the joint density under each
+   set of population parameters, then compare. This puts both candidates
+   on equal footing and gives a direct, quantitative answer.
+
+## Cross-validation results by model configuration
+
+| Configuration | Reference | Result |
+|---|---|---|
+| Weibull baseline, random intercept, MLE | `JM::jointModel(method="weibull-PH-aGH")` | `alpha` agreed to within 0.0006 (n=1500) |
+| Spline baseline, random intercept, MLE | `JM::jointModel(method="spline-PH-aGH")` | Baseline hazard curves matched closely (correlation 0.99, supported range) after fixing the `survreg`-vs-`coxph` internal-scale issue below |
+| Weibull baseline, random intercept+slope, MCMC | `JM::jointModel` (`q=2`) | `alpha`: 0.518 vs 0.516 |
+| Weibull baseline, random intercept+slope, **MLE** (new 2D adaptive-GH) | `JM::jointModel` (`q=2`) | Every parameter agreed to 3-4 decimal places (`alpha`: 0.5174 vs 0.5159) |
+| Spline baseline, random intercept+slope, MCMC | `JMbayes2::jm()` | `alpha` matched within 0.01 across 4 scenarios after resolving the issues below; ESS/sec 13.5x higher (see Benchmark section) |
+| Weibull baseline, `value + area_avg` functional form, random intercept+slope, MLE | `JMbayes2::jm(base_hazard="weibull")` | Both packages agreed closely with each other (within ~0.15-0.35 depending on dataset), but both showed the SAME shared bias pattern due to a genuine value/area_avg collinearity in the simulation design - see "Weak identifiability" section below |
+
+## Bugs found and fixed
+
+### 1. Longitudinal likelihood scored padded observations as real data
+
+The MCMC backend pads each subject's longitudinal observations into a
+fixed-width array (subjects with fewer visits get zero-filled rows). The
+original masking code,
+
+```python
+numpyro.sample("y_obs", dist.Normal(mu_long, sigma_e),
+                obs=jnp.where(mask, y_long, y_long))
+```
+
+is a no-op: both branches of `jnp.where` are `y_long`, so every padded
+zero-slot was scored as a real, perfectly-fit (residual = 0)
+observation. Because `X_long`/`Z_long` are also zero-padded, `mu_long =
+0` at every padded slot too - so this silently deflated `sigma_e` by
+~50% (confirmed: estimated 0.126 vs a true simulated value of 0.3, 214
+Wald standard errors off), which cascaded into a ~75-120% overestimate
+of the random-slope variance and a biased association parameter. Fixed
+by computing the log-density explicitly and masking before summing:
+
+```python
+log_p_y = dist.Normal(mu_long, sigma_e).log_prob(y_long)
+numpyro.factor("y_obs", jnp.sum(jnp.where(mask, log_p_y, 0.0)))
+```
+
+Confirmed fixed via a dedicated truth-recovery test at `n=1500`: `sigma_e`
+error dropped from 214 to 1.6 standard errors, `sigma_b1` from a 117%
+overestimate to under 1%.
+
+### 2. Spline quadrature basis silently scrambled
+
+The R-side code built the spline basis at quadrature nodes via
+`apply(t_quad, 2, spline_info$basis)` reshaped into a 3D array.
+`apply()`'s flattening order (subject-fastest, then spline-index) didn't
+match the array reshape's assumed order (subject, quad-node,
+spline-index), silently permuting which basis value was associated with
+which (quadrature node, spline coefficient) pair - with no error raised.
+Fixed by building the array with an explicit loop over quadrature nodes.
+
+### 3. `survreg`-based survival objects use a different internal time scale
+
+`JM::jointModel()`'s knot placement operates on a `Time` variable
+extracted from the survival object - and when that object comes from
+`survreg()` (an AFT/log-time parameterization), `Time` inside `JM` turns
+out to equal `exp(raw time)`, not raw time. This was confirmed by
+`debug(jointModel)` and directly verified against `jm_fit$x$W2`. jmjax
+sidesteps this by supporting only `coxph()`-based survival
+specifications, which don't have this scale ambiguity.
+
+### 4. Spline knot placement: wrong basis count and incomplete boundary formula
+
+An early comparison used `n_interior_knots = 7` for jmjax while `JM`'s
+actual default is 5 interior knots - an unintentional basis-size
+mismatch (11 vs 9 basis functions), not a placement-algorithm
+difference. Separately, jmjax's boundary knots used `range(T_surv)`
+alone; `JM`'s actual formula (confirmed from its source) is
+`range(Time, st)` - observed times combined with the Gauss-Kronrod
+quadrature evaluation points, which can extend the lower boundary well
+below the smallest observed time. With both fixed, jmjax's reconstructed
+knot vector matched `JM`'s real knot vector to 6 decimal places on all 5
+interior positions, and `alpha` moved from 0.53 (0.17 off) to 0.69 (0.003
+off) against `JM`'s 0.696 on the same dataset.
+
+### 5. Type coercion issues at the R/Python boundary
+
+Several instances of R doubles (e.g. literal `4`, not `4L`) or length-1 R
+vectors arriving via `reticulate` as Python floats or 0-dimensional
+arrays where JAX required a true integer or a proper array. Fixed by
+explicit `as.integer()` casts on the R side and `jnp.atleast_1d()` guards
+on the Python side at each affected site.
+
+## Ruled out: hypotheses tested and rejected
+
+Several plausible explanations for early discrepancies were tested
+directly and found *not* to be the cause - recorded here so they aren't
+re-litigated without new evidence:
+
+- **`alpha`'s own prior width**: widening `Normal(0, 2)` to `Normal(0,
+  10)` (25x the variance) changed estimates by <0.01.
+- **Spline basis flexibility**: halving the number of basis functions
+  changed estimates by <0.01.
+- **MCMC mode-trapping**: 3 independent chains agreed with each other
+  (R-hat ~1.00-1.02) while disagreeing with the true simulation value -
+  ruling out a single chain settling in the wrong mode of a multimodal
+  posterior.
+- **Naive log-density-at-truth comparison**: comparing the joint density
+  at the true parameters (with the actual simulated random effects)
+  against the fitted parameters (with posterior-mean random effects)
+  showed an apparent 504-unit gap - but this compares a random draw
+  against a tuned estimate, which is not a fair comparison even under a
+  correctly-specified model. The proper **profile** comparison (random
+  effects optimized fairly for both candidates) reduced this to 8.6
+  units - a mundane difference consistent with ordinary finite-sample
+  variability, not a defect.
+
+## Remaining, understood behavior (not a bug)
+
+At small-to-moderate sample sizes (`n` around 200), the random
+intercept+slope model can show real, dataset-dependent bias in `alpha` -
+confirmed via the profile log-density check to be a genuine property of
+specific hard datasets under the correctly-specified model, not an
+implementation issue. This bias shrinks as `n` grows (confirmed at
+`n=1500`: error dropped from an average ~-0.13 at `n=200` to ~-0.045),
+consistent with ordinary finite-sample behavior in a hierarchical model
+with a correlated random slope. Both `jmjax` and `JMbayes2` show this
+same pattern with statistically indistinguishable magnitude (see
+Benchmark results below) - it reflects the data-generating process and
+model class, not either specific implementation.
+
+**Practical recommendation**: for `random_effects = "intercept_slope"`,
+always run multiple chains and check R-hat before trusting a point
+estimate, particularly at `n` below a few hundred.
+
+## Non-centered reparameterization for the P-spline prior
+
+The `spline_prior = "penalized"` option originally used a *centered*
+parameterization of the RW2 (second-order random walk) prior: each
+spline coefficient was sampled with both its mean and scale depending on
+the hierarchical precision parameter `tau_w`. This is the textbook setup
+for "funnel" geometry (Neal, 2003) - NUTS needs a very different
+effective step size depending on whether `tau_w` is large or small,
+which showed up empirically as unusually variable sampling efficiency
+(13.9 to 61.7 ESS/second for nominally similar model configurations).
+Reparameterizing to sample a unit-scale value and multiply by the scale
+afterward (a standard fix for exactly this pattern) improved mean ESS/sec
+by roughly 5x in a single-scenario test (13.9 to 27.9) and, combined
+across the full benchmark, by nearly 5x overall (37.2 to 178.8) - see
+below.
+
+## Benchmark: jmjax vs JMbayes2
+
+**Design**: 4 scenarios (`n` in {200, 500} x basis-function count in {9,
+11}), 5 independent simulated datasets per scenario (20 total fits per
+package), genuine correlated random intercept + slope simulated data
+(avoiding the misspecification-attenuation confound of forcing a random
+slope onto slope-free data), matched basis-function counts (confirmed
+exact formulas for both packages), and jmjax's shipped defaults
+(`spline_prior = "penalized"`, `empirical_bayes_prior = TRUE`, both
+confirmed to match `JMbayes2`'s actual approach).
+
+**Accuracy** (paired t-test across the 20 matched datasets):
+
+```
+jmjax    mean |alpha error|: 0.0838 (SD 0.0385)
+JMbayes2 mean |alpha error|: 0.0870 (SD 0.0369)
+Paired t-test: t = -1.85, df = 19, p = 0.079
+```
+
+Not statistically distinguishable at conventional thresholds, and the
+point estimate favors jmjax only trivially (0.003). **Both packages
+recover the association parameter with the same accuracy.**
+
+**Sampling efficiency** (paired t-test across the same 20 datasets):
+
+```
+jmjax    ESS/sec: 267.7 (SD 136.8, 95% CI [207.7, 327.7])
+JMbayes2 ESS/sec: 19.9  (SD 9.2,   95% CI [15.8, 24.0])
+Paired t-test: t = 7.97, df = 19, p = 1.8e-07
+Speed ratio: 13.5x
+```
+
+Highly statistically significant, with non-overlapping confidence
+intervals. **jmjax achieved 13.5x the sampling efficiency of `JMbayes2`
+on the spline-baseline random-intercept-plus-slope model, at
+statistically indistinguishable accuracy.**
+
+Both packages show the same n-dependent bias pattern in `alpha` (larger
+at `n=200`, near-zero at `n=500`), consistent with the "remaining,
+understood behavior" discussion above rather than a defect in either
+implementation.
+
+**Note:** this benchmark used no covariates and predates the
+performance-tuning options described below - see that section for how
+this comparison changes (in both directions) once covariates and
+today's further optimizations are introduced.
+
+## Performance tuning
+
+A subsequent, thorough performance investigation - triggered by a
+troubling apparent efficiency regression on real, covariate-laden data,
+and documented in full in a separate technical report
+(`jmjax_mcmc_performance_investigation_report`, available alongside this
+package's development materials) - found and fixed six genuine
+inefficiencies and one important methodological confound. The headline,
+validated finding: **on real PBC2 clinical data (`q=2`, real covariates,
+penalized spline baseline), jmjax with the options below achieves
+roughly 4.8x the sampling efficiency of `JMbayes2`** - a more modest,
+but more honestly-earned, figure than the no-covariate benchmark above,
+and one that depends on the options below actually being used.
+
+### Recommended settings
+
+```r
+jmjax_setup(num_devices = 4)  # once per session, before any jm_fit() call
+
+fit <- jm_fit(
+  long_formula = y ~ time + age,       # see covariate note below
+  surv_formula = Surv(time, event) ~ drug,
+  data_long = data_long, data_surv = data_surv,
+  id_var = "id", time_var = "time",
+  method = "spline-PH-mcmc",
+  random_effects = "intercept_slope",
+  control = list(
+    num_chains = 4,
+    spline_prior = "penalized"
+  )
+)
+```
+
+**This section previously recommended four options. A replication study
+withdrew three of them.** Each candidate was compared against its own
+default across 3 seeds x 2 sample sizes, paired by seed, with the
+decision criteria written before any result was seen. The criteria
+required a consistent direction across *every* seed, not merely a
+favourable average - and that is what caught them, since all three
+looked acceptable on means alone.
+
+| Option | Previously said | Current status |
+|---|---|---|
+| `dense_mass_spline` | recommended | **default `TRUE`** |
+| `rw2_implementation` | recommended `"vectorized"` | **stays `"scan"`** |
+| `random_effects_method` | recommended `"wishart_gibbs"` | **stays `"nuts"`** |
+| `progress_bar` | recommended `FALSE`, "~30x overhead" | **leave at `TRUE`**, measured 1.00x-1.16x |
+
+- **`dense_mass_spline`** - a targeted (not global) dense NUTS mass matrix
+  over just the spline-smoothing parameters, fixing a deep-tree
+  inefficiency specific to `spline_prior = "penalized"`. It cut mean
+  leapfrog steps from 255 to 63 and passed replication at ~2.1x faster
+  and ~2.3x ESS/second, consistent on every individual run. It is now the
+  default; nothing needs setting. (A *global* `dense_mass = TRUE` remains
+  dramatically counterproductive - roughly 12x slower - because
+  estimating and inverting a mass matrix over the much larger
+  random-effects block is `O(d^3)` in a dimension that grows with the
+  number of subjects.)
+
+- **`rw2_implementation`** - an earlier single run suggested
+  `"vectorized"` was ~1.4x faster. Replication did not support it: at
+  `n = 1000` it was consistently slightly *worse* (ESS/second ratio
+  0.92x) with no wall-clock saving. The original figure appears to have
+  been noise. The default stays `"scan"`. Note that `dense_mass_spline`
+  works with either implementation - an earlier assumption that it
+  required `"vectorized"` was tested and disproven (both reach an
+  identical 63.0 mean leapfrog steps).
+
+- **`random_effects_method`** - `"wishart_gibbs"` failed the consistency
+  criterion (mixed direction across seeds) and also showed worse truth
+  recovery. **A previous version of this vignette described it as
+  "matching `JMbayes2`'s own documented sampler design". That was
+  incorrect and has been retracted** - see the dedicated note on prior
+  specification for what `JMbayes2` actually does. The option changes the
+  *prior* on the random-effects covariance, not merely the computation,
+  and its fixed scale matrix does not adapt to the data.
+
+- **`progress_bar`** - the previously reported ~30x overhead was measured
+  properly and is not real. Across five configurations varying iterations
+  and chains, ON/OFF ratios were 1.02, 1.16, 1.06, 1.06 and 1.00, with
+  three of five effects smaller than their own replicate spread. Leave it
+  on; progress feedback during a multi-minute run is worth a few percent.
+
+- **`jmjax_setup(num_devices = 4)`** - still recommended. By default JAX
+  exposes one device to NumPyro regardless of physical core count,
+  silently forcing `num_chains > 1` to run sequentially. Must be called
+  before the Python backend first loads in a session.
+
+### Covariate scale: now handled automatically
+
+jmjax's efficiency relative to `JMbayes2` was found to **reverse** with
+covariate scale: roughly 2-4x faster with standardized covariates, but
+1.4-2.8x *slower* with raw-scale ones (e.g. `age` on its natural scale).
+`JMbayes2` was near scale-invariant across the same conditions.
+
+**The mechanism.** With an intercept and a covariate `x ~ N(xbar, s)`,
+the posterior correlation between the intercept and that covariate's
+coefficient is approximately
+
+$$\mathrm{corr}(\beta_0, \beta_x) \approx \frac{-\bar{x}}{\sqrt{\bar{x}^2 + s^2}}$$
+
+For `age ~ N(50, 10)` that is about `-0.98`; for a standardized covariate
+it is zero. That single near-degenerate ridge accounts for the whole
+effect, and it is expensive for any gradient-based sampler to traverse.
+The prediction was derived first and then confirmed: `-0.9802` predicted
+against `-0.9764` measured.
+
+**The fix, now automatic.** jmjax centres and scales the baseline
+covariates in `long_formula` internally and back-transforms `beta` so
+coefficients are reported on the original scale - a pure
+reparameterization, so `alpha`, the variance components and the reported
+inference are unaffected. Mean leapfrog steps fell from 228 to 50 (in
+every seed tested) and sampling efficiency rose ~2.3x, moving jmjax from
+below `JMbayes2`'s raw-scale range to above it. Set
+`control$standardize_covariates = FALSE` to disable.
+
+**A retraction worth recording.** An earlier version of this section
+attributed `JMbayes2`'s scale-robustness to its seeding MCMC proposals
+from the covariance of its MLE pre-fits, citing Rizopoulos (2016, *JSS*).
+That paper describes **JMbayes**, the predecessor package, and the claim
+was never verified for `JMbayes2`. `JMbayes2` in fact achieves the same
+end through *hierarchical centering* - a reparameterization, not a
+proposal-tuning mechanism - which is what eventually pointed towards the
+fix actually adopted here. Three separate attempts to solve this by
+preconditioning the mass matrix all failed before that was understood.
+
+### The experimental `wishart_gibbs_centered` option
+
+A further, smaller inefficiency was diagnosed: the population intercept
+`beta_0` consistently showed the lowest ESS of any parameter, traced to
+a near-perfect (-0.95) posterior correlation with the mean random
+intercept - a classic location degeneracy, since the likelihood
+constrains only their sum. `random_effects_method =
+"wishart_gibbs_centered"` addresses this by exactly constraining the
+random intercepts to sum to zero at every posterior draw, implemented
+as a fully separate, opt-in code path with zero effect on the validated
+`"wishart_gibbs"` option above.
+
+This resolved the mixing problem directly (`beta_0` ESS improved
+roughly 4.8x at `n=500`) but, on further validation at a larger sample
+size, was found to introduce a real, quantitatively-characterized
+credible-interval miscalibration for `beta_0` (point estimates remained
+unbiased; reported posterior SD did not). The mechanism: the exact
+constraint removes genuine finite-sample variability in the true random-
+intercept sample mean, which `beta_0` must absorb without its reported
+uncertainty reflecting that fact. **This option should currently be
+treated as exploratory only** - useful for understanding the underlying
+degeneracy, not yet recommended for inference intended to be reported as
+final.
+
+## Weak identifiability: value and area_avg under near-linear trajectories
+
+When the longitudinal formula is close to linear in time (e.g. `y ~
+time`), `value(t)` and `area_avg(t) = area(t)/t` are nearly proportional
+to each other: `area_avg(t) = value(t) - (slope coefficient) * t / 2`.
+When the slope term is small relative to the intercept over the observed
+follow-up window, the two functional forms carry very similar
+information about the hazard, and their individual association
+parameters (`alpha_value`, `alpha_area_avg`) become weakly identified -
+the likelihood has a ridge along which many `(alpha_value,
+alpha_area_avg)` combinations fit almost equally well, even though their
+*sum* (or another specific linear combination) may be well determined.
+
+This was discovered empirically: fitting both `jmjax` and `JMbayes2` on
+the same simulated `value + area_avg` data showed a **shared, systematic
+bias in opposite directions** (`alpha_value` overestimated, `alpha_area_avg`
+underestimated by a similar amount) that did NOT shrink with more data -
+going from `n=400` to `n=3200` left the bias magnitude similar or larger,
+and `JMbayes2`'s own reported posterior SD for `alpha_area` remained
+large (>0.5) even at `n=3200`. This rules out ordinary finite-sample
+noise (which would shrink like `1/sqrt(n)`) and is the signature of a
+structural identifiability limitation of this specific simulation design,
+not a bug in either package - confirmed by both independent
+implementations reproducing the same direction and rough magnitude of
+bias despite using different datasets, different estimation approaches
+(MLE vs MCMC), and different code.
+
+**Practical implication**: if fitting `value` alongside `area` or
+`area_avg`, check whether your longitudinal trajectory has a
+proportionally large slope relative to its intercept over the observed
+follow-up window. If not, expect wide, correlated uncertainty on the
+individual association parameters regardless of sample size - this is a
+property of the data and model specification, not something more data or
+a different implementation will resolve. Consider whether the scientific
+question really requires separating `value` from `area_avg`, or whether
+a single functional form (or their sum) is the more identifiable and
+interpretable target.
+
+## Confirmed non-identifiable: delta with a flexible spline baseline at q=1
+
+`functional_forms = ~ ... + delta(...)` combined with a spline baseline
+hazard and a pure random intercept (`q=1`) is a confirmed
+non-identifiable model specification, actively rejected by `jm_fit()`
+rather than left to silently produce a misleading fit.
+
+**Why**: for a pure random intercept, `delta(t) = value(t) - value(0) =
+beta1*t` - a purely deterministic function of `t` with zero subject-level
+variation, since the intercept and its random effect both cancel in the
+subtraction. `alpha_delta * delta(t)` is therefore mathematically
+indistinguishable from just another linear-in-time term in the log-hazard.
+A flexible, multi-parameter spline baseline can absorb an arbitrary
+linear trend directly into its own coefficients, so the likelihood cannot
+tell "this baseline hazard shape" apart from "a slightly different shape
+plus `alpha_delta` accounting for the difference."
+
+**How this was found**: fitting the combination before the guard existed
+gave `beta`/`sigma_e`/`sigma_b`/`alpha_value` all essentially perfect
+(e.g. `beta_1 = 0.495` vs true `0.5`), but `alpha_delta` came out with the
+WRONG SIGN (`-0.58` vs true `0.3`) and a completely singular (`NaN`)
+standard error - with 8 of the 9 spline coefficients ALSO showing `NaN`
+SEs, despite `L-BFGS-B` reporting successful convergence. That combination
+(one clean, well-behaved parameter block alongside a jointly singular
+block) is the specific signature of a genuine likelihood ridge, not
+numerical noise or a fixable bug.
+
+**Why Weibull doesn't have this problem**: a 2-parameter Weibull baseline
+(`log(shape) + (shape-1)*log(t) + log_lambda0`) has a much more rigid
+functional form that cannot freely mimic an arbitrary added linear trend
+the way a flexible spline can. `weibull-PH-aGH + delta` remains fully
+valid and well-identified at `q=1` (see its own truth-recovery test).
+
+**The expected fix**: a genuine random slope (`q=2`) gives `delta(t) =
+(beta1+b1_i)*t` real subject-level variation that a population-level
+spline curve fundamentally cannot absorb (the spline only captures the
+shared population-average shape, with no mechanism to explain away
+subject-specific `b1_i` differences). Extending `delta` to
+`random_effects = "intercept_slope"` for the spline baseline is expected
+to resolve this identifiability problem, not just work around it - this
+is the natural next validation step once that extension is built.
+
+**Confirmed**: after building spline `q=2` support (combining the
+already-validated 2D adaptive-GH machinery with the spline baseline
+hazard) and extending `delta` onto it using the same generic
+extra-channel pattern validated for Weibull, the q=1 identifiability
+problem is resolved exactly as predicted. Unlike the q=1 case (wrong-
+signed `alpha_delta`, `NaN` standard errors throughout the spline
+coefficients), the q=2 fit gives finite standard errors for every
+parameter and correctly recovers both `alpha_value` and `alpha_delta`
+from simulated data with a genuine random slope. This is a case where the
+mechanistic explanation proposed for a limitation was directly testable
+and held up - not just a plausible story, but a confirmed prediction.
+
+## Time-scale sensitivity: a real-data finding (q=2 + nonlinear trajectory)
+
+Fitting `jmjax` on real (not simulated) data for the first time - the
+PBC2 dataset (312 patients, repeated serum bilirubin measurements) -
+surfaced a genuine numerical robustness gap that no simulated test in
+this package's development had exercised: a nonlinear `long_formula`
+(`log(serBilir) ~ year + I(year^2)`) combined with
+`random_effects = "intercept_slope"` (q=2) failed to converge, on both
+the adaptive-GH MLE path (`n_iter = 0`, immediate failure) and the NUTS
+path (`max R-hat = 12.92`, essentially completely disjoint chains).
+
+**First hypothesis, tested and REJECTED**: initially suspected this was
+a genuine model-level identifiability problem (many PBC2 subjects have
+very sparse follow-up - 27 of 312 have only a single observation -
+plausibly not enough repeated measures to separate a subject's own
+trajectory shape from the population's shared curvature). This
+hypothesis predicted the SAME failure should appear in any correctly-
+implemented alternative fitting the identical model on the identical
+data. It did not: fitting the exact same specification (same data, same
+`poly(year, 2)` fixed formula, same `~ year | id` random structure, same
+Weibull baseline) in `JMbayes2` converged with entirely reasonable
+diagnostics (all key parameter R-hats between 1.00-1.07, healthy
+effective sample sizes). Two independently-implemented MCMC samplers on
+identical data giving qualitatively different outcomes directly
+contradicts a pure model-identifiability explanation - the hypothesis
+was retracted rather than the contradicting evidence being explained
+away.
+
+**Root cause, confirmed empirically**: raw numerical scale of `year`
+(ranging roughly 0-14). Two independent fixes were tried:
+- `poly(year, 2)` (orthogonal polynomials, which decorrelate the
+  quadratic term from the linear term): improved the MLE path from
+  immediate failure to real optimizer progress, but still terminated
+  abnormally with a singular Hessian at q=2.
+- Rescaling `year` to `year/10` (bringing raw coefficient magnitudes
+  into a comparable range with the rest of the parameter vector, rather
+  than addressing collinearity specifically): resolved BOTH the MLE path
+  (full convergence, finite standard errors on every parameter including
+  `sigma_b0`/`sigma_b1`/`rho`) AND the MCMC path (`max R-hat = 1.008`)
+  completely.
+
+This confirms the dominant issue was raw coefficient/gradient scale
+conditioning (which simple rescaling addresses directly), not primarily
+collinearity between polynomial terms (which `poly()` addresses but only
+partially fixed the problem).
+
+**Is this expected, and is it jmjax-specific?** Based on directly
+checking the field's own documentation rather than assuming: `JM`'s own
+package documentation (`?JM::jointModel`) explicitly notes elsewhere that
+"it is advisable (especially in difficult datasets) to check the
+stability of the maximum likelihood estimates" for this general class of
+adaptive-GH-quadrature models, and the published review of Rizopoulos's
+JM book specifically highlights non-convergence as a known, openly-
+discussed reality of this model class - not a jmjax-specific failure
+mode. No evidence was found that `JM` or `JMbayes2` perform automatic
+internal rescaling of the time variable; a search did find at least one
+published Bayesian joint-model paper that explicitly centered the
+LONGITUDINAL RESPONSE (not time) "only to improve numerical stability"
+before fitting, confirming ad hoc numerical preprocessing is an accepted,
+documented practice in this literature generally - left to the analyst
+to apply as needed, not automated by the packages themselves.
+
+**Practical recommendation** (matching the field's own convention rather
+than introducing automatic rescaling, which risks silently changing the
+units/meaning of fitted coefficients without the user asking for it):
+if `random_effects = "intercept_slope"` or `random_formula` combined
+with a nonlinear `long_formula` fails to converge, rescale `time_var` to
+a moderate numerical range (roughly single digits) and refit. A future
+version could add a non-silent warning when `time_var`'s range is large
+relative to what the q=2 machinery has been validated on, without
+forcing an automatic transform.
+
+## Extending this validation
+
+Natural next steps, not yet done:
+
+- Port `area`/`area_avg` to `spline-PH-aGH` (`delta` now done at both q=1
+  [with a confirmed identifiability caveat] and q=2; the two MCMC methods
+  also not yet touched).
+- Implement `slope(t) = d/dt[m_i(t)]` (planned; trivial for the current
+  linear-in-time scope, real work once non-linear time bases are
+  supported).
+- Generalize the current "one extra channel at a time" architecture
+  (`delta`, `area`, `area_avg` each independent, combining more than one
+  simultaneously not yet supported) into a properly combinable N-channel
+  system.
+- Extend the profile log-density diagnostic tooling
+  (`evaluate_log_density()`, `find_map_b_std()`) to support
+  `spline_prior = "penalized"` and `empirical_bayes_prior = TRUE` - it
+  currently only covers the original independent-prior configuration.
+- Add baseline covariates to the survival submodel and non-`time_var`
+  covariates to the longitudinal submodel (both currently out of scope -
+  see package README).
+- Replicate the benchmark at additional sample sizes and with real
+  (non-simulated) data.
+- Construct a simulation design with a genuinely non-collinear
+  `value`/`area_avg` relationship (see the identifiability discussion
+  above) to get a fully decisive individual-parameter cross-validation,
+  rather than the current benchmark's shared-bias-under-collinearity
+  result.

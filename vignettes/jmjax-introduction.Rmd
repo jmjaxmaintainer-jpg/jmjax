@@ -1,0 +1,291 @@
+---
+title: "Introduction to jmjax"
+output: rmarkdown::html_vignette
+vignette: >
+  %\VignetteIndexEntry{Introduction to jmjax}
+  %\VignetteEngine{knitr::rmarkdown}
+  %\VignetteEncoding{UTF-8}
+---
+
+```{r, include = FALSE}
+knitr::opts_chunk$set(
+  collapse = TRUE,
+  comment = "#>"
+)
+```
+
+## What jmjax fits
+
+A shared-parameter joint model links two submodels through a common
+random effect:
+
+- **Longitudinal submodel**: a linear mixed-effects model,
+  `y_ij = X_ij %*% beta + Z_ij %*% b_i + e_ij`.
+- **Survival submodel**: a relative-risk (proportional hazards) model,
+  `h_i(t) = h0(t) * exp(alpha * m_i(t))`, where `m_i(t)` is the subject's
+  fitted longitudinal trajectory at time `t`, and `alpha` (the
+  **association parameter**) measures how strongly the longitudinal
+  trajectory predicts the hazard.
+
+jmjax offers two choices for the baseline hazard `h0(t)` and two
+estimation approaches, giving four fitting methods:
+
+| | Weibull baseline | Spline baseline |
+|---|---|---|
+| **Adaptive-GH MLE** | `"weibull-PH-aGH"` | `"spline-PH-aGH"` |
+| **Bayesian MCMC (NUTS)** | `"weibull-PH-mcmc"` | `"spline-PH-mcmc"` |
+
+## One-time setup
+
+```{r, eval = FALSE}
+library(jmjax)
+jmjax_setup()  # creates a managed Python virtualenv with jax/numpyro
+```
+
+If you already have a Python environment with `jax`/`numpyro` installed
+(e.g. a conda environment), point `reticulate` at it instead - `jmjax`
+will use it automatically and skip creating its own:
+
+```{r, eval = FALSE}
+library(reticulate)
+use_condaenv("my_existing_env", required = TRUE)
+library(jmjax)  # will detect and use the active environment
+```
+
+## Example data
+
+Your data needs two pieces: a long-format longitudinal data frame, and a
+one-row-per-subject survival data frame, sharing a common `id` column.
+
+```{r, eval = FALSE}
+library(survival)
+
+# data_long: one row per (subject, visit)
+head(data_long)
+#>   id time    y
+#> 1  1  0.0 2.03
+#> 2  1  0.5 2.31
+#> 3  1  1.0 2.58
+#> ...
+
+# data_surv: one row per subject
+head(data_surv)
+#>   id time event
+#> 1  1  3.2     1
+#> 2  2  5.0     0
+#> ...
+```
+
+## Fitting: the fast first look
+
+`"weibull-PH-aGH"` is the fastest method, has no priors to configure, and
+is a good first look at your data or a source of warm-start values for a
+more flexible fit later.
+
+```{r, eval = FALSE}
+fit_w <- jm_fit(
+  long_formula = y ~ time,
+  surv_formula = Surv(time, event) ~ 1,
+  data_long = data_long,
+  data_surv = data_surv,
+  id_var = "id",
+  time_var = "time",
+  method = "weibull-PH-aGH"
+)
+summary(fit_w)
+#>                                Estimate Std.Err z.value p.value
+#> beta_0 (Intercept)              2.0068  0.0241  83.29    0.0000
+#> beta_1 (Slope)                  0.4599  0.0045 103.11    0.0000
+#> sigma_e                         0.3586  0.0033 109.50    0.0000
+#> sigma_b                         0.8975  0.0172  52.28    0.0000
+#> log_lambda0                    -3.4847  0.1322 -26.36    0.0000
+#> shape                           1.1163  0.0394  28.35    0.0000
+#> alpha (Association)             0.6976  0.0437  15.98    0.0000
+```
+
+By default this fits a single random intercept (`random_effects =
+"intercept"`). `"weibull-PH-aGH"` also supports a correlated random
+intercept and slope via `random_effects = "intercept_slope"` (a 2D
+adaptive Gauss-Hermite implementation, cross-validated against R's `JM`
+package to within a fraction of a standard error - see
+`vignette("jmjax-validation")`).
+
+## Fitting: flexible baseline hazard, correlated random slope
+
+For a data-driven baseline hazard shape and/or a correlated random
+intercept + slope, use one of the two MCMC methods. `"spline-PH-mcmc"`
+gives the most flexibility:
+
+```{r, eval = FALSE}
+fit_s <- jm_fit(
+  long_formula = y ~ time,
+  surv_formula = Surv(time, event) ~ 1,
+  data_long = data_long,
+  data_surv = data_surv,
+  id_var = "id",
+  time_var = "time",
+  method = "spline-PH-mcmc",
+  random_effects = "intercept_slope",
+  control = list(num_warmup = 500, num_samples = 1000, num_chains = 2)
+)
+print(fit_s)
+#> Method: spline-PH-mcmc
+#> Log-Likelihood: not reported for method 'spline-PH-mcmc'
+#> Subjects: 500  | Longitudinal obs: 2483  | Events: 273 (54.6%)
+#> MCMC diagnostics: max R-hat = 1.0083, min ESS = 412
+```
+
+**Always check the printed diagnostics line before trusting point
+estimates.** `max R-hat` should be close to 1 (conventionally < 1.05) and
+`min ESS` should be at least a few hundred for a 1000-sample fit. If
+either looks off, increase `num_warmup`/`num_samples`, or - especially
+for `random_effects = "intercept_slope"` at small-to-moderate sample
+sizes - run multiple chains (`num_chains = 2` or more) and re-check,
+since a single chain's own diagnostics cannot detect if it has settled
+into the wrong region of a multimodal posterior (see
+`vignette("jmjax-validation")` for a worked example of exactly this
+check).
+
+**For real analyses, a set of validated performance-tuning options is
+recommended** on top of the basic call above - see `?jm_fit`'s
+"Performance-tuning options" section, or `vignette("jmjax-validation")`'s
+"Performance tuning" section for the full detail and benchmarks:
+
+```{r, eval = FALSE}
+jmjax_setup(num_devices = 4)  # once per session, enables genuinely
+                               # parallel (not sequential) chains
+
+fit_s <- jm_fit(
+  long_formula = y ~ time,
+  surv_formula = Surv(time, event) ~ 1,
+  data_long = data_long,
+  data_surv = data_surv,
+  id_var = "id",
+  time_var = "time",
+  method = "spline-PH-mcmc",
+  random_effects = "intercept_slope",
+  control = list(
+    num_warmup = 500, num_samples = 1000, num_chains = 4,
+    spline_prior = "penalized"
+  )
+)
+```
+
+**The performance options that used to be listed here are now defaults or
+have been withdrawn.** Earlier versions of this vignette recommended
+setting `random_effects_method = "wishart_gibbs"`,
+`rw2_implementation = "vectorized"`, `dense_mass_spline = TRUE` and
+`progress_bar = FALSE`. A replication study (3 seeds x 2 sample sizes,
+each candidate compared against its own default, with criteria written
+before the results were seen) changed that picture:
+
+| Option | Then | Now |
+|---|---|---|
+| `dense_mass_spline` | recommended | **default `TRUE`** - passed replication at ~2.1x faster, ~2.3x ESS/second, consistent on every run |
+| `rw2_implementation` | recommended `"vectorized"` | **stays `"scan"`** - the original ~1.4x came from a single run and reversed under replication (ESS/second ratio 0.92x at n=1000) |
+| `random_effects_method` | recommended `"wishart_gibbs"` | **stays `"nuts"`** - mixed direction across seeds, and worse truth recovery, consistent with a documented inverse-Wishart small-variance bias |
+| `progress_bar` | recommended `FALSE` | **leave at `TRUE`** - the reported ~30x overhead was measured properly and is 1.00x-1.16x |
+| covariate standardization | manual, user-side | **automatic** - see below |
+
+**Covariate standardization is now automatic.** jmjax centres and scales
+the baseline covariates in `long_formula` internally and back-transforms
+`beta` so coefficients are reported on the original scale. Nothing you
+read changes; only sampling efficiency does. With an uncentred covariate
+the posterior correlation between the intercept and that covariate's
+coefficient is approximately `-xbar / sqrt(xbar^2 + s^2)` - measured at
+`-0.976` for `age ~ N(50, 10)` - which is expensive for NUTS to traverse.
+Standardizing removed it, cutting mean leapfrog steps from 228 to 50 and
+raising sampling efficiency ~2.3x. Set
+`control$standardize_covariates = FALSE` to disable.
+
+**A related practical note on `time_var`'s numerical scale**: when using
+`random_effects = "intercept_slope"` or `random_formula` together with a
+nonlinear `long_formula` (e.g. `y ~ time + I(time^2)`), the current
+adaptive-GH and NUTS backends can be sensitive to the raw numerical range
+of `time_var`. If you encounter a convergence failure
+(`fit$convergence$converged == FALSE`, `n_iter == 0`, or a very high
+R-hat) in this configuration, try rescaling `time_var` to a moderate
+range (roughly single digits - e.g. dividing "days since baseline" by
+365 to get "years", or dividing "years" by 10) before refitting. This
+mirrors standard practice for gradient-based optimization generally, and
+is a normal part of working with adaptive-GH/HMC joint models on real
+data - `JM`'s own documentation similarly notes that "difficult
+datasets" for this model class may need troubleshooting (e.g. checking
+sensitivity to the number of quadrature points; see
+`?JM::jointModel`'s notes). See `vignette("jmjax-validation")`'s
+"Time-scale sensitivity" section for a worked real-data example of
+diagnosing and resolving this.
+
+By default, `"spline-PH-mcmc"` uses:
+
+- `spline_prior = "independent"` - independent priors on each spline
+  coefficient. Set `spline_prior = "penalized"` for a P-spline (RW2 +
+  Gamma precision hyperprior) that lets the data determine how smooth the
+  baseline hazard should be, matching `JMbayes2`'s approach (confirmed
+  hyperparameters: shape=5, rate=0.5).
+- `empirical_bayes_prior = TRUE` - centers the priors for the fixed
+  effects and random-effect standard deviations on an internally-fit
+  `nlme::lme()` model, matching `JMbayes2`'s confirmed default behavior.
+  This stabilizes estimation of the parameters most entangled with
+  `alpha` (especially the random-slope variance) at small-to-moderate
+  sample sizes. Set `FALSE` to use flat/uninformative priors instead.
+
+## Extracting per-subject random effects
+
+Only the two MCMC methods estimate individual subjects' random effects
+directly (the MLE methods marginalize them via quadrature):
+
+```{r, eval = FALSE}
+head(ranef(fit_s))
+#>   subject_index    b0_mean     b0_sd    b1_mean    b1_sd
+#> 1             1  0.4771231 0.1102341 -0.0322198 0.045211
+#> 2             2 -1.1023841 0.0987621  0.0611234 0.039872
+#> ...
+```
+
+Calling `ranef()` on an MLE fit returns `NULL` with a warning, since
+those methods never estimate individual `b_i` directly.
+
+## Warm-starting a more expensive fit
+
+Since `beta`, `sigma_e`, and `alpha` tend to land in similar places
+regardless of baseline hazard flexibility, a fast Weibull fit's estimates
+make good starting values for a more expensive spline fit:
+
+```{r, eval = FALSE}
+fit_spline_mle <- jm_fit(
+  long_formula = y ~ time,
+  surv_formula = Surv(time, event) ~ 1,
+  data_long = data_long,
+  data_surv = data_surv,
+  id_var = "id",
+  time_var = "time",
+  method = "spline-PH-aGH",
+  init_theta = c(
+    fit_w$estimates[["beta_0"]], fit_w$estimates[["beta_1"]],
+    log(fit_w$estimates[["sigma_e"]]), log(fit_w$estimates[["sigma_b"]]),
+    rep(0, 9),  # zeros for the spline coefficients (no Weibull analog)
+    fit_w$estimates[["alpha"]]
+  )
+)
+```
+
+## Choosing a method
+
+| Situation | Recommended method |
+|---|---|
+| Quick first look, or need warm-start values | `"weibull-PH-aGH"` |
+| Single random effect, flexible baseline hazard, frequentist | `"spline-PH-aGH"` |
+| Correlated random intercept + slope, simple baseline hazard | `"weibull-PH-mcmc"` |
+| Correlated random intercept + slope, flexible baseline hazard | `"spline-PH-mcmc"` |
+| Comparing against `JMbayes2` | `"spline-PH-mcmc"` with `spline_prior = "penalized"` (default `empirical_bayes_prior = TRUE` already matches) |
+
+## Further reading
+
+See `vignette("jmjax-validation")` for the full cross-validation
+methodology against R's `JM` and `JMbayes2` packages, the bugs found and
+fixed during development, benchmark results comparing accuracy and
+sampling efficiency, and the "Performance tuning" section documenting
+the validated options shown above (including an experimental option not
+covered here, `random_effects_method = "wishart_gibbs_centered"`, and
+its known limitations).
