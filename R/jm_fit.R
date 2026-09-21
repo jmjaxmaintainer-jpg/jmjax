@@ -1896,6 +1896,96 @@ jm_fit <- function(long_formula,
       control$init_values <- .ws
       .ws_auto <- TRUE
     }
+
+    # ---- Seeds for the sites lme() cannot supply ------------------------
+    # lme() knows about beta, sigma_e and the random effects. It knows
+    # nothing about the baseline hazard, the association parameter, or the
+    # survival submodel's own covariates - so those were left to
+    # init_to_uniform, and a uniform draw of any of them multiplies a
+    # correctly warm-started trajectory and goes through exp().
+    #
+    # Everything below is ALREADY COMPUTED by this package, at line ~1461,
+    # gated to `method %in% c("weibull-PH-aGH", "spline-PH-aGH")`. That
+    # gate was written when only the maximum-likelihood paths existed and
+    # was never widened when mcmc_warm_start arrived. The consequence was
+    # visible in the test log as three warm starts rejected on every run:
+    #
+    #   functional-forms (weibull)     9448.9 vs 5164.6   log_lambda0/log_shape
+    #   baseline-covariates           38912.1 vs 15130.5  gamma
+    #   standardize-interaction      189714.4 vs 59458.0  gamma
+    #
+    # Each block is its OWN tryCatch and runs AFTER control$init_values is
+    # set, so a failure here costs only that one seed - it cannot lose the
+    # beta/b_std warm start, which is the part that matters most.
+    if (isTRUE(.ws_auto)) {
+      # (a) Weibull baseline. survreg's AFT parameterisation converts to
+      # the model's log h0(t) = log(shape) + (shape-1)*log(t) + log_lambda0
+      # as shape = 1/scale and log_lambda0 = -shape * (Intercept). Left
+      # uniform, log_shape ~ Normal(0, 1) is initialised on [-2, 2], so
+      # shape reaches 7.4 and (shape-1)*log(t) reaches ~15 by t = 10 -
+      # the same amplification-through-exp() as W01.
+      if (method == "weibull-PH-mcmc") {
+        .wbw <- tryCatch({
+          .srw <- survival::survreg(surv_formula, data = data_surv,
+                                    dist = "weibull")
+          .shw <- 1 / .srw$scale
+          list(log_shape = log(.shw),
+               log_lambda0 = -.shw * unname(stats::coef(.srw)[1]))
+        }, error = function(e) NULL, warning = function(w) NULL)
+        if (!is.null(.wbw) && all(is.finite(unlist(.wbw)))) {
+          control$init_values$log_shape   <- .wbw$log_shape
+          control$init_values$log_lambda0 <- .wbw$log_lambda0
+        }
+      }
+
+      # (b) alpha and gamma, two-stage, mirroring JM's initial.surv():
+      # coxph of the event on the FITTED trajectory m_i(T_i). Reuses the
+      # lme fit built above rather than fitting a second one. Subjects are
+      # aligned BY NAME in both directions, as nlme orders by its own
+      # grouping levels and a positional match would pair the wrong
+      # subjects with nothing downstream to show it.
+      .tsw <- tryCatch({
+        .rew <- as.matrix(nlme::ranef(.lme_ws))
+        .ordw <- match(as.character(long_arr$subj_ids), rownames(.rew))
+        stopifnot(!anyNA(.ordw))
+        .rew <- .rew[.ordw, , drop = FALSE]
+        .mhw <- as.vector(X_time_surv %*% nlme::fixef(.lme_ws)) +
+          rowSums(Z_time_surv *
+                    .rew[, seq_len(ncol(Z_time_surv)), drop = FALSE])
+        .didw <- match(as.character(long_arr$subj_ids),
+                       as.character(data_surv[[id_var]]))
+        stopifnot(!anyNA(.didw))
+        .ddw <- data_surv[.didw, , drop = FALSE]
+        .ddw$.jmjax_mhat <- .mhw
+        .cfw <- stats::coef(survival::coxph(
+          stats::update(surv_formula, . ~ . + .jmjax_mhat), data = .ddw))
+        list(alpha = unname(.cfw[".jmjax_mhat"]),
+             gamma = unname(.cfw[setdiff(names(.cfw), ".jmjax_mhat")]))
+      }, error = function(e) NULL, warning = function(w) NULL)
+
+      if (!is.null(.tsw) && length(.tsw$alpha) == 1L && is.finite(.tsw$alpha)) {
+        # alpha when there is no functional-forms channel, alpha_value when
+        # there is; the model samples one or the other, never both, and a
+        # name it does not sample is simply never looked up.
+        control$init_values$alpha       <- .tsw$alpha
+        control$init_values$alpha_value <- .tsw$alpha
+        if (length(.tsw$gamma) && all(is.finite(.tsw$gamma))) {
+          control$init_values$gamma <- .tsw$gamma
+        }
+      }
+
+      # Neutral fallbacks. Zero is the null of no association and of no
+      # covariate effect - not a guess, and immediately left by NUTS. It
+      # applies to the channel extras always (no two-stage estimate exists
+      # for delta/area) and to alpha/gamma only when the two-stage above
+      # did not produce one.
+      for (.anw in c("alpha", "alpha_value", "alpha_delta",
+                     "alpha_area", "alpha_area_avg")) {
+        if (is.null(control$init_values[[.anw]])) {
+          control$init_values[[.anw]] <- 0
+        }
+      }
+    }
   }
   # ---- Time-scale consistency check -----------------------------------
   # The joint model evaluates the longitudinal trajectory AT the survival
@@ -2044,24 +2134,11 @@ jm_fit <- function(long_formula,
         }
       }
 
-      # alpha was omitted for the same reason the spline block was: lme
-      # has no association parameter to report. But omitting it leaves it
-      # uniform on [-2, 2], and the hazard carries exp(alpha * m) where m
-      # is the fitted trajectory - so a random alpha multiplies a
-      # warm-started, correctly-scaled m and can blow up exactly as W01
-      # does. Zero is the neutral value, not a guess: it is the null of no
-      # association, and NUTS moves off it immediately.
-      #
-      # All four names are supplied because which ones EXIST depends on
-      # functional_forms: plain `alpha` with no channel, otherwise
-      # `alpha_value` plus one of alpha_delta / alpha_area / alpha_area_avg.
-      # Names the model does not sample are simply never looked up by the
-      # init strategy, so listing them all is safe and avoids duplicating
-      # the backend's channel-selection logic here, where it would rot.
-      for (.an in c("alpha", "alpha_value", "alpha_delta",
-                    "alpha_area", "alpha_area_avg")) {
-        if (is.null(control$init_values[[.an]])) control$init_values[[.an]] <- 0
-      }
+      # alpha and gamma are seeded where the warm start is built, for both
+      # MCMC methods rather than only this one - see the two-stage block
+      # there. An earlier version zeroed alpha here, which was neutral but
+      # wasted an estimate the package already knew how to compute, and
+      # left the weibull path unseeded entirely.
     }
 
     # IMPORTANT: build this with an explicit loop, not apply()+array()
