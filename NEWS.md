@@ -44,6 +44,22 @@
 * Full mechanism, literature grounding, and validation detail:
   `vignette("jmjax-reparameterization")`.
 
+* **Test coverage added** (`tests/testthat/test-orthogonalize.R`): the
+  option's supported-configuration guards, that a default fit reports
+  `fit$convergence$orthogonalize = NULL` while an orthogonalized one
+  reports which columns were actually constrained, that fitted population
+  estimates agree with the default fit within Monte Carlo tolerance, and
+  a regression guard on `beta_1`'s ESS improving materially under
+  `orthogonalize_b`. Previously validated only by one-off `dev/` scripts.
+  `fit$convergence$orthogonalize` is new with this: a structured,
+  R-readable record of what `orthogonalize_b0`/`orthogonalize_b` actually
+  swept (`NULL` unless requested) - added because the existing
+  `RuntimeWarning` describing this arrives on stderr from the Python
+  backend, not as an R condition, so it is invisible to
+  `expect_warning()`/`tryCatch()` on the R side (same reason
+  `fit$convergence$warm_start` exists rather than relying on its own
+  warning text).
+
 
 ## Warm start
 

@@ -941,6 +941,16 @@ def fit_nuts(X_long, y_long, n_obs, X_time_surv, X_time_quad,
     _orth_all  = bool(control.get("orthogonalize_b", False))
     _orth_int  = bool(control.get("orthogonalize_b0", False))
     b_orth_bases = None
+    # Structured record of what orthogonalize_b/_b0 actually did, surfaced
+    # to R as fit$convergence$orthogonalize (NULL unless the option was
+    # requested). This exists for the same reason warm_start_check does:
+    # the warnings.warn() calls below arrive on stderr, not as an R
+    # condition (reticulate does not route them through R's condition
+    # system), so expect_warning() cannot see them and a non-interactive
+    # run would silently lose the report. A caller - or a test - that
+    # needs to know which columns were actually constrained has to be able
+    # to read it off the fitted object instead.
+    orthogonalize_report = None
     if _orth_all or _orth_int:
         if not (q >= 2 and random_effects_corr
                 and random_effects_method == "nuts"):
@@ -954,6 +964,7 @@ def fit_nuts(X_long, y_long, n_obs, X_time_surv, X_time_quad,
         _qmax = q if _orth_all else 1
         b_orth_bases = []
         _orth_report = []
+        _orth_columns = []
         for _q in range(q):
             if _q < _qmax:
                 _Q, _kept = _absorbable_basis(X_long, Z_long, n_obs, _q)
@@ -965,6 +976,12 @@ def fit_nuts(X_long, y_long, n_obs, X_time_surv, X_time_quad,
                     _q,
                     ("no basis (unconstrained)" if _Q is None else
                      "%d direction(s) from X columns %s" % (_Q.shape[1], _kept))))
+            _orth_columns.append({
+                "column": int(_q),
+                "applied": _Q is not None,
+                "n_directions": int(_Q.shape[1]) if _Q is not None else 0,
+                "source_X_columns": [int(j) for j in _kept],
+            })
         # Say what was ACTUALLY constrained, rather than leaving it to be
         # inferred from downstream behaviour. A verification run found
         # mean(b_i1) NOT driven to zero while beta_1's ESS rose 13x, which is
@@ -975,7 +992,13 @@ def fit_nuts(X_long, y_long, n_obs, X_time_surv, X_time_quad,
         # by inference from a second experiment.
         warnings.warn("orthogonalize_b: " + "; ".join(_orth_report),
                       RuntimeWarning, stacklevel=2)
-        if not any(_Q is not None for _Q in b_orth_bases):
+        _orth_any_applied = any(_Q is not None for _Q in b_orth_bases)
+        orthogonalize_report = {
+            "requested": "b" if _orth_all else "b0",
+            "columns": _orth_columns,
+            "any_applied": _orth_any_applied,
+        }
+        if not _orth_any_applied:
             warnings.warn(
                 "orthogonalize_b/_b0 = True but no fixed-effect column can "
                 "absorb a shift in any random-effect column, so there is no "
@@ -2035,7 +2058,13 @@ def _package_result(samples, diag, p, q, n_splines, N_sub, elapsed,
                          # warm start, so a rejection is visible in the
                          # fitted object rather than only in a warning that
                          # a non-interactive run would swallow.
-                         "warm_start": warm_start_check},
+                         "warm_start": warm_start_check,
+                         # NULL unless control$orthogonalize_b/_b0 was
+                         # requested. See the construction site (above,
+                         # near "control$orthogonalize_b0") for why this
+                         # exists rather than relying on the warnings.warn()
+                         # text.
+                         "orthogonalize": orthogonalize_report},
         "diagnostics": {"rhat": rhat, "ess": ess},
         "random_effects": random_effects,
         "posterior_samples": {k: np.asarray(v).tolist() for k, v in samples.items()},

@@ -304,7 +304,26 @@
 #'       settled by replication. Currently requires \code{q >= 2},
 #'       \code{random_effects_corr = TRUE} and the default
 #'       \code{random_effects_method = "nuts"}; other combinations raise
-#'       an error rather than silently doing nothing.}
+#'       an error rather than silently doing nothing.
+#'
+#'       \code{orthogonalize_b} sweeps every random-effect column (not
+#'       just the intercept), which also removes a degeneracy between the
+#'       fixed slope on time and the mean random slope - present as soon
+#'       as there is any random slope on time, independently of how many
+#'       other covariates are in the model. See
+#'       \code{vignette("jmjax-reparameterization")} for the full
+#'       mechanism and a replicated covariate-count study.
+#'
+#'       Whichever of the two is requested, what was actually swept (per
+#'       column: whether a basis was found, how many directions, and
+#'       which fixed-effects columns it came from) is reported in
+#'       \code{fit$convergence$orthogonalize} - \code{NULL} unless one of
+#'       these options was requested - rather than only in a
+#'       \code{RuntimeWarning} at fit time. The warning is emitted by the
+#'       Python backend and arrives on stderr, not as an R condition, so
+#'       it is not visible to \code{tryCatch()}/\code{withCallingHandlers()}
+#'       on the R side; \code{fit$convergence$orthogonalize} is the
+#'       reliable way to check programmatically what happened.}
 #'     \item{\code{dense_mass_beta}, \code{seed_mass_matrix}}{Both logical,
 #'       both default \code{FALSE}. \strong{Tested and not adopted} -
 #'       retained only to document the negative results.
