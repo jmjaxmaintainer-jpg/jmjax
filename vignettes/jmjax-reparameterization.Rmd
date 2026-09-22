@@ -1298,46 +1298,78 @@ affordable replicate count, because it uses the whole interval rather
 than a binary hit - and it is the exact shape of the
 `wishart_gibbs_centered` failure.
 
-At $R = 16$ replicates on the `linear` design (95% coverage carries a
-Monte Carlo SE of about $0.027$ here; a 100-replicate run is in
-progress):
+At $R = 100$ replicates on the `linear` design, $N = 300$, 500 warmup +
+1000 draws over 2 chains, gated at regression-only
+$\widehat{R} \le 1.05$ (95% coverage carries a Monte Carlo SE of about
+$0.011$ at this count):
 
-| estimand | arm A | arm D | arm E | D corrected | E corrected |
-|---|---|---|---|---|---|
-| `beta_0` sd_ratio | 1.177 | **0.283** | **0.283** | 1.181 | 1.193 |
-| `beta_0` cov95 | 1.000 | **0.500** | **0.500** | 1.000 | 1.000 |
-| `beta_slope` sd_ratio | 1.184 | 1.183 | **0.267** | 1.183 | 1.195 |
-| `beta_slope` cov95 | 1.000 | 1.000 | **0.250** | 1.000 | 1.000 |
-| `alpha` sd_ratio | 0.935 | 0.934 | 0.927 | - | - |
-| `sigma_b0` sd_ratio | 1.135 | 1.138 | 1.152 | - | - |
+| estimand | arm A | arm D | arm E |
+|---|---|---|---|
+| `beta_0` sd_ratio | 1.164 | **0.262** | **0.264** |
+| `beta_0` cov95 | 0.990 | **0.323** | **0.320** |
+| `beta_slope` sd_ratio | 1.027 | 1.032 | **0.223** |
+| `beta_slope` cov95 | 0.970 | 0.960 | **0.250** |
+| `alpha` sd_ratio | 0.922 | 0.920 | 0.921 |
+| `alpha` cov95 | 0.930 | 0.929 | 0.920 |
+| `sigma_b0` sd_ratio | 0.914 | 0.906 | 0.910 |
+
+Put in absolute terms, against the across-replicate spread of the
+posterior means - the quantity a calibrated posterior SD should be
+estimating:
+
+| | empirical SD | mean posterior SD | intervals too narrow by |
+|---|---|---|---|
+| `beta_0`, arm A | 0.0587 | 0.0660 | - (1.16x, mildly conservative) |
+| `beta_0`, arm D / E | 0.0587 | **0.0154** | **3.8x** |
+| `beta_slope`, arm A / D | 0.0172 | 0.0178 | - (1.03x) |
+| `beta_slope`, arm E | 0.0172 | **0.0038** | **4.5x** |
+
+Point estimates are unbiased throughout: the largest relative bias in any
+arm or estimand among $\beta_0$, $\beta_{\text{slope}}$ and
+$\sigma_{b_0}$ is $0.5\%$.
 
 The pattern is a clean dose-response and leaves little room for an
 alternative reading. Arm D sweeps only the intercept column and damages
 only `beta_0`; arm E sweeps both and damages both; `beta_slope` under D is
-untouched, as it must be, since D never touches that column. `alpha` -
-carried deliberately as a **negative control**, since it lives in the
-survival submodel and never meets the subject-constant column space - is
-identical across all three arms, as is `sigma_b0`. That last point also
+untouched, as it must be, since D never touches that column. The
+unmodified fit is itself well calibrated on `beta_slope` (1.027) and
+mildly conservative on `beta_0` (1.164), so arm A rather than nominal
+$0.95$ is the target a correction should be matching.
+
+`alpha` is carried deliberately as a **negative control**: it lives in the
+survival submodel and never meets the subject-constant column space, so no
+arm should move it. None does - and the agreement is far tighter than the
+table can show. Paired replicate by replicate, the mean difference in
+`alpha`'s posterior mean is $+2 \times 10^{-5}$ between arms D and A and
+$+1 \times 10^{-4}$ between E and A, i.e. $0.04\%$ and $0.2\%$ of a single
+posterior standard deviation. `sigma_b0` behaves the same way, which also
 settles an open question posed in `mcmc_model.py`'s own source comment:
 sweeping does **not** shift `sigma_b0`'s posterior.
 
-Point estimates remain unbiased throughout (bias below $0.6$ Monte Carlo
-standard errors in every arm and estimand), which is exactly why this
-could not have been caught by a bias check, and exactly how
-`wishart_gibbs_centered` passed inspection for as long as it did.
+That the damage is invisible to a point-estimate check is the whole
+difficulty. It is exactly why `wishart_gibbs_centered` survived inspection
+for as long as it did, and exactly why this study reports interval width
+rather than agreement of means.
 
-**The correction restores calibration.** The final two columns report
-$\tilde\beta$ of Section 4.9, computed by post-processing each arm's own
-draws with no refit: $\mathrm{sd\_ratio}$ returns to $1.18$-$1.19$ against
-the unmodified fit's $1.18$, and 95% coverage returns to $1.00$. The
+**The correction restores calibration.** Applying $\tilde\beta$ of
+Section 4.9 - post-processing each arm's own draws, with no refit - at
+$R = 16$ replicates under the same settings (the 100-replicate
+confirmation is in progress):
+
+| estimand | arm A | arm D | arm E | D corrected | E corrected |
+|---|---|---|---|---|---|
+| `beta_0` sd_ratio | 1.177 | 0.283 | 0.283 | **1.181** | **1.193** |
+| `beta_slope` sd_ratio | 1.184 | 1.183 | 0.267 | **1.183** | **1.195** |
+
+with 95% coverage restored to $1.00$ in every corrected cell. The
 agreement is stronger than the table shows, because it holds **per
-replicate** and not merely in aggregate: arm D's corrected `beta_0`
-tracks arm A's `beta_0` across replicates at $r = 0.9999$, with a mean
-absolute gap of $0.0007$ against $0.0082$ for the uncorrected comparison -
-an order of magnitude tighter. That is the signature Proposition 6
-predicts, since the correction reconstructs what the unmodified
-parameterization would have reported *given the same* `b_raw` draw, rather
-than merely landing on a similar variance.
+replicate** and not merely in aggregate: arm D's corrected `beta_0` tracks
+arm A's `beta_0` across replicates at $r = 0.9999$, with a mean absolute
+gap of $0.0007$ against $0.0082$ for the uncorrected comparison - an order
+of magnitude tighter. That is the signature Proposition 6 predicts, since
+the correction reconstructs what the unmodified parameterization would
+have reported *given the same* `b_raw` draw, rather than merely landing on
+a similar variance.
 
 The practical reading, pending the larger run: `beta` from an
 orthogonalized fit is a *constrained* estimand and its interval should not
@@ -1348,6 +1380,26 @@ is done in the identified coordinates afterwards.
 
 ### 9.2 Remaining limitations
 
+- **An unrelated finding the same study surfaced, recorded here rather than
+  dropped.** The negative control `alpha` is arm-invariant to a remarkable
+  degree, which is what it was included to check. But in *every* arm,
+  including the unmodified fit, its posterior mean sits about $2.8\%$ above
+  the truth ($0.5142$ against $0.500$) - $32\%$ of one posterior standard
+  deviation, or $2.97$ Monte Carlo standard errors at $R = 100$ - with
+  $\mathrm{sd\_ratio}$ $0.92$ and 95% coverage $0.93$. `sigma_b0` shows a
+  milder version of the same pattern ($\mathrm{sd\_ratio}$ $0.91$, coverage
+  $0.94$, bias $0.3\%$). Because the effect is identical across arms it
+  says nothing whatever about the reparameterization, which is the claim
+  this document makes; it is a property of the joint model, this
+  simulation design, or this sample size, and it appeared only because
+  this is the first time these fits were replicated 100 times and examined
+  for *coverage* rather than point agreement. It is reported because a
+  coverage table that includes a negative control should show what the
+  negative control actually did: omitting `alpha` once it showed something
+  would undermine the value of having included it. Diagnosing it - finite-
+  sample bias in the association parameter is a plausible and
+  well-precedented candidate - is separate work, and it should be
+  understood before this table is put in front of a referee.
 - The option currently requires `q >= 2`, `random_effects_corr = TRUE`, and
   `random_effects_method = "nuts"` (the default); other combinations raise
   an informative error rather than silently no-op'ing, but the option's
