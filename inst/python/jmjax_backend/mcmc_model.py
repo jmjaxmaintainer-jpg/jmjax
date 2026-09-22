@@ -1919,7 +1919,8 @@ def fit_nuts(X_long, y_long, n_obs, X_time_surv, X_time_quad,
                             mean_num_steps=mean_num_steps, max_num_steps=max_num_steps,
                             n_divergences=n_divergences,
                             divergence_rate=divergence_rate,
-                            warm_start_check=warm_start_check)
+                            warm_start_check=warm_start_check,
+                            orthogonalize_report=orthogonalize_report)
 
 
 # Explicit naming per site, matching the MLE backends' convention
@@ -1975,7 +1976,7 @@ def recompute_site_diagnostics(draws, num_chains=1):
 def _package_result(samples, diag, p, q, n_splines, N_sub, elapsed,
                      mean_num_steps=None, max_num_steps=None,
                      n_divergences=None, divergence_rate=None,
-                     warm_start_check=None):
+                     warm_start_check=None, orthogonalize_report=None):
     # gamma's size isn't a fixed factory parameter like p/q/n_splines (it
     # depends on how many baseline covariates were in surv_formula, which
     # build_model() never needed to know ahead of time - W_surv's shape
