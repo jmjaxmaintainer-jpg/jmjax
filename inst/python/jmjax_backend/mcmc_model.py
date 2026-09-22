@@ -362,6 +362,81 @@ def _absorbable_generator_matrix(Q, gens, tol=1e-8):
     return Dg @ coeffs                                     # [p, k]
 
 
+def _orthogonal_complement(Q, seed=0):
+    """Orthonormal basis of the orthogonal complement of span(Q).
+
+    SEPARATE, OPT-IN TRACK (control$orthogonalize_b0_rotate). Not used by
+    orthogonalize_b/_b0's own sweep, nor by the beta_corrected correction -
+    both only ever need Q. This exists to let the intercept column's own
+    sampling be reparameterized so the swept generator direction becomes an
+    explicit, low-dimensional NUTS site (see the long comment at this
+    option's control-flag check in fit_nuts()), instead of being buried
+    inside the full N_sub-dimensional b_std[:, 0], where it cannot receive
+    its own mass-matrix treatment.
+
+    Q: [N, k] orthonormal (as returned by _absorbable_basis_exact). Returns
+    Qperp: [N, N-k] orthonormal, with Q.T @ Qperp == 0 and [Q, Qperp]
+    jointly spanning R^N (verified below to a strict numerical tolerance,
+    not assumed) - i.e. [Q, Qperp] is an N x N orthogonal matrix. Computed
+    via QR of [Q | a random completion], a standard, numerically stable
+    construction (Householder QR). The completion's seed is fixed (derived
+    from control$seed by the caller) so a fit stays exactly reproducible.
+
+    WHY THIS IS THE RIGHT OBJECT. If u ~ N(0, I_k) and v ~ N(0, I_{N-k})
+    independently, then b := Q @ u + Qperp @ v is EXACTLY N(0, I_N)
+    distributed - a basic rotation-invariance fact (Q, Qperp orthonormal
+    and jointly spanning R^N), not an approximation. So replacing the
+    N-dimensional standard-normal sample b_std[:, 0] with this
+    reconstruction changes nothing about the model; it only changes which
+    coordinates NUTS actually adapts a mass matrix to. And because
+    Q.T @ Qperp = 0, Q.T @ b = u exactly - so u IS the same generator
+    coordinate orthogonalize_b0's sweep step (Q @ (Q.T @ b_raw[:, 0])) and
+    beta_corrected's correction (_absorbable_generator_matrix's own
+    Q.T @ b_raw[:, q] term) already compute from b_raw. Giving it its own
+    name is what lets it receive its own dense-mass block
+    (control$dense_mass_b0_generator) via NumPyro's ordinary block-diagonal
+    mass-matrix mechanism, with no new sampler-level machinery required.
+
+    NOT USED for the slope column (or any q >= 1 column when
+    orthogonalize_b sweeps it): b_raw[:, 0] = sigma_b[0] * b_std[:, 0]
+    always (a valid Cholesky factor of a correlation matrix has first row
+    [1, 0, ..., 0]), so a FIXED rotation of b_std[:, 0] alone exactly
+    isolates the intercept's generator direction. The analogous slope
+    direction is sigma_b[1] * (rho * b_std[:, 0] + sqrt(1-rho^2) *
+    b_std[:, 1]) - a combination that depends on the SAMPLED correlation
+    rho, so a fixed, precomputed rotation cannot isolate it the same way.
+    Extending this construction to the slope column is future work, not
+    something this function silently attempts.
+
+    Returns None if Q is None, if Q.shape[1] >= Q.shape[0] (nothing left
+    to complement), or if the construction fails its own verification
+    (defensive; should not happen for any well-conditioned Q).
+    """
+    if Q is None:
+        return None
+    N, k = Q.shape
+    if k >= N:
+        return None
+    rng = np.random.default_rng(seed)
+    M = np.concatenate([Q, rng.standard_normal((N, N - k))], axis=1)
+    Qfull, _ = np.linalg.qr(M)
+    Qperp = Qfull[:, k:]
+    # Defensive check, not a formality: an (astronomically unlikely)
+    # near-rank-deficient random completion, or an ill-conditioned Q,
+    # would silently produce a Qperp that does not actually complement Q -
+    # which would corrupt the model rather than merely under-perform it.
+    ortho_err = float(np.abs(Q.T @ Qperp).max())
+    orthonorm_err = float(np.abs(Qperp.T @ Qperp - np.eye(N - k)).max())
+    if ortho_err > 1e-6 or orthonorm_err > 1e-6:
+        warnings.warn(
+            "orthogonalize_b0_rotate: the orthogonal-complement construction "
+            "did not verify to tolerance (ortho_err=%.2e, orthonorm_err="
+            "%.2e); falling back to the unrotated sampling for this fit." %
+            (ortho_err, orthonorm_err), RuntimeWarning, stacklevel=2)
+        return None
+    return Qperp
+
+
 def build_model(p, q, n_splines, max_obs, alpha_prior_sd=2.0,
                  sigma_e_prior_mean=None, sigma_e_prior_shape=5.0,
                  lkj_concentration=3.0,
@@ -375,7 +450,8 @@ def build_model(p, q, n_splines, max_obs, alpha_prior_sd=2.0,
                  random_effects_method="nuts",
                  rw2_implementation="scan",
                  wishart_eb_scale=False,
-                 b_orth_bases=None):
+                 b_orth_bases=None,
+                 b0_gen_perp=None):
     """
     Factory for the joint-model log-density, shared by fit_nuts() (which
     runs NUTS against it) and evaluate_log_density() (which evaluates it at
@@ -745,8 +821,43 @@ def build_model(p, q, n_splines, max_obs, alpha_prior_sd=2.0,
                     # toward zero correlation.
                     L_corr = numpyro.sample("L_corr", dist.LKJCholesky(q, concentration=lkj_concentration))
                     L = sigma_b[:, None] * L_corr
-                    with numpyro.plate("subjects", N_sub):
-                        b_std = numpyro.sample("b_std", dist.Normal(0.0, 1.0).expand([q]).to_event(1))
+                    if b0_gen_perp is not None and q >= 2:
+                        # ------------------------------------------------
+                        # EXPERIMENTAL, opt-in (control$orthogonalize_b0_rotate).
+                        # See _orthogonal_complement()'s docstring for the
+                        # derivation and why this is exact and intercept-
+                        # column-only. b_raw[:, 0] = sigma_b[0] * b_std[:, 0]
+                        # always, so a FIXED rotation of b_std[:, 0] alone -
+                        # into an explicit k-dim "generator" coordinate
+                        # (b0_gen_u, exactly Q.T @ b_std[:, 0]) plus an
+                        # (N_sub - k)-dim residual (b0_gen_v) - changes
+                        # nothing about the model (it is a rotation of a
+                        # spherical Gaussian) but gives the swept direction
+                        # its own NUTS site, which control$dense_mass_b0_
+                        # generator can then give its own mass-matrix block.
+                        # Columns 1+ (e.g. the slope) are sampled exactly as
+                        # before; only column 0's construction changes.
+                        _Q0 = jnp.asarray(b_orth_bases[0])
+                        _Qp0 = jnp.asarray(b0_gen_perp)
+                        _k_gen = _Q0.shape[1]
+                        _n_res = _Qp0.shape[1]
+                        b0_gen_u = numpyro.sample(
+                            "b0_gen_u",
+                            dist.Normal(0.0, 1.0).expand([_k_gen]).to_event(1))
+                        b0_gen_v = numpyro.sample(
+                            "b0_gen_v",
+                            dist.Normal(0.0, 1.0).expand([_n_res]).to_event(1))
+                        b_std_col0 = _Q0 @ b0_gen_u + _Qp0 @ b0_gen_v
+                        with numpyro.plate("subjects", N_sub):
+                            b_std_rest = numpyro.sample(
+                                "b_std_rest",
+                                dist.Normal(0.0, 1.0).expand([q - 1]).to_event(1))
+                        b_std = numpyro.deterministic(
+                            "b_std",
+                            jnp.concatenate([b_std_col0[:, None], b_std_rest], axis=1))
+                    else:
+                        with numpyro.plate("subjects", N_sub):
+                            b_std = numpyro.sample("b_std", dist.Normal(0.0, 1.0).expand([q]).to_event(1))
                     b_raw = b_std @ L.T
 
                     if b_orth_bases is None or not any(
@@ -1176,6 +1287,22 @@ def fit_nuts(X_long, y_long, n_obs, X_time_surv, X_time_quad,
     #                    and less tested half.
     _orth_all  = bool(control.get("orthogonalize_b", False))
     _orth_int  = bool(control.get("orthogonalize_b0", False))
+    # SEPARATE, OPT-IN TRACK, layered on top of orthogonalize_b/_b0 rather
+    # than replacing it: changes HOW the intercept column's degeneracy is
+    # SAMPLED (an explicit, low-dimensional rotation - see
+    # _orthogonal_complement()'s docstring), not WHETHER it is swept. Valid
+    # whenever column 0 is touched at all, i.e. whenever orthogonalize_b0
+    # or orthogonalize_b is requested (both compute b_orth_bases[0]).
+    # Intercept-only: the analogous slope direction depends on the sampled
+    # correlation rho, so this does not (yet) extend to orthogonalize_b's
+    # slope column - see the same docstring.
+    _orth_int_rotate = bool(control.get("orthogonalize_b0_rotate", False))
+    if _orth_int_rotate and not (_orth_all or _orth_int):
+        raise ValueError(
+            "control$orthogonalize_b0_rotate = TRUE requires "
+            "orthogonalize_b0 or orthogonalize_b to also be TRUE - it only "
+            "changes how the intercept column's degeneracy is sampled, not "
+            "whether it is swept at all.")
     b_orth_bases = None
     # SEPARATE, OPT-IN TRACK (see the "beta_corrected" block after
     # mcmc.get_samples() below, and _absorbable_generator_matrix() near
@@ -1213,6 +1340,7 @@ def fit_nuts(X_long, y_long, n_obs, X_time_surv, X_time_quad,
         _orth_report = []
         _orth_columns = []
         _s_resid = 0.0
+        _b0_gen_perp = None
         for _q in range(q):
             if _q < _qmax:
                 # TWO constructions, deliberately. The per-column search is
@@ -1266,6 +1394,15 @@ def fit_nuts(X_long, y_long, n_obs, X_time_surv, X_time_quad,
                 # _Q/_gens already computed above at no extra cost (no second
                 # call into _absorbable_basis_exact).
                 _Dmat = _absorbable_generator_matrix(_Q, _gens) if _Q is not None else None
+                if _q == 0 and _orth_int_rotate and _Q is not None:
+                    # Reuses the fit's own seed so the (otherwise arbitrary)
+                    # random completion in _orthogonal_complement is exactly
+                    # reproducible given the same control$seed - it affects
+                    # only WHICH orthonormal completion is used, never
+                    # whether the construction is exact (verified inside
+                    # _orthogonal_complement regardless of the seed drawn).
+                    _b0_gen_perp = _orthogonal_complement(
+                        _Q, seed=int(control.get("seed", 2026)) + 90210)
             else:
                 _Q, _kept, _ncol, _nex = None, [], 0, 0
                 _Dmat = None
@@ -1353,7 +1490,8 @@ def fit_nuts(X_long, y_long, n_obs, X_time_surv, X_time_quad,
                          random_effects_method=random_effects_method,
                          rw2_implementation=rw2_implementation,
                          wishart_eb_scale=bool(control.get("wishart_eb_scale", False)),
-                         b_orth_bases=b_orth_bases)
+                         b_orth_bases=b_orth_bases,
+                         b0_gen_perp=_b0_gen_perp)
 
     # Targeted dense_mass for the spline coefficients specifically -
     # distinct from the global control$dense_mass (which covers EVERY
@@ -1474,6 +1612,42 @@ def fit_nuts(X_long, y_long, n_obs, X_time_surv, X_time_quad,
     # ------------------------------------------------------------------
     if control.get("dense_mass_beta", False) and p >= 2:
         _blocks.append(("beta",))
+
+    # ------------------------------------------------------------------
+    # EXPERIMENTAL, opt-in: a dense mass block over the intercept column's
+    # explicit generator coordinate, b0_gen_u (see _orthogonal_complement()
+    # and control$orthogonalize_b0_rotate). Only meaningful when that
+    # option actually created the site - guarded the same way dense_mass_
+    # spline is guarded against sites that do not exist for the current
+    # model configuration (requesting a dense block over a nonexistent
+    # site raises KeyError, not a silent no-op).
+    #
+    # MOTIVATION. dense_mass_beta (above) targets a comparable, even more
+    # strongly correlated, ridge (beta's own cross-coefficient correlation)
+    # and was measured to produce a NULL result - a large correlation is
+    # necessary but evidently not sufficient for a dense block to help,
+    # which is a real prior finding this option's evaluation should be
+    # read against, not a reason to skip trying it: b0_gen_u is a
+    # DIFFERENT kind of block than dense_mass_beta's. dense_mass_beta gives
+    # a dense matrix to a slice of an ALREADY well-conditioned coordinate
+    # (beta, once orthogonalized); b0_gen_u is the coordinate the
+    # degeneracy was relocated INTO (vignette("jmjax-reparameterization"),
+    # Section 9.1.1) - a small (k = number of absorbable directions,
+    # typically 1-4), previously-nonexistent site with no prior track
+    # record at all. Whether isolating it this way closes the ESS gap
+    # Section 9.1.1 measures for beta_corrected is exactly the open
+    # question this option exists to test; a null result here would be
+    # informative in the same way dense_mass_beta's was, not a failure of
+    # the prototype.
+    if control.get("dense_mass_b0_generator", False):
+        if _b0_gen_perp is None:
+            raise ValueError(
+                "control$dense_mass_b0_generator = TRUE requires "
+                "control$orthogonalize_b0_rotate = TRUE to have actually "
+                "created the b0_gen_u site (it did not for this fit - "
+                "either the option was not requested, or no absorbable "
+                "intercept direction was found).")
+        _blocks.append(("b0_gen_u",))
 
     if _blocks:
         dense_mass_arg = _blocks
@@ -1643,6 +1817,17 @@ def fit_nuts(X_long, y_long, n_obs, X_time_surv, X_time_quad,
     # breaking positive-definiteness. Going through biject_to means every
     # constraint survives automatically - sigmas stay positive, L_corr
     # stays a valid Cholesky factor - with no special cases.
+    #
+    # KNOWN GAP: control["orthogonalize_b0_rotate"] and a warm-started
+    # "b_std" value do not combine. The check just below only substitutes
+    # sites where site["type"] == "sample"; when the rotation is active,
+    # "b_std" is rebuilt as a numpyro.deterministic from "b0_gen_u" /
+    # "b0_gen_v" / "b_std_rest" (see build_model()), so a warm start
+    # supplied for "b_std" is silently skipped for those columns - NUTS
+    # falls back to its default init for them instead of erroring. This is
+    # a soft degradation, not a correctness bug (the model is unchanged),
+    # but it means a warm-started, rotated fit gets less benefit from the
+    # warm start than an unrotated one until this is addressed.
     _init_vals = control.get("init_values")
     if _init_vals:
         from numpyro.infer import initialization as _init
@@ -2295,7 +2480,14 @@ def fit_nuts(X_long, y_long, n_obs, X_time_surv, X_time_quad,
     # is ever included in population_sites below, so computing their
     # full R-hat/ESS diagnostics would be wasted work. Both sites' raw
     # samples remain fully available via `samples` above for ranef().
-    _per_subject_sites = {"b", "b_std", "b_raw", "z_step"}
+    # b_std_rest (q-1 remaining per-subject columns) and b0_gen_v (the
+    # N_sub-k residual block of control$orthogonalize_b0_rotate) are the
+    # same per-subject-scale exclusion as b_std itself, for the same
+    # reason. b0_gen_u is DELIBERATELY NOT excluded: it is the small,
+    # explicit generator coordinate that option creates, and its own
+    # R-hat/ESS is the whole diagnostic this prototype needs.
+    _per_subject_sites = {"b", "b_std", "b_raw", "z_step",
+                          "b_std_rest", "b0_gen_v"}
     samples_by_chain_for_diag = {k: v for k, v in samples_by_chain.items() if k not in _per_subject_sites}
     diag = numpyro_summary(samples_by_chain_for_diag, group_by_chain=True)
 
