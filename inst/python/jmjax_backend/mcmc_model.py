@@ -29,6 +29,103 @@ from numpyro.contrib.control_flow import scan as numpyro_scan
 RHAT_CONVERGED_THRESHOLD = 1.05
 
 
+def _absorbable_basis(X_long, Z_long, n_obs, q_idx, tol=1e-8):
+    """Basis for the directions of random-effect column `q_idx` that the
+    fixed effects can absorb.
+
+    A shift of b[:, q] by s_i (subject-constant) changes the linear
+    predictor by s_i * Z[:, :, q]. That shift is absorbed by beta - leaving
+    fitted values unchanged - exactly when some column j of X satisfies
+
+        X[:, :, j]  ==  s_i * Z[:, :, q]      for a subject-constant s_i
+
+    so the absorbable space is spanned by the s_i vectors of every such
+    column. The data decide which columns qualify; nothing is assumed about
+    the formula.
+
+    For q = 0 the random-effect column is the constant 1, so the condition
+    reduces to "column j is constant within subject" and this recovers the
+    intercept case. For q = 1 (a random slope on time) it picks up `time`
+    itself, giving the sum-to-zero constraint on b_1, and would also pick up
+    any covariate-by-time interaction present in X.
+
+    Returns (Q, kept) with Q an [N_sub, k] orthonormal basis, or (None, []).
+
+    Computed in fit_nuts() where X_long and Z_long are concrete arrays:
+    inside the traced model "which columns qualify" would be a tracer and
+    could not select columns at all.
+    """
+    X = np.asarray(X_long, dtype=float)
+    Z = np.asarray(Z_long, dtype=float)
+    if X.ndim != 3 or Z.ndim != 3 or q_idx >= Z.shape[2]:
+        return None, []
+    N_sub, max_obs, p = X.shape
+    n = np.asarray(n_obs).astype(int).reshape(-1)
+    if n.shape[0] != N_sub or N_sub == 0 or p == 0:
+        return None, []
+
+    mask = np.arange(max_obs)[None, :] < n[:, None]          # [N_sub, max_obs]
+    zq   = Z[:, :, q_idx]                                     # [N_sub, max_obs]
+    nz   = mask & (np.abs(zq) > tol)                          # usable cells
+    zsc  = max(float(np.nanmax(np.abs(zq[mask]))) if mask.any() else 1.0, 1.0)
+
+    keep, svals = [], []
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore", RuntimeWarning)
+        for j in range(p):
+            xj = X[:, :, j]
+            # Wherever Z_q is ~0 the column must be ~0 too, or no constant
+            # s_i can reproduce it.
+            bad = mask & ~nz & (np.abs(xj) > tol * max(
+                float(np.nanmax(np.abs(xj[mask]))) if mask.any() else 1.0, 1.0))
+            if bad.any():
+                continue
+            r = np.where(nz, xj / np.where(np.abs(zq) > tol, zq, 1.0), np.nan)
+            rmin = np.nanmin(r, axis=1); rmax = np.nanmax(r, axis=1)
+            spread = np.nanmax(rmax - rmin)
+            if not np.isfinite(spread):
+                continue
+            scale = max(float(np.nanmax(np.abs(rmax))), 1.0)
+            if spread <= tol * scale * zsc:
+                # BUG FIX: a subject with no cell where |Z_q| > tol (e.g.
+                # the only observation is at Z_q = 0, such as a baseline-
+                # only trajectory when q is the time-slope column) has no
+                # row from which to determine s_i at all - rmin/rmax are
+                # NaN for them, not "the ratio is 0". Their own data is
+                # silent on s_i, not evidence for s_i = 0: with Z_iq = 0
+                # everywhere for that subject, ANY s_i leaves their fitted
+                # values unchanged, so imputing the consensus value from
+                # the subjects whose data DOES determine it (already known,
+                # by the spread check just above, to agree with each other
+                # to within tol) keeps the basis column the single uniform
+                # direction it is supposed to be. The old fallback (0.0)
+                # silently broke that uniformity - see
+                # dev/diag_slope_projection.R: at n=500 with several
+                # baseline-only subjects, Q[:,0] for the slope column came
+                # back non-uniform (sd 5.3e-3, some entries exactly 0)
+                # instead of constant, so the projection removed a
+                # subject-WEIGHTED quantity instead of the simple mean,
+                # and mean_i(b_i1) was left as large as 0.04-0.07 instead
+                # of pinned to ~1e-16 like the intercept column always was.
+                det = np.isfinite(rmin)
+                s_fill = float(np.nanmedian(rmin)) if det.any() else 0.0
+                s_i = np.where(det, rmin, s_fill)
+                keep.append(int(j)); svals.append(s_i)
+    if not keep:
+        return None, []
+
+    S = np.stack(svals, axis=1)                               # [N_sub, k]
+    Q, R = np.linalg.qr(S)
+    r = np.abs(np.diag(R))
+    if r.size == 0:
+        return None, []
+    good = r > tol * max(float(r.max()), 1.0)
+    Q = np.ascontiguousarray(Q[:, good], dtype=float)
+    if Q.shape[1] == 0:
+        return None, []
+    return Q, [keep[i] for i, g in enumerate(good) if g]
+
+
 def build_model(p, q, n_splines, max_obs, alpha_prior_sd=2.0,
                  sigma_e_prior_mean=None, sigma_e_prior_shape=5.0,
                  lkj_concentration=3.0,
@@ -40,7 +137,9 @@ def build_model(p, q, n_splines, max_obs, alpha_prior_sd=2.0,
                  sigma_b_prior_mean=None, sigma_b_prior_shape=5.0,
                  random_effects_corr=True,
                  random_effects_method="nuts",
-                 rw2_implementation="scan"):
+                 rw2_implementation="scan",
+                 wishart_eb_scale=False,
+                 b_orth_bases=None):
     """
     Factory for the joint-model log-density, shared by fit_nuts() (which
     runs NUTS against it) and evaluate_log_density() (which evaluates it at
@@ -326,7 +425,15 @@ def build_model(p, q, n_splines, max_obs, alpha_prior_sd=2.0,
                 # nu0 = q + 2, the smallest df giving a finite prior mean,
                 # and set S0 = (D_hat * (nu0 - q - 1))^-1 = D_hat^-1 so
                 # that E[D] = D_hat exactly.
-                if bool(control.get("wishart_eb_scale", False)) and sigma_b_prior_mean is not None:
+                # NOT control.get(...): `control` is a parameter of fit_nuts,
+                # not of build_model, so referring to it here raised
+                #   NameError: name 'control' is not defined
+                # the moment this branch executed - i.e. every
+                # random_effects_method = "wishart_gibbs" fit. The flag is now
+                # threaded in as an argument. Found on 2026-09-21 by running
+                # the PBC2 comparison the validation vignette's 4.8x figure
+                # came from: that figure's exact configuration could not run.
+                if bool(wishart_eb_scale) and sigma_b_prior_mean is not None:
                     nu0 = float(q + 2)  # smallest df with a finite prior mean for D
                     sd_hat = jnp.atleast_1d(jnp.array(sigma_b_prior_mean))
                     # Diagonal D_hat from the pre-fit SDs (correlation is
@@ -404,7 +511,91 @@ def build_model(p, q, n_splines, max_obs, alpha_prior_sd=2.0,
                     L = sigma_b[:, None] * L_corr
                     with numpyro.plate("subjects", N_sub):
                         b_std = numpyro.sample("b_std", dist.Normal(0.0, 1.0).expand([q]).to_event(1))
-                    b = numpyro.deterministic("b", b_std @ L.T)
+                    b_raw = b_std @ L.T
+
+                    if b_orth_bases is None or not any(
+                            q_ is not None for q_ in b_orth_bases):
+                        b = numpyro.deterministic("b", b_raw)
+                    else:
+                        # ----------------------------------------------------
+                        # EXPERIMENTAL, opt-in (control$orthogonalize_b0).
+                        #
+                        # MEASURED MOTIVATION (PBC2, n=312, 4x1000, sampled
+                        # space - the ONLY space these numbers mean anything
+                        # in; see dev/diagnose_beta0_v3.R for why):
+                        #
+                        #   corr(beta_0, mean level of b_i0)      -0.9709
+                        #   corr(beta_2, age-slope of b_i0)       -0.9715
+                        #   corr(beta_1, age-slope of b_i0)       +0.0543
+                        #
+                        #             ESS    ESS(+c)   recoverable
+                        #   beta_0   440.5   2893.1        6.57x
+                        #   beta_2   526.0   4000.0       >7.60x   (censored)
+                        #   beta_1  1233.6       -            -
+                        #
+                        # Every coefficient on a SUBJECT-CONSTANT covariate
+                        # is in a near-perfect location degeneracy with the
+                        # matching projection of the random intercepts: the
+                        # likelihood constrains only the SUM, and the split
+                        # is pinned by the prior alone, at scale
+                        # sigma_b0/sqrt(N). beta_1 is a WITHIN-subject
+                        # contrast and is clean, which is the control that
+                        # makes this a mechanism rather than a correlation.
+                        #
+                        # WHY A MEAN CONSTRAINT IS NOT ENOUGH. The existing
+                        # random_effects_method="wishart_gibbs_centered"
+                        # pins mean(b_i0) = 0 exactly, removing ONE direction
+                        # of a k-dimensional degeneracy. Measured: beta_0
+                        # 440.5 -> 1490.4, but beta_2 526.0 -> 291.2, so the
+                        # WORST parameter got worse (442 -> 291) and the
+                        # conservative min-ESS metric moved backwards. That
+                        # is the whole case for generalizing from the mean to
+                        # the full column space.
+                        #
+                        # WHAT THIS DOES. b0_orth_basis is an orthonormal
+                        # basis Q [N_sub, k] for the subject-constant columns
+                        # of the longitudinal design, built once from the
+                        # concrete X_long in fit_nuts(). The intercept column
+                        # of b is replaced by its residual off that space:
+                        #
+                        #     b_0  <-  b_0 - Q (Q' b_0)
+                        #
+                        # which is the k-dimensional generalization of
+                        # subtracting the mean (k=1, Q = 1/sqrt(N)).
+                        #
+                        # WHY THE MODEL IS UNCHANGED. The removed directions
+                        # lie in span(S), and S is by construction a subset
+                        # of X's columns - so every direction swept out of
+                        # b_0 is one beta already spans. For any b_raw there
+                        # is a shift of beta giving IDENTICAL fitted values
+                        # X beta + Z b, so the achievable mean structures are
+                        # exactly the same set. This is a reparameterization
+                        # that removes an unidentified direction, not a
+                        # different model. The transform is deterministic and
+                        # differentiable, so HMC gradients flow through it.
+                        #
+                        # WHAT DOES CHANGE, AND MUST BE CHECKED. The implied
+                        # prior on the constrained b_0 is singular (confined
+                        # to the orthogonal complement), and sigma_b still
+                        # governs the UNCONSTRAINED b_raw. The k swept
+                        # directions of b_raw are then unidentified by the
+                        # likelihood and simply sample their prior. Whether
+                        # that shifts sigma_b0's posterior is an empirical
+                        # question, not something to assert - which is why
+                        # this is opt-in and why the accompanying test
+                        # compares estimates arm to arm, not just ESS.
+                        # ----------------------------------------------------
+                        _cols = []
+                        for _q in range(q):
+                            _bq = b_raw[:, _q]
+                            _Qq = (b_orth_bases[_q]
+                                   if _q < len(b_orth_bases) else None)
+                            if _Qq is not None:
+                                _Qq = jnp.asarray(_Qq)
+                                _bq = _bq - _Qq @ (_Qq.T @ _bq)
+                            _cols.append(_bq[:, None])
+                        b = numpyro.deterministic(
+                            "b", jnp.concatenate(_cols, axis=1))
                 else:
                     # Simpler alternative: intercept and slope sampled
                     # INDEPENDENTLY (no LKJCholesky prior, no b_std @ L.T
@@ -732,6 +923,68 @@ def fit_nuts(X_long, y_long, n_obs, X_time_surv, X_time_quad,
     #
     # "scan" remains selectable for anyone on numpyro >= 0.17.0 who wants it.
     rw2_implementation = control.get("rw2_implementation", "vectorized")
+
+    # ------------------------------------------------------------------
+    # control$orthogonalize_b0 (EXPERIMENTAL, opt-in, default False).
+    # See the long note in build_model()'s matching branch for the measured
+    # motivation. Restricted to the path it was measured on rather than
+    # silently no-op'ing elsewhere: the other random-effects branches name
+    # "b" as a SAMPLE site, so constraining it there would leave
+    # posterior_samples$b holding the unconstrained draws while the
+    # likelihood used the projected ones - a discrepancy that would quietly
+    # corrupt exactly the diagnostics this option exists to improve.
+    # ------------------------------------------------------------------
+    # orthogonalize_b  : every random-effect column (intercept AND slope)
+    # orthogonalize_b0 : the intercept column only - retained so the two can
+    #                    be compared, since the slope extension is the newer
+    #                    and less tested half.
+    _orth_all  = bool(control.get("orthogonalize_b", False))
+    _orth_int  = bool(control.get("orthogonalize_b0", False))
+    b_orth_bases = None
+    if _orth_all or _orth_int:
+        if not (q >= 2 and random_effects_corr
+                and random_effects_method == "nuts"):
+            raise ValueError(
+                "orthogonalize_b/_b0 = True currently requires q >= 2, "
+                "random_effects_corr = TRUE and the default "
+                "random_effects_method = 'nuts' (got q = %d, corr = %s, "
+                "method = '%s'). It is an experimental option; the other "
+                "random-effects branches are not yet covered."
+                % (q, bool(random_effects_corr), random_effects_method))
+        _qmax = q if _orth_all else 1
+        b_orth_bases = []
+        _orth_report = []
+        for _q in range(q):
+            if _q < _qmax:
+                _Q, _kept = _absorbable_basis(X_long, Z_long, n_obs, _q)
+            else:
+                _Q, _kept = None, []
+            b_orth_bases.append(_Q)
+            _orth_report.append(
+                "b[:,%d] <- %s" % (
+                    _q,
+                    ("no basis (unconstrained)" if _Q is None else
+                     "%d direction(s) from X columns %s" % (_Q.shape[1], _kept))))
+        # Say what was ACTUALLY constrained, rather than leaving it to be
+        # inferred from downstream behaviour. A verification run found
+        # mean(b_i1) NOT driven to zero while beta_1's ESS rose 13x, which is
+        # a contradiction that could not be resolved from outside: either the
+        # basis for the slope column was not what its design intended, or the
+        # effect came from somewhere else. A sampler that reports its own
+        # constraints makes that question answerable in one line instead of
+        # by inference from a second experiment.
+        warnings.warn("orthogonalize_b: " + "; ".join(_orth_report),
+                      RuntimeWarning, stacklevel=2)
+        if not any(_Q is not None for _Q in b_orth_bases):
+            warnings.warn(
+                "orthogonalize_b/_b0 = True but no fixed-effect column can "
+                "absorb a shift in any random-effect column, so there is no "
+                "location degeneracy to remove and the option has no "
+                "effect. Expected when the design has no intercept and no "
+                "column matching a random-effect term.",
+                RuntimeWarning)
+            b_orth_bases = None
+
     model = build_model(p, q, n_splines, max_obs, alpha_prior_sd=alpha_prior_sd,
                          baseline_hazard=baseline_hazard,
                          spline_prior=spline_prior,
@@ -747,7 +1000,9 @@ def fit_nuts(X_long, y_long, n_obs, X_time_surv, X_time_quad,
                          gamma_prior_sd=gamma_prior_sd,
                          random_effects_corr=random_effects_corr,
                          random_effects_method=random_effects_method,
-                         rw2_implementation=rw2_implementation)
+                         rw2_implementation=rw2_implementation,
+                         wishart_eb_scale=bool(control.get("wishart_eb_scale", False)),
+                         b_orth_bases=b_orth_bases)
 
     # Targeted dense_mass for the spline coefficients specifically -
     # distinct from the global control$dense_mass (which covers EVERY
@@ -1054,7 +1309,27 @@ def fit_nuts(X_long, y_long, n_obs, X_time_surv, X_time_quad,
                 nm = site["name"]
                 if values is not None and nm in values:
                     tf = biject_to(site["fn"].support)
-                    u = tf.inv(values[nm].astype(jnp.result_type(float)))
+                    # RESHAPE TO THE SITE'S OWN SHAPE before transforming.
+                    # A length-1 value crosses the R/Python boundary as a
+                    # SCALAR, not a 1-element array: reticulate unwraps
+                    # length-1 vectors. So a model with exactly one baseline
+                    # survival covariate got `gamma` as a 0-d array, and
+                    # einsum("ng,g->n", W_surv, gamma) failed with
+                    #   Einstein sum subscript 'g' does not contain the
+                    #   correct number of indices for operand 1
+                    # which surfaced only as "warm-start self-check failed"
+                    # - so the warm start silently never ran on any model
+                    # with a single baseline covariate, PBC2 included.
+                    #
+                    # Reshaping here fixes every site at once rather than
+                    # patching each caller, and a genuinely wrong element
+                    # count now raises immediately instead of becoming a
+                    # confusing einsum error further downstream.
+                    val = jnp.asarray(values[nm], dtype=jnp.result_type(float))
+                    want = tuple(site["fn"].shape())
+                    if jnp.shape(val) != want:
+                        val = jnp.reshape(val, want)
+                    u = tf.inv(val)
                     key = site["kwargs"].get("rng_key")
                     if key is not None and scale > 0:
                         u = u + scale * jax.random.normal(key, jnp.shape(u), dtype=u.dtype)
@@ -1083,29 +1358,312 @@ def fit_nuts(X_long, y_long, n_obs, X_time_surv, X_time_quad,
                 return float(st[1](st[0].z))
 
             _pe_warm = _pe(_warm, 0)
-            _pe_unif = min(_pe(_init.init_to_uniform, k) for k in (1, 2, 3))
-            if np.isfinite(_pe_warm) and _pe_warm < _pe_unif:
+
+            # The uniform potential is RECORDED, never used to decide. It was
+            # the gate until a reference measurement showed it cannot be:
+            # on pbc2 with unstandardized covariates the potential at the
+            # POSTERIOR MEAN - the centre of the distribution being sampled -
+            # came out 1,465,425 against 118,098 for a uniform draw, so the
+            # test ranked the best possible starting point 12x BELOW a random
+            # one and rejected it. A quantity that does that cannot gate
+            # anything, at any threshold.
+            #
+            # Two things were wrong with it. min() over three draws is an
+            # order statistic, so the bar was the LUCKIEST of three rather
+            # than a typical one. And a uniform draw can score well for a
+            # reason unrelated to being a good start: a large sigma_e flattens
+            # the longitudinal likelihood, lowering the potential without
+            # improving anything. The baseline also swung 50,204 -> 776,297
+            # on identical data across configurations, a 15x move in the bar.
+            #
+            # Recorded as a median rather than a min so the number in the
+            # record is at least a typical draw rather than the best of three.
+            _unifs = [_pe(_init.init_to_uniform, k) for k in (1, 2, 3)]
+            _pe_unif = float(np.median([u for u in _unifs if np.isfinite(u)])
+                             if any(np.isfinite(u) for u in _unifs) else np.inf)
+
+            # ---- the conservative seed: JMbayes2's design ------------------
+            # Built HERE, before the holdback tables and the decision, both of
+            # which compare against it. It used to be constructed further down;
+            # moving the gate to use it left _pe_safe referenced before
+            # assignment, the whole self-check then raised, and every fit
+            # silently started cold - caught by install_jmjax.sh's own check.
+            # When the full warm start loses, the current behaviour throws
+            # away ALL fourteen seeded values and starts cold - including
+            # beta, sigma_e, sigma_b and b_std, which were verified correct
+            # to 2-3 decimals against the generating truth. One bad site
+            # discarding thirteen good ones is a worse outcome than either
+            # extreme.
+            #
+            # JMbayes2 (R/jm.R, initial_values) does not face this because it
+            # never seeds the risky sites:
+            #     bs_gammas     <- rep(-0.1, ncol(W0_H))    # flat baseline
+            #     alphas        <- rep(0.0, ...)            # zero association
+            #     tau_bs_gammas <- 20                       # tight smoothing
+            #     betas, sigmas, D, b <- from the mixed-model pre-fits
+            #     gammas              <- coef(Surv_object)
+            # That combination CANNOT blow up: with alpha = 0 the trajectory
+            # does not enter the hazard, so a flat baseline has nothing to be
+            # amplified by. It is strictly more informed than a cold start
+            # and strictly safer than seeding alpha and the baseline jointly,
+            # which is what couples two estimates through exp(alpha * m).
+            #
+            # A flat baseline in the RW2 parameterization is W01 = (c, c)
+            # with z_step = 0, since W_k = W01[2] + k*(W01[2]-W01[1]) +
+            # sigma_w * cumsum(cumsum(z)) collapses to c.
+            _vals_safe = {k: v for k, v in _vals.items()
+                          if not k.startswith("alpha")
+                          and k not in ("W01", "z_step", "tau_w")}
+            if "W01" in _vals:
+                _vals_safe["W01"] = np.array([-0.1, -0.1], dtype=float)
+            if "z_step" in _vals:
+                _vals_safe["z_step"] = np.zeros_like(
+                    np.asarray(_vals["z_step"], dtype=float))
+            if "tau_w" in _vals:
+                _vals_safe["tau_w"] = 20.0
+            for _an in ("alpha", "alpha_value", "alpha_delta", "alpha_area",
+                        "alpha_area_avg"):
+                if _an in _vals:
+                    _vals_safe[_an] = np.zeros_like(
+                        np.asarray(_vals[_an], dtype=float))
+            try:
+                _safe = _init_to_value_jittered(values=_vals_safe,
+                                                scale=_jit_scale)
+                _pe_safe = _pe(_safe, 0)
+            except Exception:
+                _safe, _pe_safe = None, np.inf
+
+            # ---- localize a rejection to a BLOCK ---------------------------
+            # A single pair of numbers says the warm start is worse without
+            # saying WHERE, which leaves the cause to be guessed at from
+            # outside - and guessing produced three wrong hypotheses in a row
+            # (a partial-seeding mixture, the time scale, and the b_std
+            # inversion; the last is guarded by round-trip assertions and was
+            # never a candidate). Re-evaluating with one block at a time held
+            # back turns that into a measurement.
+            #
+            # LONGITUDINAL: beta, sigma_e, sigma_b, L_corr, b_std - what lme()
+            # supplies directly. SURVIVAL: alpha*, gamma and the baseline
+            # hazard spline (W01, z_step, tau_w) - seeded from a two-stage
+            # coxph fit, and the ones that enter the likelihood through
+            # exp(alpha * m_i(t)), where a modest error is amplified.
+            _blocks = {
+                "longitudinal": ("beta", "sigma_e", "sigma_b", "L_corr",
+                                 "b_std", "b"),
+                "survival": ("alpha", "alpha_value", "alpha_delta",
+                             "alpha_area", "alpha_area_avg", "gamma",
+                             "W01", "z_step", "tau_w"),
+            }
+            _pe_block = {}
+            for _bn, _names in _blocks.items():
+                _kept = {k: v for k, v in _vals.items() if k not in _names}
+                if len(_kept) == len(_vals):
+                    continue          # nothing from this block was seeded
+                try:
+                    _pe_block[_bn] = _pe(
+                        _init_to_value_jittered(values=_kept, scale=_jit_scale), 0)
+                except Exception:
+                    pass
+            warm_start_blocks = dict(_pe_block)
+
+            # On REJECTION only, go one level finer: hold back each seeded
+            # site on its own. Two block numbers say which half is wrong;
+            # this says which VALUE is wrong, which is what a fix needs. It
+            # costs one initialize_model call per site and runs only when the
+            # warm start has already failed, so the normal path pays nothing.
+            # Record the seeded VALUES for small sites, not just their
+            # effect on the potential. Holding a site back is a differential
+            # measurement and cannot separate "this value is wrong" from
+            # "this value is right and tight, and is exposing an error
+            # elsewhere" - sigma_e sits in front of a squared residual, so it
+            # shows up either way. The value itself says which, and is the
+            # cheapest check available; it should have been recorded from the
+            # start rather than inferred through four rounds of holdback.
+            warm_start_values = {}
+            for _nm, _v in _vals.items():
+                _a = np.asarray(_v)
+                # b_std is recorded in full despite its size: it is the only
+                # seeded site whose per-SUBJECT values are needed to check
+                # that the warm start's subject ordering matches the model's,
+                # and that alignment is the one step the existing round-trip
+                # assertions do not cover.
+                _cap = 4096 if _nm in ("b_std", "b") else 8
+                if _a.size <= _cap:
+                    warm_start_values[_nm] = (float(_a) if _a.size == 1
+                                              else [float(x) for x in _a.ravel()])
+                else:
+                    warm_start_values[_nm] = {
+                        "shape": list(_a.shape), "mean": float(np.mean(_a)),
+                        "sd": float(np.std(_a)),
+                        "absmax": float(np.max(np.abs(_a)))}
+
+            # CAVEAT on both holdback tables: each variant re-initialises
+            # the sites it holds back, and although PRNGKey(0) is fixed, the
+            # set of sites drawing from it changes - so the numbers are NOT
+            # a controlled comparison across rows. This confound is what made
+            # them finger sigma_e, which a direct reconstruction later cleared
+            # (seeded values reproduce lme's fit to 0.37 against 0.27). Read
+            # them as a hint about where to look, never as evidence.
+            warm_start_sites_pe = {}
+            if not (np.isfinite(_pe_warm)
+                    and (not np.isfinite(_pe_safe) or _pe_warm <= _pe_safe)):
+                for _nm in sorted(_vals):
+                    _kept = {k: v for k, v in _vals.items() if k != _nm}
+                    try:
+                        warm_start_sites_pe[_nm] = _pe(
+                            _init_to_value_jittered(values=_kept,
+                                                    scale=_jit_scale), 0)
+                    except Exception:
+                        pass
+
+            # ---- the decision ---------------------------------------------
+            # Both candidates are DELIBERATE points on the same scale, so the
+            # comparison is meaningful in a way the uniform one was not:
+            #
+            #   full          everything the pre-fits estimate, including
+            #                 alpha and a fitted baseline hazard
+            #   conservative  JMbayes2's design: longitudinal block and the
+            #                 survival covariates from the pre-fits, alpha at
+            #                 zero, flat baseline. Structurally cannot blow
+            #                 up - with alpha = 0 the trajectory never enters
+            #                 the hazard, so nothing amplifies a bad baseline.
+            #
+            # The conservative seed is the FLOOR, not a fallback of last
+            # resort. There is no path back to a cold start any more: it is
+            # strictly less informed than the conservative seed on every
+            # dataset, and discarding beta, sigma_e, sigma_b and b_std -
+            # verified correct to 2-3 decimals against the generating truth -
+            # because a lottery went the wrong way was never defensible.
+            # The MEDIAN uniform potential is a SANITY FLOOR - not the gate it
+            # used to be. Removing the uniform comparison altogether was a
+            # mistake: it had two jobs, and only one of them was wrong.
+            #
+            # As a GATE it was indefensible, because min() over three draws is
+            # a favourable order statistic and uniform potentials span nine
+            # orders of magnitude (simulated: min 50,204 against a median of
+            # 6.8e9), so a lucky draw rejected a warm start 40,000x better
+            # than a typical cold one.
+            #
+            # As a FLOOR it was load-bearing, and dropping it let a
+            # deliberately corrupt seed through - tests/testthat/
+            # test-penalized-spline.R:226 supplies beta = c(500, 500) with
+            # sigma_e = 0.01 and expects rejection. The conservative tier does
+            # not catch that: it only neutralises alpha and the baseline, so
+            # when a caller supplies just beta and sigma_e there is nothing to
+            # strip and the "safe" seed IS the corrupt one.
+            #
+            # A median floor does both jobs correctly. Good warm starts beat a
+            # typical draw by orders of magnitude (167,467 vs 6.8e9; 1,881 vs
+            # 2.35e6), and catastrophic ones lose to it.
+            _cand, _cand_pe, _cand_tier = None, np.inf, None
+            if np.isfinite(_pe_warm) and (not np.isfinite(_pe_safe)
+                                          or _pe_warm <= _pe_safe):
+                _cand, _cand_pe, _cand_tier = _warm, _pe_warm, "full"
+            elif _safe is not None and np.isfinite(_pe_safe):
+                _cand, _cand_pe, _cand_tier = _safe, _pe_safe, "conservative"
+
+            if _cand is not None and not (_cand_pe < _pe_unif):
+                warnings.warn(
+                    f"warm start REJECTED: the better of the two seeds scored "
+                    f"{_cand_pe:.1f}, which is not better than a TYPICAL "
+                    f"uniform start ({_pe_unif:.1f}). A seed this far off is "
+                    "worse than no seed at all - check that the supplied "
+                    "values are on the scale the model expects "
+                    "(standardize_covariates, scale_time). Falling back to "
+                    "the default start.",
+                    RuntimeWarning)
+                _cand, _cand_tier = None, None
+
+            if _cand is not None and _cand_tier == "full":
                 nuts_kwargs["init_strategy"] = _warm
                 warm_start_check = {
-                    "used": True,
+                    "used": True, "tier": "full",
                     "potential_warm": _pe_warm,
+                    "potential_conservative": _pe_safe,
                     "potential_uniform": _pe_unif,
                     "sites": sorted(_vals),
+                    "potential_by_block_held_back": warm_start_blocks,
+                    "potential_by_site_held_back": warm_start_sites_pe,
+                    "values": warm_start_values,
+                }
+            elif _cand is not None:
+                nuts_kwargs["init_strategy"] = _safe
+                # Informational, not a warning: this fires on every fit
+                # where the full seed's association parameter isn't yet
+                # supported by the data as strongly as JMbayes2's flat/zero
+                # starting point (a common, expected outcome - see the
+                # comment above "the decision"). Using warnings.warn() here
+                # made a routine event read like something had gone wrong.
+                print(
+                    "jmjax: warm start using the CONSERVATIVE seed "
+                    f"(full seed scored {_pe_warm:.1f} vs {_pe_safe:.1f}). "
+                    "The association parameter starts at zero with a flat "
+                    "baseline hazard (the combination JMbayes2 uses), while "
+                    "the longitudinal block and survival covariates are still "
+                    "taken from the pre-fits - this is not a fallback to a "
+                    "cold start, those values are kept.")
+                warm_start_check = {
+                    "used": True, "tier": "conservative",
+                    "potential_warm": _pe_warm,
+                    "potential_conservative": _pe_safe,
+                    "potential_uniform": _pe_unif,
+                    "sites": sorted(_vals_safe),
+                    "potential_by_block_held_back": warm_start_blocks,
+                    "potential_by_site_held_back": warm_start_sites_pe,
+                    "values": warm_start_values,
                 }
             else:
+                # Reached only when BOTH deliberate points are non-finite,
+                # which means the model cannot be evaluated there at all - a
+                # structural problem, not a close call about start quality.
                 warnings.warn(
-                    "warm start REJECTED: its log-density is not better than a "
-                    f"uniform start (potential {_pe_warm:.1f} vs {_pe_unif:.1f}). "
-                    "This usually means the supplied values are on a different "
-                    "scale than the model expects - check standardize_covariates "
-                    "and scale_time. Falling back to the default start.",
+                    "warm start UNUSABLE: neither the full seed "
+                    f"({_pe_warm:.1f}) nor the conservative one ({_pe_safe:.1f}) "
+                    "has a finite log-density, so the model cannot be evaluated "
+                    "at either. This is a structural problem rather than a "
+                    "judgement about start quality - check for non-finite "
+                    "values in the pre-fits. "
+                    + ("Holding one block back at a time gives: "
+                       + ", ".join("%s -> %.1f" % (k, v)
+                                   for k, v in warm_start_blocks.items())
+                       + ". " if warm_start_blocks else "")
+                    + ("Per site, the largest improvements from holding ONE "
+                       "value back: "
+                       + ", ".join(
+                           "%s -> %.1f" % (k, v) for k, v in
+                           sorted(warm_start_sites_pe.items(),
+                                  key=lambda kv: kv[1])[:4])
+                       + " (against %.1f with all of them). " % _pe_warm
+                       if warm_start_sites_pe else "")
+                    + "Falling back to the default start.",
                     RuntimeWarning)
                 warm_start_check = {
                     "used": False,
                     "potential_warm": _pe_warm,
+                    "potential_conservative": _pe_safe,
                     "potential_uniform": _pe_unif,
                     "sites": sorted(_vals),
+                    "potential_by_block_held_back": warm_start_blocks,
+                    "potential_by_site_held_back": warm_start_sites_pe,
+                    "values": warm_start_values,
                 }
+        except (NameError, AttributeError) as _e:
+            # A bug in THIS code, not a property of the model or the data.
+            # Deliberately NARROW: TypeError/IndexError/KeyError are how a
+            # seed reports that it does not fit this model configuration -
+            # rw2_implementation="scan" gives TypeError("cannot reshape array
+            # of shape (7,)") because z_step has a different shape there - and
+            # those must warn and fall back rather than abort a fit that would
+            # otherwise work.
+            # It used to be folded into the generic message below, which reads
+            # like a modelling judgement - so a NameError from a mis-ordered
+            # variable silently disabled the warm start on every fit and was
+            # caught only by install_jmjax.sh asserting warm_start$used.
+            raise RuntimeError(
+                "jmjax internal error in the warm-start self-check: %r. This "
+                "is a bug in jmjax, not a problem with your data - please "
+                "report it. The fit was stopped rather than silently running "
+                "without the pre-fit starting values." % (_e,)) from _e
         except Exception as _e:                       # noqa: BLE001
             warnings.warn(f"warm-start self-check failed ({_e}); using the "
                           "default start.", RuntimeWarning)
@@ -1354,6 +1912,41 @@ def _site_names(site, size):
     if site == "gamma":
         return [f"gamma_{i}" for i in range(size)]
     return [site]  # scalar sites: sigma_e, alpha, sigma_b (q=1), L_corr handled separately
+
+
+def recompute_site_diagnostics(draws, num_chains=1):
+    """R-hat and ESS for draws that R has transformed after sampling.
+
+    WHY THIS EXISTS. When control$standardize_covariates is active, jm_fit()
+    back-transforms beta to the ORIGINAL covariate scale after the fit -
+    rewriting estimates, se and posterior_samples. It did NOT rewrite
+    diagnostics$ess or diagnostics$rhat, which are computed here, during
+    sampling, on the STANDARDIZED parameters. So a user comparing
+    fit$estimates[["beta_0"]] with fit$diagnostics$ess[["beta_0"]] was
+    reading a diagnostic for a different quantity than the estimate.
+
+    Recomputing in R would mean a second, hand-rolled ESS estimator
+    disagreeing with this one in the third digit for no good reason. This
+    routine runs numpyro's own summary over the transformed draws instead,
+    so every ESS the package reports comes from one implementation.
+
+    draws: [n_draws, p] array, chains CONCATENATED (as get_samples returns
+    them). Reshaped to [num_chains, n_per_chain, p] so R-hat is genuinely
+    between-chain rather than split-within-one.
+    """
+    arr = np.asarray(draws, dtype=float)
+    if arr.ndim == 1:
+        arr = arr[:, None]
+    n_total = arr.shape[0]
+    nc = max(1, int(num_chains))
+    if n_total % nc != 0:
+        # Not divisible: fall back to one chain rather than silently
+        # mis-grouping draws, which would corrupt R-hat.
+        nc = 1
+    grouped = arr.reshape(nc, n_total // nc, arr.shape[1])
+    summ = numpyro_summary({"beta": grouped}, prob=0.9, group_by_chain=True)["beta"]
+    return {"r_hat": np.atleast_1d(summ["r_hat"]).tolist(),
+            "n_eff": np.atleast_1d(summ["n_eff"]).tolist()}
 
 
 def _package_result(samples, diag, p, q, n_splines, N_sub, elapsed,

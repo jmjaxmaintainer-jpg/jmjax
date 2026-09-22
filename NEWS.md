@@ -1,5 +1,50 @@
 # jmjax (development)
 
+## New: orthogonalize_b0 / orthogonalize_b (location-degeneracy reparameterization, experimental)
+
+* **`control$orthogonalize_b0`** (intercept column only) and
+  **`control$orthogonalize_b`** (every random-effect column, intercept and
+  slope) remove a location degeneracy between subject-constant fixed
+  effects and the matching random-effect direction, which the likelihood
+  identifies only through their *sum*. Implemented as a NUTS-space
+  reparameterization (`_absorbable_basis()` in `mcmc_model.py` sweeps the
+  absorbable directions, read from the actual design matrices, out of the
+  sampled random-effect column) rather than an exact Gibbs constraint -
+  see `?jm_fit` for the full mechanism and measured numbers.
+
+* **The same degeneracy recurs for the random slope on time, independently
+  of covariate count.** `orthogonalize_b0` fixes only the intercept-level
+  case; `orthogonalize_b` also fixes a `beta_1`/`mean(b_i1)` degeneracy
+  present as soon as there is any random slope on time, regardless of `k`.
+  A replicated simulation sweep (k = 1, 4, 8, 12 extra covariates, n=1000,
+  3 seeds) confirms `orthogonalize_b`'s regression-parameter ESS/sec
+  advantage over the default fit is flat across k (~11-15x, not growing
+  with covariate count), and is highly significant at k=8 (p=0.0064) and
+  k=12 (p=0.0003) even though the aggregate all-parameters comparison is
+  not (dominated by `JMbayes2`'s own random-effects-covariance R-hat
+  collapsing with k - up to >10,000 at k=12 - a separate, `JMbayes2`-
+  specific block-Gibbs fragility unrelated to this fix). Independently
+  confirmed on the `aids` real-data benchmark (never used to build any of
+  the diagnostics above): regression-only ESS/sec ratios of roughly
+  5x-13x across 4 seeds.
+
+* **Not the same fix as the earlier, retracted `wishart_gibbs_centered`**
+  (see "Known limitations" below and the existing entry above): that
+  option pinned only one direction of the degeneracy via an exact Gibbs
+  constraint, and was found to miscalibrate `beta_0`'s credible interval.
+  `orthogonalize_b0`/`orthogonalize_b` identify all absorbable directions
+  from the actual design and operate as a continuous NUTS-space
+  reparameterization instead. **Correctness** (fitted values and
+  posterior means unaffected) is verified; **calibration/coverage has not
+  yet been checked** - this is the reason the option remains experimental
+  and opt-in, currently requiring `q >= 2`, `random_effects_corr = TRUE`
+  and `random_effects_method = "nuts"` (other combinations error rather
+  than silently no-op'ing).
+
+* Full mechanism, literature grounding, and validation detail:
+  `vignette("jmjax-reparameterization")`.
+
+
 ## Warm start
 
 * **The MCMC warm start now supplies the spline baseline hazard**, and under

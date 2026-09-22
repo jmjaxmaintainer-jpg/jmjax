@@ -169,8 +169,23 @@
 #'       \code{jm_fit()} verifies that \code{tcrossprod(L)} reproduces the
 #'       covariance matrix and that \code{b_std} round-trips back to the
 #'       BLUPs, and the backend then compares the log-density at the warm
-#'       start against a uniform one and \emph{discards the warm start if
-#'       it is not better}. A scale mismatch produces a warning and default
+#'       start against a CONSERVATIVE one and uses whichever scores better.
+#'       The conservative seed is JMbayes2's design - the longitudinal block
+#'       and the survival covariates from the pre-fits, the association
+#'       parameter at zero and a flat baseline hazard - which cannot blow up,
+#'       since with \code{alpha = 0} the trajectory never enters the hazard.
+#'       It is the floor: there is no fallback to a cold start.
+#'
+#'       This replaced a comparison against a \emph{uniform} start, which was
+#'       shown to be unusable: on \code{pbc2} with unstandardized covariates
+#'       the potential at the posterior mean - the centre of the distribution
+#'       being sampled - scored 1,465,425 against 118,098 for a uniform draw,
+#'       so the test ranked the best possible starting point below a random
+#'       one. The bar was also \code{min()} over three draws, an order
+#'       statistic rather than a typical value, and it moved 50,204 to 776,297
+#'       on identical data across configurations. The uniform potential is
+#'       still recorded in \code{fit$convergence$warm_start} (as a median) but
+#'       decides nothing.
 #'       behaviour, never a silently worse fit. The outcome is recorded in
 #'       \code{fit$convergence$warm_start}.}
 #'     \item{\code{warm_start_jitter}}{Numeric, default \code{0.1}. SD of
@@ -249,6 +264,47 @@
 #'       \code{mass_matrix_investigation_negative_results.md}. Reasonable
 #'       to enable when \code{alpha} is the parameter of primary interest,
 #'       which is typical for joint models.}
+#'     \item{\code{orthogonalize_b0}}{Logical, default \code{FALSE}.
+#'       \strong{Experimental.} Sweeps the subject-constant columns of the
+#'       longitudinal design out of the random intercepts, replacing
+#'       \code{b_0} by its residual off that column space. With an
+#'       intercept and one baseline covariate this removes a
+#'       two-dimensional near-degeneracy; with an intercept alone it
+#'       reduces to the familiar sum-to-zero constraint.
+#'
+#'       \strong{Why.} The likelihood constrains only the SUM of a
+#'       subject-constant coefficient and the matching projection of the
+#'       random intercepts; the split between them is pinned by the prior
+#'       alone, at scale \code{sigma_b0/sqrt(N)}. Measured on \code{pbc2}
+#'       (n = 312, 4 chains x 1000, in the space NUTS actually samples):
+#'       \code{corr(beta_0, mean(b_i0)) = -0.9709} and
+#'       \code{corr(beta_2, age-slope(b_i0)) = -0.9715}, against
+#'       \code{+0.0543} for \code{beta_1}, a within-subject contrast. ESS
+#'       for the identified sums was 2893 and >4000 against 441 and 526
+#'       for the coefficients alone - a recoverable factor of 6.6x and
+#'       >7.6x. These figures are only meaningful in sampled space;
+#'       \code{posterior_samples$beta} is back-transformed when
+#'       \code{standardize_covariates = TRUE}, and correlations computed
+#'       on it measure the transform rather than the posterior.
+#'
+#'       \strong{Not the same as} \code{random_effects_method =
+#'       "wishart_gibbs_centered"}, which pins \code{mean(b_i0)} at zero
+#'       and so removes one direction of the degeneracy: that moved
+#'       \code{beta_0} 441 -> 1490 but \code{beta_2} 526 -> 291, making
+#'       the worst parameter worse.
+#'
+#'       \strong{The model is unchanged.} Every direction swept out of
+#'       \code{b_0} lies in a column space \code{beta} already spans, so
+#'       for any draw there is a shift of \code{beta} giving identical
+#'       fitted values - the set of achievable mean structures is the
+#'       same. What does change is that the implied prior on the
+#'       constrained \code{b_0} is singular while \code{sigma_b} still
+#'       governs the unconstrained draws, so whether \code{sigma_b0}'s
+#'       posterior shifts is an empirical question. Opt-in until that is
+#'       settled by replication. Currently requires \code{q >= 2},
+#'       \code{random_effects_corr = TRUE} and the default
+#'       \code{random_effects_method = "nuts"}; other combinations raise
+#'       an error rather than silently doing nothing.}
 #'     \item{\code{dense_mass_beta}, \code{seed_mass_matrix}}{Both logical,
 #'       both default \code{FALSE}. \strong{Tested and not adopted} -
 #'       retained only to document the negative results.
@@ -1817,8 +1873,20 @@ jm_fit <- function(long_formula,
   # them. A caller who supplied their own starting values asked for those
   # values, not for ours quietly folded in alongside.
   .ws_auto <- FALSE
+  # random_effects_method = "wishart_gibbs" samples D_inv - the whole q x q
+  # covariance, drawn in closed form by a Wishart-conjugate Gibbs step - and
+  # does NOT sample sigma_b or L_corr. The warm start supplies both of those
+  # plus b_std, and b_std is only meaningful RELATIVE to the L it was derived
+  # from. Under this method that L is silently dropped while b_std is kept,
+  # so the start is subject-level values calibrated against a matrix the
+  # model never receives. Measured on PBC2: potential 62129.4 against 21483.3
+  # for a uniform start. The self-check rejected it correctly, but attempting
+  # it costs four initialize_model() calls and emits an alarming warning for
+  # a configuration where it cannot ever work. So do not attempt it.
+  .ws_incompatible <- identical(control$random_effects_method, "wishart_gibbs")
   if (method %in% c("spline-PH-mcmc", "weibull-PH-mcmc") &&
       isTRUE(control$mcmc_warm_start %||% TRUE) &&
+      !.ws_incompatible &&
       is.null(control$init_values)) {
     .ws <- tryCatch({
       .lme_ws <- if (inherits(control$.lme_object, "lme")) {
@@ -1960,7 +2028,11 @@ jm_fit <- function(long_formula,
         .cfw <- stats::coef(survival::coxph(
           stats::update(surv_formula, . ~ . + .jmjax_mhat), data = .ddw))
         list(alpha = unname(.cfw[".jmjax_mhat"]),
-             gamma = unname(.cfw[setdiff(names(.cfw), ".jmjax_mhat")]))
+             gamma = unname(.cfw[setdiff(names(.cfw), ".jmjax_mhat")]),
+             # Kept for the spline seed below, which needs alpha AND the
+             # trajectory to convert a marginal baseline into a conditional
+             # one. Recomputing it there would refit lme() a third time.
+             mhat = .mhw)
       }, error = function(e) NULL, warning = function(w) NULL)
 
       if (!is.null(.tsw) && length(.tsw$alpha) == 1L && is.finite(.tsw$alpha)) {
@@ -1970,7 +2042,13 @@ jm_fit <- function(long_formula,
         control$init_values$alpha       <- .tsw$alpha
         control$init_values$alpha_value <- .tsw$alpha
         if (length(.tsw$gamma) && all(is.finite(.tsw$gamma))) {
-          control$init_values$gamma <- .tsw$gamma
+          # as.array(), because reticulate unwraps a length-1 R vector into
+          # a Python scalar. The `gamma` site has shape [n_gamma], so with a
+          # single baseline covariate a bare numeric arrived 0-dimensional
+          # and the model's einsum over subscript "g" had no index to use.
+          # The backend now reshapes defensively as well; this keeps the
+          # intent visible at the point the value is built.
+          control$init_values$gamma <- as.array(as.numeric(.tsw$gamma))
         }
       }
 
@@ -2088,6 +2166,19 @@ jm_fit <- function(long_formula,
         .mu <- unname(stats::coef(.sr)[1])
         .tt <- pmax(as.numeric(surv_arr$T_surv), 1e-8)
         .logh0 <- log(.shape) + (.shape - 1) * log(.tt) - .shape * .mu
+
+        # NOT corrected from marginal to conditional, deliberately.
+        # survreg() above omits the longitudinal trajectory, so .logh0 is the
+        # MARGINAL log baseline and overstates the conditional one by
+        # alpha * m_i(t). Subtracting that was tried and made things WORSE:
+        # .logh0 stops being a smooth function of t and becomes a scattered
+        # cloud over subjects, so lm.fit() chases the scatter. Measured, the
+        # seeded W went from smooth to oscillating on BOTH datasets -
+        # pbc2's -0.38..+0.25 became -2.24, -0.56, -2.19, -0.82, ... with
+        # tau_w collapsing 60.7 -> 0.25 - while the potential barely moved
+        # (167467 -> 166850), which also shows the baseline was never the
+        # dominant term. Any future attempt must smooth in t BEFORE
+        # projecting, not subtract per-subject values from a per-time curve.
         .co <- stats::lm.fit(as.matrix(backend_args$B_T), .logh0)$coefficients
         if (any(!is.finite(.co))) NULL else unname(.co)
       }, error = function(e) NULL, warning = function(w) NULL)
@@ -2486,6 +2577,48 @@ jm_fit <- function(long_formula,
         }
         py_result$posterior_samples$beta <-
           lapply(seq_len(nrow(.bm)), function(i) .bm[i, ])
+
+        # ---- and the DIAGNOSTICS, which were being left behind ----------
+        # estimates, se and posterior_samples above are all rewritten to
+        # the original covariate scale. diagnostics$ess and $rhat were not:
+        # they are computed in Python during sampling, on the STANDARDIZED
+        # parameters. So fit$estimates[["beta_0"]] and
+        # fit$diagnostics$ess[["beta_0"]] described DIFFERENT QUANTITIES
+        # whenever standardization was active - which is the default.
+        #
+        # It also quietly corrupted cross-package benchmarking: a min-ESS
+        # comparison against another package reads this field, and was
+        # therefore comparing jmjax's standardized-scale ESS against the
+        # other package's natural-scale ESS.
+        #
+        # Recomputed with numpyro's own summary rather than a second
+        # estimator written in R, so every ESS the package reports comes
+        # from one implementation. Failure here leaves the old values and
+        # warns rather than dropping the diagnostics entirely - a
+        # mismatched ESS is bad, but a missing one is worse.
+        .nc <- as.integer(control$num_chains %||% 1L)
+        .rd <- tryCatch(
+          .get_backend()$mcmc_model$recompute_site_diagnostics(.bm, .nc),
+          error = function(e) { 
+            warning("standardize_covariates: could not recompute beta ",
+                    "diagnostics on the original scale (", conditionMessage(e),
+                    "); fit$diagnostics for beta_* remain on the ",
+                    "standardized scale and do not correspond to ",
+                    "fit$estimates.", call. = FALSE)
+            NULL
+          })
+        if (!is.null(.rd)) {
+          .ne <- as.numeric(unlist(.rd$n_eff)); .rh <- as.numeric(unlist(.rd$r_hat))
+          for (j in seq_len(ncol(.bm))) {
+            nm <- paste0("beta_", j - 1)
+            if (j <= length(.ne) && nm %in% names(py_result$diagnostics$ess)) {
+              py_result$diagnostics$ess[[nm]] <- .ne[j]
+            }
+            if (j <= length(.rh) && nm %in% names(py_result$diagnostics$rhat)) {
+              py_result$diagnostics$rhat[[nm]] <- .rh[j]
+            }
+          }
+        }
       } else {
         # ---- MLE path: the same projection, applied exactly -------------
         # beta_original = A %*% beta_sampled is linear, so the sampling
