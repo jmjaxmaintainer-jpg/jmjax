@@ -38,3 +38,8 @@ benchmark_results/
 # OS
 .DS_Store
 Thumbs.db
+
+# dev/ study outputs (results CSVs and run logs are regenerated, not sources)
+dev/*.csv
+dev/*.csv.bak-*
+*.log
