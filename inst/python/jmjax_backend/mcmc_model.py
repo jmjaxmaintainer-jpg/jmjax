@@ -1324,6 +1324,14 @@ def fit_nuts(X_long, y_long, n_obs, X_time_surv, X_time_quad,
     # needs to know which columns were actually constrained has to be able
     # to read it off the fitted object instead.
     orthogonalize_report = None
+    # Initialized here, OUTSIDE the `if _orth_all or _orth_int:` block below,
+    # because build_model() is called unconditionally further down with
+    # b0_gen_perp=_b0_gen_perp for EVERY fit, including an ordinary default
+    # fit that never sets orthogonalize_b0/_b at all. A first attempt at this
+    # left the init inside the `if`, which raised UnboundLocalError on every
+    # non-orthogonalized fit - caught by the install script's self-check
+    # (dev/install_jmjax.sh step 4/4) on its plain penalized-spline fit.
+    _b0_gen_perp = None
     if _orth_all or _orth_int:
         if not (q >= 2 and random_effects_corr
                 and random_effects_method == "nuts"):
@@ -1340,7 +1348,6 @@ def fit_nuts(X_long, y_long, n_obs, X_time_surv, X_time_quad,
         _orth_report = []
         _orth_columns = []
         _s_resid = 0.0
-        _b0_gen_perp = None
         for _q in range(q):
             if _q < _qmax:
                 # TWO constructions, deliberately. The per-column search is
