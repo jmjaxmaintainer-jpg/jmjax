@@ -19,7 +19,7 @@ knitr::opts_chunk$set(
 `jmjax` samples joint longitudinal-survival models with NUTS/HMC and, on
 identical data, mixes dramatically better than `JMbayes2`'s block-Gibbs/
 Metropolis sampler - by more than an order of magnitude on regression
-parameters in several of the comparisons below. This document does four things. First, it names the mechanism precisely: a location degeneracy
+parameters in several of the comparisons below. This document does five things. First, it names the mechanism precisely: a location degeneracy
 between subject-constant fixed effects and the matching linear combination
 of correlated random effects, which the likelihood pins only through their
 *sum*. This is not specific to the random intercept - this document shows,
@@ -38,7 +38,21 @@ just empirically, unchanged. The same analysis shows the construction is
 *not* complete: because it inspects one design column at a time while the
 absorbable set depends only on the column space, a spline or
 orthogonal-polynomial longitudinal mean paired with a random slope defeats
-it silently, and a basis-independent replacement is given. Fourth, it
+it silently, and a basis-independent replacement is given - and now ships.
+Fourth, it settles the question the first draft left open, and the answer
+is two-sided. Posterior calibration *fails* for the reparameterized
+coordinates: credible intervals for exactly the swept parameters come back
+too narrow by close to the predicted $\sigma_b/\sqrt{N}$, reproducing the
+failure mode that retracted `wishart_gibbs_centered`, while point
+estimates stay unbiased - which is precisely why a bias check would have
+passed it. But the damage is to the *coordinates*, not the target, and it
+is exactly removable: a closed-form, unit-Jacobian affine map carries the
+reparameterized draws back onto the identified ones, using quantities the
+same fit already stores and requiring no refit. The correction is proved
+exact for the likelihood, shown to differ from the unconstrained posterior
+only by an explicit prior-invariance weight that is negligible under any
+diffuse prior on $\beta$, and measured to restore both coverage and
+interval width. Fifth, it
 reports a replicated simulation study across a covariate-count sweep (k = 1, 4, 8, 12
 extra covariates) and an independent real-data check (the `aids` clinical
 trial data, never used to build any of the diagnostics below), both showing
@@ -52,9 +66,9 @@ grows (max R-hat past 10,000 at k = 12), which inflates naive "jmjax vs
 JMbayes2" ratios for reasons that have nothing to do with `jmjax`'s
 reparameterization. The document closes by connecting this to established
 reparameterization and MCMC literature, and by being explicit about what
-has *not* yet been checked - most importantly, posterior calibration, which
-is exactly the axis on which the earlier `wishart_gibbs_centered` attempt
-was found wanting.
+has *not* yet been checked - most importantly the effective sample size of
+the corrected estimand, which is the figure a user actually reports and the
+one remaining measurement that could still change the option's value.
 
 ## 1. Motivation
 
@@ -363,21 +377,25 @@ than as an exact constraint imposed by a separate Gibbs step. This is why
 the fix generalizes correctly to the multi-covariate case where the earlier
 one did not.
 
-It is important to be equally direct about the corresponding open question.
-`wishart_gibbs_centered`'s efficiency gain was checked for calibration and
-found wanting (Section 3.2). `orthogonalize_b0`/`orthogonalize_b` have, to
-date, been checked for correctness in the point-estimate sense (Section 5:
-fitted values and posterior means are unaffected, as the construction
-requires) and extensively for efficiency (Sections 6-7), but **not yet for
-calibration** - whether reported credible intervals for `beta_0`/`beta_1`
-under the swept-basis prior have correct frequentist coverage. There is a
-plausible mechanistic reason to expect this fix behaves differently on that
-axis (it changes the prior's *support*, not the likelihood's identification
-of a specific value the way an exact zero-sum constraint does), but this is
-a hypothesis, not yet a checked result, and the package documentation
-correctly marks the option experimental / opt-in pending exactly this. This
-document does not close that question; Section 9 returns to it as the
-single most important piece of unfinished validation work.
+It is important to be equally direct about where the two constructions turn
+out to be *alike*. `wishart_gibbs_centered`'s efficiency gain was checked
+for calibration and found wanting (Section 3.2). An earlier version of this
+document argued that `orthogonalize_b0`/`orthogonalize_b` had a plausible
+mechanistic reason to behave differently on that axis, since they change
+the prior's *support* rather than pinning a specific value the way an exact
+zero-sum constraint does, and listed the check as the single most important
+piece of unfinished work.
+
+The check has now been run, and that argument was wrong: on the
+reparameterized coordinates these options miscalibrate in the same way and
+for the same reason (Section 9.1). What differs is the remedy. Because the
+damage here is confined to the coordinates in which the sampler reports -
+the likelihood is untouched, by Corollary 1 - the discarded uncertainty can
+be put back exactly, in closed form, from the draws the same fit already
+produced (Section 4.9). No analogous closed-form recovery exists for an
+exact Gibbs constraint, which destroys the information rather than
+relocating it. That is the substantive difference between the two
+approaches, and it is a sharper one than the argument it replaces.
 
 ## 4. Formal correctness of the absorbable-basis construction
 
@@ -610,8 +628,8 @@ which basis of that span `model.matrix()` happens to emit. That gap is the
 precise statement of the limitation.
 
 Its practical consequence is sharper than the generic caution in
-Section 9. With a spline or orthogonal-polynomial longitudinal mean and a
-random slope, `orthogonalize_b` would silently fail to remove the
+Section 9.2. With a spline or orthogonal-polynomial longitudinal mean and a
+random slope, the column-wise construction silently failed to remove the
 $\beta_1 \leftrightarrow \overline{b_{i1}}$ degeneracy that Section 3.3
 identifies as the *dominant* source of the efficiency advantage - and the
 existing no-op warning would not fire, because the intercept column still
@@ -629,8 +647,15 @@ $$\mathcal{A}^{\mathrm{long}}
 so the correct basis is an orthonormal basis of the null space of the
 $\big(\sum_i n_i\big) \times N$ matrix $(I - P_{\mathcal{T}})\mathcal{U}$,
 computable with one SVD and no loop over columns. This is basis-independent
-by construction, recovers the current answer whenever (C) holds, and costs
-a single decomposition performed once outside the sampler.
+by construction, recovers the column-wise answer whenever (C) holds, and
+costs a single decomposition performed once outside the sampler.
+
+This repair is no longer hypothetical: it ships as
+`_absorbable_basis_exact()` and is the basis the implementation actually
+sweeps, with the column-wise search retained alongside it for attribution
+and cross-checking. Section 4.8 describes what the implementation does with
+both, and Section 4.9 shows that the same generators the exact
+construction produces are what make the calibration correction computable.
 
 ### 4.6 Subjects whose own data does not determine their ratio
 
@@ -689,43 +714,284 @@ anything about the posterior. The reparameterized column
 $b[\,\cdot\,, q_\ast]$ is supported on the orthogonal complement of
 $\operatorname{span}(Q)$, a proper subspace, so the implied prior is
 singular there, while `sigma_b` continues to govern the unconstrained
-`b_raw` and the swept directions sample their prior unmodified. Whether
-the resulting credible intervals for $\beta_0$ and $\beta_1$ have correct
-frequentist coverage is exactly the open question of Section 9, and this
-section does not close it. A construction can be provably
-likelihood-invariant and still be miscalibrated; indeed
-`wishart_gibbs_centered` was likelihood-invariant in the same sense and
-was found wanting on precisely that axis.
+`b_raw` and the swept directions sample their prior unmodified. A
+construction can be provably likelihood-invariant and still be
+miscalibrated; indeed `wishart_gibbs_centered` was likelihood-invariant in
+the same sense and was found wanting on precisely that axis.
 
-### 4.8 Consequences for the implementation
+An earlier version of this document left that as an open question and
+offered a conjecture: that because this construction changes the prior's
+*support* rather than imposing an exact Gibbs constraint, it might escape
+the failure mode. **That conjecture is false, and the simulation in
+Section 9.1 refutes it.** The credible intervals for exactly the swept
+parameters are too narrow by close to the predicted
+$\sigma_b/\sqrt{N}$ - measured $\mathrm{sd\_ratio} = 0.283$ against
+$1.177$ for an unmodified fit, with 95% coverage $0.50$ against $1.00$ -
+while point estimates remain unbiased and the negative control is
+untouched. The mechanism is not subtle in hindsight: the swept component
+of `b_raw` is, after the sweep, unconstrained by the likelihood, so it
+samples its prior, and nothing carries that uncertainty into $\beta$'s
+posterior.
 
-Three concrete items follow, in descending order of importance:
+This is a statement about the *coordinates in which the sampler reports*,
+not about the sampler's target being wrong, and that distinction turns out
+to be actionable. Section 4.9 shows that the discarded uncertainty can be
+restored exactly, in closed form, from the draws the same fit already
+produces.
 
-1. **Guard against the completeness failure.** Either replace the
-   column-wise search with the null-space computation at the end of
-   Section 4.5 - which is basis-independent, no more expensive in any
-   practically relevant regime, and provably exact - or, at minimum, detect
-   the failure and warn: compare $\dim(\operatorname{range}\mathcal{T}
-   \cap \operatorname{range}\mathcal{U})$ against
-   $\operatorname{rank}(Q)$ and raise if they differ. The silent case
-   (spline or orthogonal-polynomial longitudinal mean plus a random slope)
-   leaves the paper's dominant mechanism untreated while reporting
-   success, which is the worst available failure mode.
-2. **Verify (S) rather than assume it.** Run the existing ratio test a
-   second time on `X_time_quad`/`Z_time_quad` and confirm the same
-   $s^{(j)}$, turning Condition (S) from an argument into a check. The
-   arrays are already built and passed to `fit_nuts()`.
-3. **Record the justification for the imputation.** The source comment
-   presents the median fallback as restoring uniformity; Proposition 5
-   shows it is forced by joint-model invariance. Worth stating in the
-   comment, since the weaker justification invites a future reader to
-   "simplify" it back.
+### 4.8 What the implementation now does
 
-None of the three affects any number reported in Sections 5 through 7:
+Three concrete items followed from the analysis above, in descending order
+of importance. All three have since been implemented; this subsection
+records what ships rather than what was recommended.
+
+1. **The completeness failure is closed, not merely detected.** The
+   column-wise search has been superseded by the null-space computation of
+   Section 4.5, implemented as `_absorbable_basis_exact()`: one SVD of a
+   $\left(\sum_i n_i\right) \times p$ matrix, basis-independent, and
+   provably exact by Proposition 4. It is now *authoritative* - the basis
+   actually swept. The column-wise `_absorbable_basis()` is retained
+   alongside it for **attribution**, because it names *which* columns of
+   $X$ expose each direction, which is what makes the fit's report
+   diagnostic rather than a bare dimension count. The two are compared at
+   every fit and any disagreement raises a warning naming the extra
+   directions; the reverse disagreement (the exact construction finding
+   *fewer*) would contradict Proposition 2 and is reported as a bug.
+   `fit$convergence$orthogonalize` carries `n_directions_column_search`
+   separately, so the spline/polynomial case is detectable
+   programmatically rather than by parsing warning text. Every returned
+   direction is verified against the defining identity before use, so the
+   basis is sound by construction rather than by choice of tolerance.
+2. **Condition (S) is checked, not assumed.**
+   `_structural_extension_residual()` evaluates the same proportionality
+   on `X_time_surv`/`Z_time_surv` and `X_time_quad`/`Z_time_quad` - arrays
+   the backend already builds - and warns when the worst relative residual
+   exceeds $10^{-6}$, stating explicitly that results from such a fit are
+   unvalidated. (S) has thus moved from an argument in this document to a
+   per-fit assertion.
+3. **Proposition 5's justification is recorded at the site.** The source
+   comment previously presented the median fallback as restoring
+   uniformity, which is the visible symptom rather than the reason; it now
+   states that the silent subject's entry is *forced* by joint-model
+   invariance, since the survival submodel identifies what the
+   longitudinal submodel alone does not.
+
+None of the three changes any number reported in Sections 5 through 7:
 every design used in this document spells `time` as its own column, so
-$K$ contains it, (C) holds, and the construction is exactly complete
-there. They bear on the option's behavior outside the designs tested,
-which is the subject of Section 9.
+$K$ contains it, (C) holds, and both constructions agree exactly there.
+`dev/verify_absorbable_basis.py` checks that agreement directly, across
+the canonical designs and a randomized sweep, so the claim is a test
+rather than an assurance.
+
+### 4.9 Restoring the identified parameterization: an exact correction
+
+Section 4.7 establishes that the reparameterization is likelihood-
+invariant but not posterior-preserving, and Section 9.1 measures the
+consequence. This subsection shows the consequence is *removable*: the
+discarded uncertainty can be restored exactly, in closed form, from the
+draws an orthogonalized fit already produces. No second fit is required,
+and no sampled quantity changes.
+
+The idea is that the sweep does not destroy information, it only moves
+it. The component $Q^{\top} b_{\mathrm{raw}}[\,\cdot\,, q_\ast]$ removed
+from $b$ is still present in the draws - `b_raw` is a deterministic
+function of the sampled `b_std`, `sigma_b` and `L_corr` - and by
+Definition 1 its effect on the fitted values is *exactly* reproducible by
+a shift in $\beta$. Recovering the unconstrained parameterization is
+therefore a matter of applying that shift.
+
+**Definition 2 (generator map).** Let $Q \in \mathbb{R}^{N \times k}$ be
+the orthonormal basis of swept directions, with
+$\operatorname{span}(Q) \subseteq \mathcal{A}$ by Proposition 3. For each
+column $Q[\,\cdot\,, m]$ Proposition 1 supplies a witness $d$; write it as
+$-\Gamma e_m$, so that
+
+$$X_i\,(\Gamma e_m) \;=\; Q[\,\cdot\,, m]_i\, z_i \quad \text{for every } i,
+\qquad
+x_i(t)^{\top}(\Gamma e_m) \;=\; Q[\,\cdot\,, m]_i\, g(t; c_i)
+\quad \text{for every } t, \tag{G}$$
+
+the second identity holding under (S). Extending linearly gives
+$\Gamma: \mathbb{R}^{k} \to \mathbb{R}^{p}$ with
+$X_i(\Gamma c) = (Qc)_i z_i$ and
+$x_i(t)^{\top}(\Gamma c) = (Qc)_i\, g(t; c_i)$ for every $c \in
+\mathbb{R}^{k}$.
+
+(The sign is a convention: Definition 1 pairs a shift $+v$ in $b$ with a
+witness $d$ satisfying $X_i d = -v_i z_i$, whereas $\Gamma$ is defined so
+that $X_i \Gamma c = +(Qc)_i z_i$, which is the form the implementation
+uses. The two differ by a sign only.)
+
+$\Gamma$ need not be unique: if $\ker\mathcal{T} \neq \{0\}$ - that is, if
+some $d \neq 0$ has $X_i d = 0$ for every $i$ - then $\Gamma$ may be
+modified by any map into $\ker\mathcal{T}$. This is harmless, because
+$\ker\mathcal{T}$ is exactly the set of directions along which the
+likelihood is flat in $\beta$, so two choices of $\Gamma$ produce
+corrected draws differing only within a subspace in which $\beta$ is
+itself unidentified. When $X$ has full column rank across subjects - the
+generic case, and one already required for $\beta$ to be estimable -
+$\ker\mathcal{T} = \{0\}$ and $\Gamma$ is unique.
+
+**Proposition 6 (the correction is an exact reparameterization).** Fix
+$\Gamma$ satisfying (G) and define
+
+$$\Phi:\; (\beta,\, b_{\mathrm{raw}}) \;\longmapsto\;
+(\tilde\beta,\, b_{\mathrm{raw}}),
+\qquad
+\tilde\beta \;=\; \beta \;-\; \Gamma\big(Q^{\top}
+b_{\mathrm{raw}}[\,\cdot\,, q_\ast]\big).$$
+
+Then, writing $b^{\mathrm{orth}}$ for the swept random effects
+$b_{\mathrm{raw}} - QQ^{\top}b_{\mathrm{raw}}$ on column $q_\ast$:
+
+(i) $\Phi$ is an affine bijection with unit Jacobian determinant;
+
+(ii) the orthogonalized model's linear predictors at
+$(\beta, b_{\mathrm{raw}})$ coincide with the *unconstrained* model's at
+$\Phi(\beta, b_{\mathrm{raw}})$, for every observation and every $t$:
+
+$$\mu_{ij}\big(\beta,\, b^{\mathrm{orth}}\big)
+= \mu_{ij}\big(\tilde\beta,\, b_{\mathrm{raw}}\big),
+\qquad
+m_i\big(t;\, \beta,\, b^{\mathrm{orth}}\big)
+= m_i\big(t;\, \tilde\beta,\, b_{\mathrm{raw}}\big);$$
+
+(iii) consequently the two likelihoods agree exactly,
+$L^{\mathrm{orth}}(\beta, b_{\mathrm{raw}}, \theta) =
+L(\tilde\beta, b_{\mathrm{raw}}, \theta)$ for all remaining parameters
+$\theta$.
+
+*Proof.* Write $c = Q^{\top} b_{\mathrm{raw}}[\,\cdot\,, q_\ast]$, so the
+removed component is $QQ^{\top}b_{\mathrm{raw}}[\,\cdot\,, q_\ast] = Qc$.
+Only column $q_\ast$ is altered, so
+
+$$\mu_{ij}\big(\beta, b^{\mathrm{orth}}\big)
+= x_{ij}^{\top}\beta + z_{ij}^{\top}b_i - (Qc)_i\, z_{ij,q_\ast}.$$
+
+By the first identity in (G), $(Qc)_i z_i = X_i(\Gamma c)$, which read
+componentwise is $(Qc)_i z_{ij,q_\ast} = x_{ij}^{\top}\Gamma c$.
+Substituting,
+
+$$\mu_{ij}\big(\beta, b^{\mathrm{orth}}\big)
+= x_{ij}^{\top}\big(\beta - \Gamma c\big) + z_{ij}^{\top}b_i
+= x_{ij}^{\top}\tilde\beta + z_{ij}^{\top}b_i
+= \mu_{ij}\big(\tilde\beta, b_{\mathrm{raw}}\big).$$
+
+The same computation with the second identity in (G) gives the trajectory
+statement for every $t \in [0,\tau]$; this is the step that requires (S),
+and it is the only place the survival submodel enters. Since the joint
+likelihood depends on $(\beta, b)$ only through $\mu$ and $m$, (iii)
+follows. For (i), $\Phi$ is the identity in $b_{\mathrm{raw}}$ and a
+$b_{\mathrm{raw}}$-dependent translation in $\beta$, hence block-triangular
+with identity diagonal blocks. $\square$
+
+When several columns are swept at once (`orthogonalize_b`), the shifts add:
+$\tilde\beta = \beta - \sum_{q} \Gamma_q\big(Q_q^{\top}
+b_{\mathrm{raw}}[\,\cdot\,, q]\big)$, each term justified by Proposition 6
+applied to its own column.
+
+Proposition 6 is a statement about the likelihood. The question that
+matters for reporting is what happens to the *posterior*, and the answer
+is exact enough to be worth stating as an identity rather than an
+approximation.
+
+**Proposition 7 (posterior push-forward).** Suppose the orthogonalized and
+unconstrained models are given the same priors $\pi(\beta)$,
+$\pi(b_{\mathrm{std}})$, $\pi(\theta)$ - as they are, since the
+reparameterization alters only how $b$ enters the likelihood, never any
+prior. Let $p^{\mathrm{orth}}$ and $p$ denote the two posteriors. Then
+
+$$\big(\Phi_{\#}\, p^{\mathrm{orth}}\big)
+\big(\tilde\beta,\, b_{\mathrm{raw}},\, \theta \mid y\big)
+\;\propto\;
+\underbrace{\frac{\pi\big(\tilde\beta + s\big)}{\pi\big(\tilde\beta\big)}}
+_{\textstyle w(\tilde\beta,\, b_{\mathrm{raw}})}
+\;\cdot\;
+p\big(\tilde\beta,\, b_{\mathrm{raw}},\, \theta \mid y\big),
+\qquad
+s \;=\; \Gamma\big(Q^{\top}b_{\mathrm{raw}}[\,\cdot\,, q_\ast]\big).$$
+
+In particular:
+
+(i) if $\pi(\beta)$ is invariant under translation by
+$\operatorname{range}\Gamma$ - a flat prior on that subspace, for instance
+- then $w \equiv 1$ and the corrected draws are *exact* draws from the
+unconstrained model's posterior;
+
+(ii) for $\pi(\beta) = \mathcal{N}(0, \sigma_\beta^{2} I_p)$, which is what
+`jmjax` uses,
+
+$$\log w
+= -\,\frac{2\,\tilde\beta^{\top} s + \lVert s \rVert^{2}}
+{2\,\sigma_\beta^{2}}.$$
+
+*Proof.* The orthogonalized posterior is
+$p^{\mathrm{orth}} \propto \pi(\beta)\,\pi(b_{\mathrm{raw}} \mid \theta)\,
+\pi(\theta)\, L^{\mathrm{orth}}(\beta, b_{\mathrm{raw}}, \theta)$. For
+fixed $(b_{\mathrm{raw}}, \theta)$ the quantity $s$ is constant and
+$\beta \mapsto \tilde\beta = \beta - s$ is a translation with unit
+Jacobian, so the density of $\tilde\beta$ is obtained by substituting
+$\beta = \tilde\beta + s$:
+
+$$\Phi_{\#}\,p^{\mathrm{orth}}
+\;\propto\;
+\pi\big(\tilde\beta + s\big)\,\pi(b_{\mathrm{raw}} \mid \theta)\,\pi(\theta)\,
+L^{\mathrm{orth}}\big(\tilde\beta + s,\, b_{\mathrm{raw}},\, \theta\big).$$
+
+By Proposition 6(iii), $L^{\mathrm{orth}}(\tilde\beta + s, b_{\mathrm{raw}},
+\theta) = L(\tilde\beta, b_{\mathrm{raw}}, \theta)$. Comparing with
+$p \propto \pi(\tilde\beta)\,\pi(b_{\mathrm{raw}} \mid \theta)\,\pi(\theta)\,
+L(\tilde\beta, b_{\mathrm{raw}}, \theta)$ gives the stated ratio; (i) and
+(ii) are immediate. $\square$
+
+Two consequences are worth drawing out, because together they explain both
+why the correction works and where it would stop working.
+
+**Corollary 2 (scale of the restored variance, and of the residual
+weight).** In the canonical case $q_\ast = 0$ with $z_i = \mathbf{1}$ and
+$Q = \mathbf{1}/\sqrt{N}$, the generator is
+$\Gamma e_1 = e_{\mathrm{int}}/\sqrt{N}$ and the shift is
+$s = \bar b_0\, e_{\mathrm{int}}$ - precisely the mean random intercept.
+Since $\bar b_0 = O_p\big(\sigma_{b_0}/\sqrt{N}\big)$, the correction
+restores exactly the $\sigma_b/\sqrt{N}$ of location uncertainty that
+Section 3.2 identifies as the width of the degeneracy and that Section 9.1
+measures as missing. The residual prior weight is then
+$\log w = O_p\big(\lVert\beta\rVert\,\sigma_b / (\sigma_\beta^{2}
+\sqrt{N})\big)$, which is negligible whenever the prior on $\beta$ is
+diffuse relative to $\sigma_b/\sqrt{N}$: at $\sigma_\beta = 5$,
+$\sigma_{b_0} = 0.8$ and $N = 300$, $\lVert s \rVert \approx 0.046$ and
+the log-weight varies across draws by order $10^{-2}$.
+
+So the corrected draws are not merely approximately right; they are exact
+draws from the unconstrained posterior up to a reweighting whose magnitude
+is known in closed form and is, under any diffuse prior on $\beta$,
+numerically irrelevant. This is a sharper statement than a coverage study
+can produce, and it also supplies a per-fit diagnostic rather than a
+general assurance: $w$ is computable draw by draw from quantities already
+stored, so the effective sample size of $\{w\}$ measures directly whether
+the reweighting matters for a given fit. Implementing that diagnostic is
+listed in Section 9.3.
+
+**Where the correction fails.** Three conditions, each already visible in
+the statements above:
+
+1. **Condition (S) must hold.** Proposition 6(ii) uses the second identity
+   in (G) for all $t$, so a design that fails (S) breaks the correction
+   for exactly the same reason it breaks the sweep. The existing (S) check
+   therefore guards both. Verified directly for the design of Example 1:
+   the residual is $3 \times 10^{-16}$ on the survival and quadrature
+   grids, so the correction is valid precisely where the completeness
+   repair is most needed.
+2. **The prior on $\beta$ must be diffuse relative to
+   $\sigma_b/\sqrt{N}$.** Otherwise $w$ departs from 1 and the corrected
+   draws require the weight to be applied, not merely noted. Corollary 2
+   bounds when this arises; a genuinely informative prior on a swept
+   coefficient is the case to watch.
+3. **$\Gamma$ must be computable from the same generators as $Q$.** The
+   implementation obtains it by applying to the witnesses the same linear
+   combination that QR applies to the directions, and verifies the
+   resulting identity before use; `dev/verify_beta_correction.py` checks
+   this independently of any MCMC run.
 
 ## 5. Correctness validation
 
@@ -759,6 +1025,22 @@ requires. This is complemented by the study's built-in negative control,
 to build a null distribution for how much two fits of the *same* model
 should differ by chance alone, so that an apparent "A vs D" difference can
 be judged against genuine sampling variability rather than eyeballed.
+
+The algebra underneath these agreements is separately machine-checked,
+independently of any MCMC run, so that a future change breaking the
+construction fails a test rather than quietly shifting a posterior mean.
+`dev/verify_absorbable_basis.py` (34 checks) covers soundness, the
+completeness repair, the consensus imputation of Section 4.6, Condition (S)
+on a design built to violate it, and a randomized sweep confirming the
+exact construction never loses a direction the column-wise search found.
+`dev/verify_beta_correction.py` (34 checks) covers Section 4.9: that
+$\Gamma$ satisfies identity (G), and that the resulting $\tilde\beta$
+reproduces the unconstrained model's fitted values exactly - on
+coordinate-aligned designs, on the spline/orthogonal-polynomial design of
+Example 1, and with several random-effect columns swept at once. Residuals
+across all cases are at machine precision ($\le 3 \times 10^{-15}$).
+`tests/testthat/test-orthogonalize.R` carries the corresponding
+integration tests against real fits.
 
 ## 6. Efficiency: simulated covariate-count sweep
 
@@ -995,13 +1277,77 @@ parameters in general.
 
 ## 9. Limitations and open questions
 
-- **Posterior calibration has not been checked** for `orthogonalize_b0`/
-  `orthogonalize_b`, unlike `wishart_gibbs_centered`, which *was* checked on
-  this axis and found to miscalibrate `beta_0`'s credible interval (Section
-  3.2, 3.6). This is the single most important remaining validation step
-  before recommending the option for inference intended to be reported as
-  final, and there is no evidence yet either way for this specific
-  construction.
+### 9.1 Posterior calibration: a negative result, and its correction
+
+The first draft of this document listed posterior calibration as the
+single most important unchecked item, with no evidence either way. It has
+now been checked (`dev/study_calibration.R`), and the answer for the
+reported parameterization is negative.
+
+The study simulates $R$ replicates at $N = 300$, fits each under three
+arms - **A** (unmodified), **D** (`orthogonalize_b0`), **E**
+(`orthogonalize_b`) - and reports, per arm and estimand, coverage of the
+central credible intervals together with
+$\mathrm{sd\_ratio} = \overline{\mathrm{SD}(\beta \mid y)} \big/
+\mathrm{SD}\big(\mathbb{E}[\beta \mid y]\big)$, the average posterior SD
+divided by the across-replicate spread of the posterior means. A
+calibrated posterior reports, on average, the spread its point estimates
+actually have, so $\mathrm{sd\_ratio}$ sits at 1; below 1 means intervals
+too narrow. It is a far sharper instrument than coverage at any
+affordable replicate count, because it uses the whole interval rather
+than a binary hit - and it is the exact shape of the
+`wishart_gibbs_centered` failure.
+
+At $R = 16$ replicates on the `linear` design (95% coverage carries a
+Monte Carlo SE of about $0.027$ here; a 100-replicate run is in
+progress):
+
+| estimand | arm A | arm D | arm E | D corrected | E corrected |
+|---|---|---|---|---|---|
+| `beta_0` sd_ratio | 1.177 | **0.283** | **0.283** | 1.181 | 1.193 |
+| `beta_0` cov95 | 1.000 | **0.500** | **0.500** | 1.000 | 1.000 |
+| `beta_slope` sd_ratio | 1.184 | 1.183 | **0.267** | 1.183 | 1.195 |
+| `beta_slope` cov95 | 1.000 | 1.000 | **0.250** | 1.000 | 1.000 |
+| `alpha` sd_ratio | 0.935 | 0.934 | 0.927 | - | - |
+| `sigma_b0` sd_ratio | 1.135 | 1.138 | 1.152 | - | - |
+
+The pattern is a clean dose-response and leaves little room for an
+alternative reading. Arm D sweeps only the intercept column and damages
+only `beta_0`; arm E sweeps both and damages both; `beta_slope` under D is
+untouched, as it must be, since D never touches that column. `alpha` -
+carried deliberately as a **negative control**, since it lives in the
+survival submodel and never meets the subject-constant column space - is
+identical across all three arms, as is `sigma_b0`. That last point also
+settles an open question posed in `mcmc_model.py`'s own source comment:
+sweeping does **not** shift `sigma_b0`'s posterior.
+
+Point estimates remain unbiased throughout (bias below $0.6$ Monte Carlo
+standard errors in every arm and estimand), which is exactly why this
+could not have been caught by a bias check, and exactly how
+`wishart_gibbs_centered` passed inspection for as long as it did.
+
+**The correction restores calibration.** The final two columns report
+$\tilde\beta$ of Section 4.9, computed by post-processing each arm's own
+draws with no refit: $\mathrm{sd\_ratio}$ returns to $1.18$-$1.19$ against
+the unmodified fit's $1.18$, and 95% coverage returns to $1.00$. The
+agreement is stronger than the table shows, because it holds **per
+replicate** and not merely in aggregate: arm D's corrected `beta_0`
+tracks arm A's `beta_0` across replicates at $r = 0.9999$, with a mean
+absolute gap of $0.0007$ against $0.0082$ for the uncorrected comparison -
+an order of magnitude tighter. That is the signature Proposition 6
+predicts, since the correction reconstructs what the unmodified
+parameterization would have reported *given the same* `b_raw` draw, rather
+than merely landing on a similar variance.
+
+The practical reading, pending the larger run: `beta` from an
+orthogonalized fit is a *constrained* estimand and its interval should not
+be reported for a swept parameter; `beta_corrected` is the identified one
+and is what a user should report. The sampler still works in the
+well-conditioned geometry - that is the entire point - and the reporting
+is done in the identified coordinates afterwards.
+
+### 9.2 Remaining limitations
+
 - The option currently requires `q >= 2`, `random_effects_corr = TRUE`, and
   `random_effects_method = "nuts"` (the default); other combinations raise
   an informative error rather than silently no-op'ing, but the option's
@@ -1014,29 +1360,25 @@ parameters in general.
   priority (per an explicit, deliberate scope decision - see project
   history); a proper `n`-scaling characterization, orthogonal to the
   `k`-sweep reported here, remains open.
-- **`_absorbable_basis` is sound but not complete.** Section 4 supplies the
-  formal treatment this list previously called for, and the result is
-  two-sided. Soundness holds: every direction the construction removes is
+- **The completeness gap is closed** (was: "`_absorbable_basis` is sound
+  but not complete"). Section 4 supplies the formal treatment, and the
+  result is two-sided. Soundness always held: every direction removed is
   genuinely absorbable by `beta` (Propositions 2 and 3), so Corollary 1's
   model-invariance claim - which underwrites every number in Sections 5
-  to 8 - is now established rather than assumed. Completeness does *not*
-  hold in general (Proposition 4 and Example 1): the search tests one
-  column of `X` at a time, so it finds only those absorbable directions
-  that the particular basis `model.matrix()` emits happens to expose, while
-  the absorbable set itself depends only on the column space. A spline or
-  orthogonal-polynomial longitudinal mean together with a random slope is a
-  concrete failure case - the slope degeneracy this document identifies as
-  dominant would be left untreated, with no warning, because the intercept
-  column still yields a basis. Section 4.8 gives a basis-independent
-  replacement (a single null-space computation) that closes this; it is not
-  yet implemented.
-- **Condition (S) is argued, not checked.** The ratio test runs on the
-  observed longitudinal grid, while joint-model invariance also requires
-  the same proportionality at the event and quadrature times
-  (Section 4.4). It holds by construction for every column type the option
-  currently targets, but the code does not verify it - and Section 4.8
-  notes that it could, at negligible cost, using arrays it already
-  builds.
+  to 8 - is established rather than assumed. Completeness did *not* hold
+  for the column-wise search (Proposition 4 and Example 1), and the
+  failure was silent: with a spline or orthogonal-polynomial longitudinal
+  mean plus a random slope, the dominant degeneracy was left untreated
+  while the intercept column still produced a basis, so no warning fired.
+  The basis-independent null-space construction of Section 4.5 now ships
+  as `_absorbable_basis_exact()` and is authoritative (Section 4.8). What
+  remains open is narrower: behaviour under *near*-collinearity, where the
+  rank decision is a tolerance judgement rather than a clean split.
+- **Condition (S) is checked, not argued.** `_structural_extension_residual()`
+  evaluates the proportionality on the event and quadrature grids at every
+  fit and warns when it fails (Section 4.8). The residual is reported, so
+  a design that satisfies the grid test by coincidence is now visible
+  rather than silently accepted.
 - The simulation design here uses a Weibull survival submodel and a
   specific covariate structure (three named covariates plus independent
   Gaussian extras). Generalization to the spline-baseline hazard, to
@@ -1045,6 +1387,37 @@ parameters in general.
   notes it would also pick up), and to designs without a random slope at
   all, is plausible by construction but not separately re-verified by the
   study in this document.
+
+### 9.3 Next validation steps, in priority order
+
+1. **Effective sample size of the corrected estimand.** This is the one
+   that could still change the option's value proposition. `beta_corrected`
+   is what a user reports, so its ESS - not `beta`'s - is the figure that
+   matters, and it is not currently computed: the correction is applied to
+   the pooled draws, downstream of the per-chain summary. The expectation
+   is that it is close to `beta`'s, because the swept component is
+   unconstrained by the likelihood and therefore mixes at essentially the
+   prior's rate, nearly independently between iterations. But that is an
+   argument, not a measurement, and if it is wrong - if $\tilde\beta$'s ESS
+   falls back to the unmodified fit's - then the option buys fast sampling
+   of a quantity that cannot be reported and slow effective sampling of the
+   one that can. Computing the correction on the by-chain draws as well
+   would settle it and costs one array reshape.
+2. **The prior-weight diagnostic of Proposition 7.** $w$ is computable draw
+   by draw from quantities already stored; reporting
+   $\mathrm{ESS}(\{w\})$, or simply $\mathrm{sd}(\log w)$, converts
+   Corollary 2's asymptotic argument into a per-fit check and would make
+   the correction self-validating on designs and priors not covered here.
+3. **The 100-replicate calibration run**, extended to the `mixing` design.
+   The numbers in Section 9.1 come from 16 replicates; the larger run is
+   confirmatory rather than decisive given the effect size, but `mixing`
+   is genuinely new information: it is the design where the per-column
+   search finds *nothing* for the slope column, so it exercises the full
+   sequence - defect, repair, and correction - in one arm. Condition (S)
+   has been verified to hold there ($3 \times 10^{-16}$), so the
+   correction is applicable.
+4. **Coverage of the other random-effects code paths**, per the second
+   bullet of Section 9.2.
 
 ## 10. Related work summary
 
@@ -1077,10 +1450,20 @@ reparameterization of a real, diagnosed identifiability problem that recurs
 - independently of covariate count - for any random slope on time. The
 weaker, still-favorable nuisance-parameter comparison is better understood
 as `JMbayes2`'s own degradation under growing inter-block correlation than
-as an independent `jmjax` achievement. The most important open item before
-this work is submission-ready is a calibration/coverage check of the fix
-itself, precisely because the one directly comparable earlier attempt
-failed that exact check.
+as an independent `jmjax` achievement.
+
+The calibration question that the first draft named as the blocker has
+been answered, and the answer is more interesting than a clean pass would
+have been. The reparameterization miscalibrates the coordinates it
+reports, exactly as its retracted predecessor did - but unlike that
+predecessor it only *relocates* the uncertainty rather than destroying it,
+and the relocation is invertible in closed form. A fit can therefore
+sample in the well-conditioned geometry and report in the identified one,
+which is what the option was always supposed to deliver and what it now
+actually does. The remaining item before submission is narrow: the
+effective sample size of the corrected estimand, which is the figure a
+reader would quote and the last place the efficiency claim could still
+come apart.
 
 ## 12. Note on publication venue
 
@@ -1095,9 +1478,15 @@ low-cost and would establish priority independently of review timelines.
 `Bayesian Analysis`, `Statistics in Medicine`, and `Computational Statistics
 & Data Analysis` are reasonable alternates if a narrower statistical-
 methodology framing (rather than software-paper framing) is preferred.
-Before any of these, Section 9's calibration gap should be closed - a
-reviewer working in this area would be expected to ask for it, and it is
-better to have the answer already in hand.
+Section 9's calibration gap, which an earlier draft flagged as the blocker
+here, is now closed in both directions: the negative result is measured and
+the correction is proved and validated (Sections 4.9 and 9.1). That
+strengthens rather than weakens the submission - a reviewer in this area
+would have asked for the coverage study, and the honest answer now comes
+with a remedy attached rather than a caveat. The remaining item worth
+having in hand first is the effective sample size of the corrected
+estimand (Section 9.3, item 1), since the efficiency claim is the paper's
+headline and `beta_corrected` is the quantity a reader would report.
 
 ## References
 

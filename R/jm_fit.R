@@ -297,14 +297,52 @@
 #'       \code{b_0} lies in a column space \code{beta} already spans, so
 #'       for any draw there is a shift of \code{beta} giving identical
 #'       fitted values - the set of achievable mean structures is the
-#'       same. What does change is that the implied prior on the
-#'       constrained \code{b_0} is singular while \code{sigma_b} still
-#'       governs the unconstrained draws, so whether \code{sigma_b0}'s
-#'       posterior shifts is an empirical question. Opt-in until that is
-#'       settled by replication. Currently requires \code{q >= 2},
+#'       same. Currently requires \code{q >= 2},
 #'       \code{random_effects_corr = TRUE} and the default
 #'       \code{random_effects_method = "nuts"}; other combinations raise
 #'       an error rather than silently doing nothing.
+#'
+#'       \strong{But the reported intervals are NOT unchanged - read this
+#'       before reporting a fit.} The implied prior on the constrained
+#'       \code{b_0} is singular while \code{sigma_b} still governs the
+#'       unconstrained draws, so the swept component is unidentified by
+#'       the likelihood and samples its prior, and that uncertainty is
+#'       absent from \code{beta}'s posterior. Measured (n = 300, 16
+#'       replicates): for the swept coefficients, mean posterior SD
+#'       divided by the across-replicate SD of posterior means falls to
+#'       \strong{0.28} against \strong{1.18} for an unmodified fit, and
+#'       95\% coverage to \strong{0.50} against \strong{1.00}. Point
+#'       estimates stay unbiased, so a bias check does not catch this.
+#'       \code{sigma_b0} and \code{alpha} are unaffected in every arm,
+#'       which settles the empirical question earlier versions of this
+#'       note left open: sweeping does not shift \code{sigma_b0}'s
+#'       posterior.
+#'
+#'       \strong{Use \code{beta_corrected}, not \code{beta}, for swept
+#'       parameters.} Because the sweep relocates the uncertainty rather
+#'       than destroying it, it is exactly invertible. When either option
+#'       actually sweeps a direction, the fit gains
+#'       \code{posterior_samples$beta_corrected}: the same draws expressed
+#'       in the identified parameterization, obtained by adding back the
+#'       \code{beta}-shift corresponding to the swept component of
+#'       \code{b_raw}. It is computed from draws the fit already produced
+#'       - no refit, no extra sampling - and is absent (\code{NULL}) for
+#'       fits where nothing was swept. Measured on the same replicates,
+#'       it restores the SD ratio to 1.18-1.19 and 95\% coverage to 1.00,
+#'       and tracks an unmodified fit's \code{beta_0} across replicates at
+#'       r = 0.9999. So: sample with the option for the mixing gain, then
+#'       report \code{beta_corrected}. \code{beta} itself is left
+#'       untouched and remains the constrained estimand.
+#'
+#'       Two caveats. The correction relies on the same off-grid
+#'       proportionality (Condition (S)) the sweep does, so a design where
+#'       the fit warns about (S) breaks both. And the corrected draws are
+#'       exact draws from the unmodified model's posterior only when the
+#'       prior on \code{beta} is flat over the swept directions; under
+#'       \code{jmjax}'s N(0, 5) prior they differ by a weight of order
+#'       \code{sigma_b/(sigma_beta^2 sqrt(N))}, negligible at any usual
+#'       sample size. See \code{vignette("jmjax-reparameterization")},
+#'       Sections 4.9 and 9.1, for the derivation and the study.
 #'
 #'       \code{orthogonalize_b} sweeps every random-effect column (not
 #'       just the intercept), which also removes a degeneracy between the
