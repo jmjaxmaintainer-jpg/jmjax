@@ -275,6 +275,12 @@ fit_one <- function(design, arm, rep_id) {
   # D's / E's, so these arms check the implementation, as D_rot did.
   if (arm == "D_rotall") { ctl$orthogonalize_b0 <- TRUE; ctl$orthogonalize_rotate_all <- TRUE }
   if (arm == "E_rotall") { ctl$orthogonalize_b  <- TRUE; ctl$orthogonalize_rotate_all <- TRUE }
+  # A_rotdense: the no-sweep alternative (rotate_absorbable + a dense block
+  # over beta and b_gen_U). Reports the ordinary beta, like A, so its
+  # calibration rows are directly comparable to A's.
+  if (arm == "A_rotdense") { ctl$rotate_absorbable <- TRUE; ctl$dense_mass_generator_beta <- TRUE }
+  if (arm == "E_rotall_dense") { ctl$orthogonalize_b <- TRUE; ctl$orthogonalize_rotate_all <- TRUE
+                                 ctl$dense_mass_generator <- TRUE }
 
   tm <- system.time(f <- jm_fit(
     long_formula = spec$lform,
