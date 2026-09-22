@@ -88,11 +88,21 @@ identifiability bug that silently miscalibrates credible intervals for
 swept coefficients (Section 9.1), exactly as an earlier, retracted attempt
 at the same problem did, with a closed-form, verified correction - but its
 efficiency benefit for the coefficients it targets, once measured on
-coordinates a user may actually report, is modest, not dramatic. The
-document closes by connecting this to established reparameterization and
-MCMC literature, including the specific point (Geyer, 1992) that explains
-why a sampled coordinate can mix beautifully while the linear combination
-needed to recover the identified quantity does not.
+coordinates a user may actually report, is modest, not dramatic. A late
+follow-up (Section 9.1.2), added after the claim above was set, finds
+that a further, currently experimental reparameterization
+(`orthogonalize_b0_rotate`) recovers most of `beta_corrected`'s missing
+efficiency - roughly 5x-8x over a default fit across three small pilots
+and two baseline-hazard forms - while leaving calibration unchanged
+within Monte Carlo noise on the one design checked so far. It is reported
+for completeness, because the evidence is consistent across every
+configuration tried, not because it has yet received the breadth of
+validation (multiple designs, real data, the random-slope column) the
+rest of this document's claims have. The document closes by connecting
+this to established reparameterization and MCMC literature, including the
+specific point (Geyer, 1992) that explains why a sampled coordinate can
+mix beautifully while the linear combination needed to recover the
+identified quantity does not.
 
 ## 1. Motivation
 
@@ -1359,7 +1369,10 @@ the headline number this document originally reported for it. Its more
 durable contribution is the one Section 9.1 documents at length:
 diagnosing and correcting a real posterior-calibration bug that silently
 miscalibrates credible intervals for swept coefficients, in exactly the
-way an earlier, retracted attempt at the same problem did.
+way an earlier, retracted attempt at the same problem did. A follow-up
+construction (Section 9.1.2), not yet validated to the same standard as
+the rest of this document, suggests the 1.25x-1.31x figure above is not
+the end of the story - see that section before treating it as a ceiling.
 
 ### 8.3 Synthesis
 
@@ -1556,6 +1569,118 @@ about the machinery, but the exact 1.25x-1.31x figure for
 `beta_corrected` should be treated as a preliminary estimate, not a final
 number, until more seeds are run.
 
+### 9.1.2 A follow-up: isolating the relocated degeneracy recovers most of the missing efficiency
+
+Section 9.1.1 traced the corrected estimand's disappointing ESS/sec to a
+specific mechanism: the relocated degeneracy lands inside `b_std[:, 0]`, a
+several-hundred-dimensional per-subject block, and inherits whatever
+mixing rate NUTS's single global mass matrix gives that block as a whole -
+not the near-prior rate this document's original hypothesis assumed. That
+diagnosis suggests a fix: give the specific direction the degeneracy
+occupies its own, small, separately-adapted coordinate, rather than
+leaving it buried inside a large block tuned for everything else in it.
+
+**The construction.** `b_raw[:, 0] = sigma_b[0] * b_std[:, 0]` always - a
+valid Cholesky factor of a correlation matrix has first row
+$[1, 0, \ldots, 0]$ - so `b_std[:, 0]` can be split, with no
+approximation, into a component along the orthonormal basis $Q$ that
+`orthogonalize_b0`/`orthogonalize_b` already computes (the absorbable
+directions) and a component along its orthogonal complement $Q_\perp$:
+`b_std[:, 0]` $= Qu + Q_\perp v$, with $u$, $v$ independent standard
+normal of dimension $k$ (typically 1-4) and $N_{\mathrm{sub}} - k$
+respectively. Because this is a rotation of a spherical Gaussian, it is
+exact: `b_std[:, 0]` marginally, and jointly with every other parameter,
+has precisely the same distribution as before, and
+$u = Q^{\top}$`b_std[:, 0]` recovers exactly the generator coordinate the
+degeneracy lives in (verified in pure NumPy to machine precision,
+independently of the model). $u$ is then sampled as its own, explicitly
+small NUTS site (`control$orthogonalize_b0_rotate = TRUE`), optionally
+given its own dense mass-matrix block via NumPyro's existing
+block-diagonal mechanism (`control$dense_mass_b0_generator = TRUE`) - the
+same mechanism `dense_mass_beta`/`dense_mass_spline` already use elsewhere
+in this package. No other part of the model changes: the sweep, the
+survival submodel, and the `beta_corrected` post-processing of Section 4.9
+read `b_std`/`L_corr`/`sigma_b` exactly as before and do not know whether
+`b_std` was rotated. The construction is currently scoped to the
+intercept column only - the slope column's analogous direction depends on
+the sampled correlation $\rho$, so a fixed, precomputed rotation cannot
+isolate it the same way.
+
+**Efficiency.** `beta_corrected`'s own ESS/sec, relative to a default
+fit's `beta_0` (the closest available like-for-like reference, since a
+default fit never reports a corrected estimand):
+
+| pilot | baseline hazard | seeds | `orthogonalize_b0` alone | `+ orthogonalize_b0_rotate` | `+ dense_mass_b0_generator` |
+|---|---|---:|---:|---:|---:|
+| 1 | spline | 2 | 0.91x | 7.61x | 5.23x |
+| 2 | spline | 6 | 0.93x | 5.77x | 5.81x |
+| 3 | weibull | 2 | 1.05x | 6.52x | 5.64x |
+
+(all three on the `linear` design, `N = 300`). The rotation alone
+recovers most of the gap between the plain option's 1.25x-1.31x
+(Section 9.1.1) and the swept, unreportable coordinate's own 9x-15x,
+consistently across two baseline-hazard forms and both seed counts tried.
+The additional dense mass-matrix block does not reliably help on top of
+the rotation - it trails it in two of three pilots and ties it in the
+third - unlike the rotation itself, which improved on the plain option in
+every pilot run. A correctness check accompanies every pilot:
+`beta_corrected`'s posterior mean agrees between the rotated and
+unrotated fit at the same seed to within Monte Carlo noise (mean absolute
+difference $0.0009$-$0.0018$ across the three pilots, against posterior
+means of order $2$), consistent with the rotation being exact rather than
+merely well-behaved.
+
+**Calibration.** An exact reparameterization of the sampling coordinates
+cannot change the target posterior, but "provably exact" and "confirmed
+by this document's own calibration instrument" are different claims - and
+the instrument exists precisely because an earlier reparameterization
+(`wishart_gibbs_centered`) was likelihood-invariant and unbiased
+throughout, and was retracted only because its intervals turned out too
+narrow (Section 9.1). `dev/study_calibration.R` was extended with a
+`D_rot` arm (`orthogonalize_b0` + `orthogonalize_b0_rotate`) and run at
+$R = 100$ on the `linear` design, gated identically to Section 9.1:
+
+| estimand | arm A (`beta_0`, plain - A is never orthogonalized) | arm D `beta_0_corrected` | arm D_rot `beta_0_corrected` |
+|---|---|---|---|
+| cov95 | 0.990 | 0.990 | 0.990 |
+| sd_ratio | 1.164 | 1.164 | 1.156 |
+| bias/se | 1.68 | 1.52 | 1.55 |
+| `alpha` cov95 (negative control) | 0.930 | 0.929 | 0.930 |
+
+Arm A's row is its own plain `beta_0` - the target a correction should be
+matching, per Section 9.1 - not a corrected quantity, since nothing is
+swept for an unmodified fit. `D_rot`'s coverage matches `D`'s exactly and
+its sd_ratio differs by
+$0.008$ - noise at this replicate count (Monte Carlo SE on 95% coverage is
+about $0.011$ here), nowhere near the fourfold narrowing
+`wishart_gibbs_centered` produced. The negative control does not move
+either. This is also, incidentally, the $R = 100$ confirmation Section 9.1
+flagged as "in progress" for arm D's own correction: the plain option's
+calibration fix is now confirmed at full replicate count, not only the
+$R = 16$ pilot reported there; arm E's equivalent confirmation remains
+open.
+
+**Status.** This is a promising, internally consistent result, but it
+should not be read as validated to the standard the rest of this document
+uses. It has been checked on one design (`linear`), one baseline hazard
+beyond the initial spline pilot (Weibull), a handful of seeds per
+configuration (not the covariate-count sweep of Section 6 or the
+independent real-data check of Section 7), and only for the intercept
+column (`orthogonalize_b0`, not `orthogonalize_b`'s slope sweep). It is
+also new code, implemented and reviewed but not traced by its authoring
+session (no JAX/NumPyro environment was available during implementation -
+see `dev/pilot_b0_rotate.R`'s header), so its first executions are the
+ones reported here rather than the product of independent pre-release
+testing. It ships as two opt-in `control` arguments, off by default,
+alongside the existing `orthogonalize_b0`/`orthogonalize_b` options; it
+does not change either option's own behaviour when left at its default
+(`FALSE`). A known interaction: a warm-started fit's initial value for
+`b_std` is silently not applied to the rotated columns, since `b_std`
+becomes a derived quantity rather than a sampled one under the rotation
+(a soft degradation - NUTS still starts from a valid point - not a
+correctness issue). Section 9.3 lists what remains before this could be
+reported with the same confidence as Sections 6-8.
+
 ### 9.2 Remaining limitations
 
 - **An unrelated finding the same study surfaced, recorded here rather than
@@ -1579,14 +1704,17 @@ number, until more seeds are run.
   well-precedented candidate - is separate work, and it should be
   understood before this table is put in front of a referee.
 - **The reparameterization's own efficiency contribution, once correctly
-  measured, is modest.** Section 9.1.1: a 2-seed pilot puts
+  measured, is modest as shipped.** Section 9.1.1: a 2-seed pilot puts
   `beta_corrected`'s ESS/sec gain over a default fit at roughly
   1.25x-1.31x, not the 9x-15x measured for the swept, unreportable `beta`.
   This does not undermine the calibration fix itself (Section 9.1) or the
   option's value as a bug fix, but it does mean the option should not be
   marketed on efficiency grounds alone; Section 8 gives the reattributed
   picture, with `alpha`'s own advantage over `JMbayes2` (Sections 6.3, 7.1)
-  now carrying the paper's central efficiency claim instead.
+  now carrying the paper's central efficiency claim instead. A follow-up
+  construction (Section 9.1.2) recovers most of this gap in pilot testing
+  while preserving calibration, but is not yet validated broadly enough
+  to revise this bullet's headline number for the package as shipped.
 - The option currently requires `q >= 2`, `random_effects_corr = TRUE`, and
   `random_effects_method = "nuts"` (the default); other combinations raise
   an informative error rather than silently no-op'ing, but the option's
@@ -1629,30 +1757,36 @@ number, until more seeds are run.
 
 ### 9.3 Next validation steps, in priority order
 
-1. **More seeds for the corrected estimand's effective sample size.**
-   Section 9.1.1 answers this at pilot scale (2 seeds): the expectation
-   stated in the first draft of this item - that `beta_corrected` would mix
-   close to `beta`'s own rate - was wrong, and the reportable gain is
-   roughly 1.25x-1.31x, not 9x-15x. What remains is to firm up that number:
-   more seeds (4-8 is cheap, same script), and computing the correction on
-   the by-chain draws directly (rather than post hoc via
-   `recompute_site_diagnostics()` on pooled draws) so the number in a
-   future revision comes from the same pipeline as every other table in
-   this document.
-2. **The prior-weight diagnostic of Proposition 7.** $w$ is computable draw
+1. **Broader validation of the rotation follow-up (Section 9.1.2).**
+   Before it could be reported with the same confidence as the rest of
+   this document: the covariate-count sweep of Section 6, or at least
+   more than one design; the real-data check of Section 7; extending the
+   construction (or a proof it cannot be extended the same way) to the
+   slope column via `orthogonalize_b`; more replicates on the calibration
+   check (currently $R = 100$, one design); and resolving the warm-start
+   interaction noted in Section 9.1.2's "Status" paragraph.
+2. **More seeds for the plain correction's effective sample size -
+   corroborated, not yet closed.** Section 9.1.1's 2-seed figure
+   (1.25x-1.31x) has since been corroborated by two further pilots at 6
+   spline seeds and 2 Weibull seeds (Section 9.1.2's table; the plain-
+   option column there reads 0.91x-1.05x, consistent pilot-to-pilot noise
+   around the same modest figure). Computing the correction on by-chain
+   draws directly, rather than post hoc via `recompute_site_diagnostics()`
+   on pooled draws, remains open.
+3. **The prior-weight diagnostic of Proposition 7.** $w$ is computable draw
    by draw from quantities already stored; reporting
    $\mathrm{ESS}(\{w\})$, or simply $\mathrm{sd}(\log w)$, converts
    Corollary 2's asymptotic argument into a per-fit check and would make
    the correction self-validating on designs and priors not covered here.
-3. **The 100-replicate calibration run**, extended to the `mixing` design.
-   The numbers in Section 9.1 come from 16 replicates; the larger run is
-   confirmatory rather than decisive given the effect size, but `mixing`
-   is genuinely new information: it is the design where the per-column
-   search finds *nothing* for the slope column, so it exercises the full
-   sequence - defect, repair, and correction - in one arm. Condition (S)
-   has been verified to hold there ($3 \times 10^{-16}$), so the
-   correction is applicable.
-4. **Coverage of the other random-effects code paths**, per the second
+4. **The 100-replicate calibration run, extended to arm E and the
+   `mixing` design.** Arm D's correction is now confirmed at $R = 100$ on
+   the `linear` design (Section 9.1.2); arm E's remains at the original
+   $R = 16$ pilot scale, and the `mixing` design - where the per-column
+   search finds *nothing* for the slope column, exercising the full
+   sequence of defect, repair, and correction in one arm - has not yet
+   been run at either scale. Condition (S) has been verified to hold
+   there ($3 \times 10^{-16}$), so the correction is applicable.
+5. **Coverage of the other random-effects code paths**, per the second
    bullet of Section 9.2.
 
 ## 10. Related work summary
@@ -1727,6 +1861,20 @@ default fit and credit the sampler; use
 matters, report `beta_corrected` rather than `beta`, and expect a modest,
 not dramatic, efficiency dividend for doing so.
 
+A late addition complicates that last clause without overturning it: a
+follow-up construction (`orthogonalize_b0_rotate`, Section 9.1.2) recovers
+most of the missing efficiency for the intercept-swept coefficient in
+every pilot run so far - roughly 5x-8x over a default fit, against the
+1.25x-1.31x above - while leaving calibration unchanged within noise on
+the one design checked ($R = 100$). It is reported here because the
+evidence is consistent, not because it has earned the same confidence as
+the rest of this document: it needs the breadth of validation Section 9.3
+lists (more designs, real data, the slope column, more calibration
+replicates) before "modest, not dramatic" above should be revised for the
+package as shipped. Until then, the honest summary is: the correctness
+fix is proven and ships; a further efficiency fix on top of it looks
+promising in early testing but is not yet ready to promise.
+
 ## 12. Note on publication venue
 
 For the record, and as requested: this material is suited to a package
@@ -1751,10 +1899,14 @@ efficiency claim a reviewer should be shown first is now `alpha`'s
 reparameterization-independent advantage over `JMbayes2` (real and large on
 two datasets), not the reparameterization's own effect on swept
 coefficients (real but modest once measured on `beta_corrected`). The
-remaining item worth having in hand before submission is a few more seeds
-of the `beta_corrected` ESS pilot (Section 9.3, item 1), to firm up the
-1.25x-1.31x figure rather than change the paper's central claim, which no
-longer rests on it.
+remaining items worth having in hand before submission are the broader
+validation of the rotation follow-up (Section 9.1.2; Section 9.3, item 1)
+if it is to be included as a package feature rather than a documented
+pilot result, and, more modestly, a few more seeds of the plain
+correction's ESS pilot (Section 9.3, item 2) to firm up the 1.25x-1.31x
+figure - neither changes the paper's central claim (Section 8), which
+rests on `alpha`'s reparameterization-independent advantage rather than on
+either of these items.
 
 ## References
 
