@@ -17,9 +17,11 @@ knitr::opts_chunk$set(
 ## Abstract
 
 `jmjax` samples joint longitudinal-survival models with NUTS/HMC and, on
-identical data, mixes dramatically better than `JMbayes2`'s block-Gibbs/
-Metropolis sampler - by more than an order of magnitude on regression
-parameters in several of the comparisons below. This document does five things. First, it names the mechanism precisely: a location degeneracy
+identical data, mixes substantially better than `JMbayes2`'s block-Gibbs/
+Metropolis sampler - most robustly, and independently of any optional
+reparameterization, on the association parameter a joint-model analysis is
+usually run to estimate, where the advantage is several-fold to an order of
+magnitude (Sections 6.3, 7.1, 8). This document does six things. First, it names the mechanism precisely: a location degeneracy
 between subject-constant fixed effects and the matching linear combination
 of correlated random effects, which the likelihood pins only through their
 *sum*. This is not specific to the random intercept - this document shows,
@@ -56,7 +58,7 @@ interval width. Fifth, it
 reports a replicated simulation study across a covariate-count sweep (k = 1, 4, 8, 12
 extra covariates) and an independent real-data check (the `aids` clinical
 trial data, never used to build any of the diagnostics below), both showing
-the same pattern: the regression-parameter efficiency advantage over
+the same pattern: the *swept-coefficient* efficiency advantage over
 `JMbayes2` is large, statistically significant, and *does not grow with
 covariate count* - because its dominant source is the covariate-count-
 independent slope degeneracy, not the covariate-count-dependent one. A
@@ -64,11 +66,33 @@ separate, k-dependent effect is `JMbayes2`'s own catastrophic loss of
 convergence on its random-effects covariance parameter as covariate count
 grows (max R-hat past 10,000 at k = 12), which inflates naive "jmjax vs
 JMbayes2" ratios for reasons that have nothing to do with `jmjax`'s
-reparameterization. The document closes by connecting this to established
-reparameterization and MCMC literature, and by being explicit about what
-has *not* yet been checked - most importantly the effective sample size of
-the corrected estimand, which is the figure a user actually reports and the
-one remaining measurement that could still change the option's value.
+reparameterization. Sixth - and this changes the document's central claim -
+it measures the effective sample size of the corrected estimand itself,
+`beta_corrected` in Section 4.9's terms, and finds that the large advantage
+just described for the *swept* coordinate does not transfer to it: a pilot
+measurement puts the reportable estimand's gain at roughly 1.25x-1.31x, not
+an order of magnitude. Read together with a direct, reparameterization-
+independent measurement of the *association parameter* `alpha` - the
+quantity a joint-model analysis is usually run to estimate - the picture
+that emerges is a reallocation of `jmjax`'s central claim, not a loss of
+it: a default, non-orthogonalized fit already beats `JMbayes2` on `alpha`'s
+own ESS/second by 2.44x on real data and 5.7x-8.1x in simulation, with the
+reparameterization option contributing little on top (roughly 1.0x-1.5x,
+inconsistently across the two datasets). The large, robust, well-evidenced
+advantage is therefore Layer 1 - `jmjax`'s generic NUTS/HMC engine against
+`JMbayes2`'s block sampler (Section 8.1), now demonstrated directly rather
+than only argued for - and it needs no reparameterization option to hold.
+`orthogonalize_b0`/`orthogonalize_b` remains a genuine, worthwhile
+contribution on its own, narrower terms: it diagnoses and fixes a real
+identifiability bug that silently miscalibrates credible intervals for
+swept coefficients (Section 9.1), exactly as an earlier, retracted attempt
+at the same problem did, with a closed-form, verified correction - but its
+efficiency benefit for the coefficients it targets, once measured on
+coordinates a user may actually report, is modest, not dramatic. The
+document closes by connecting this to established reparameterization and
+MCMC literature, including the specific point (Geyer, 1992) that explains
+why a sampled coordinate can mix beautifully while the linear combination
+needed to recover the identified quantity does not.
 
 ## 1. Motivation
 
@@ -217,6 +241,21 @@ sensitivity to growing correlation) are all separately well established;
 their combination and application to this specific model class, with this
 specific empirical signature, is offered here as this document's actual
 contribution - not a rediscovery of general theory.
+
+### 2.7 A related point this document needed later: ESS is a property of the functional, not the sampler
+
+Geyer (1992), "Practical Markov Chain Monte Carlo," *Statistical Science*,
+7(4), 473-483, is the classical reference for a fact that becomes
+load-bearing in Section 9: effective sample size and Monte Carlo standard
+error are defined with respect to a *specific scalar function* of the
+chain being averaged, not as a property of the sampler or the state vector
+in the abstract. Two different linear functionals of the same joint draws
+- say, a sampled coordinate, and a different linear combination of that
+coordinate with another block entirely - can therefore have arbitrarily
+different effective sample sizes even though they come from the identical
+run. This is not a surprising or unusual fact in the MCMC literature; it
+is why Section 9.1.1's correction needed its own, separate ESS measurement
+rather than inheriting the swept coordinate's.
 
 ## 3. The location degeneracy in jmjax's joint model
 
@@ -1133,6 +1172,32 @@ not clearly different from parity; the real, replicated, large effect is
 specific to the regression parameters the reparameterization actually
 targets.
 
+**A parameter-specific breakdown, and why it changes the reading above.**
+"Regression-only" in the table above is `min(ESS/sec)` over
+`{beta, alpha, gamma}`, and in every cell of this sweep the parameter
+setting that minimum (`min_who_reg` in `dev/study_orth_vs_jmbayes2.R`'s own
+output) is a `beta` coefficient, never `alpha`. That means the
+13.3x-14.7x figure above is, in effect, a comparison of the swept `beta`
+coordinate's ESS/sec between arms - exactly the coordinate Sections 9.1 and
+9.1.1 show does not survive the calibration correction. Pulling `alpha`'s
+own ESS/sec out of the same runs (`alpha_ess` is stored as its own column,
+independently of the `min`-based composite) gives a materially different,
+and materially more important, picture:
+
+| k | A vs J (alpha) | E vs A (alpha) |
+|---:|---:|---:|
+| 1  | 5.72x | 1.02x |
+| 4  | 8.07x | 0.91x |
+| 8  | 6.22x | 1.07x |
+| 12 | 6.25x | 1.15x |
+
+`jmjax`'s *default*, non-orthogonalized fit already beats `JMbayes2` on
+`alpha`'s own ESS/sec by 5.7x-8.1x, flat across k, with no involvement of
+`orthogonalize_b` at all - `E vs A` for `alpha` sits close to 1x throughout
+(0.91x-1.15x), unlike the 11x+ effect the same ratio produces for `beta_0`
+on this same sweep. Section 8 returns to what this means for how the
+overall claim should be attributed.
+
 ### 6.4 JMbayes2's own degradation with k
 
 Independently of anything about `jmjax`, `JMbayes2`'s random-effects
@@ -1199,6 +1264,28 @@ regression-vs-nuisance split seen throughout this document, now confirmed
 on a dataset that played no role in developing any of the diagnostics that
 found it.
 
+**The same `alpha`-specific breakdown on real data.** As in the simulated
+sweep, pulling `alpha`'s own ESS/sec (also stored per-seed in
+`aids_full.csv`, independently of the `min`-based regression-only column)
+rather than the composite gives:
+
+| arm | mean alpha ESS/sec | vs A | vs J |
+|---|---:|---:|---:|
+| A (default) | 147.2 | - | 2.44x |
+| D (orth. intercept) | 206.7 | 1.40x | 3.43x |
+| E (orth. all) | 219.2 | 1.49x | 3.64x |
+| J (JMbayes2, 2 seeds) | 60.3 | - | - |
+
+`jmjax`'s default fit is already 2.44x faster than `JMbayes2` on `alpha`'s
+own mixing, with no reparameterization involved; `orthogonalize_b` adds a
+further, real but modest, 1.49x on top (larger than the simulated sweep's
+~1.0x for this quantity, though from only 2-4 seeds per arm here - a
+difference worth another look, but not one that changes the main
+conclusion). Contrast the swept `beta_0`: its own `A`-vs-`E` ESS/sec ratio
+on this same dataset is 7.41x - an order of magnitude larger effect,
+specific to the coordinate Section 9.1.1's measurement shows is not the one
+a user reports.
+
 ### 7.2 PBC2
 
 The pre-existing PBC2 benchmark in `vignette("jmjax-validation")`
@@ -1223,57 +1310,75 @@ reparameterization in this package touches at all. That reading is half
 right and worth separating into its two actual components, because they
 have different degrees of novelty and different literature backing.
 
-### 8.1 Layer 1: generic gradient-based robustness (well-established, not jmjax-specific)
+### 8.1 Layer 1: generic gradient-based robustness (well-established, not jmjax-specific, and now directly demonstrated)
 
-`rho`'s own mixing under `jmjax` is, on its own terms, unremarkable: its
-ESS/draw bounces in a narrow band (roughly 0.06-0.12 across the k-sweep) with
-no trend as `k` grows, since neither `orthogonalize_b0` nor `orthogonalize_b`
-touches `rho` at all. What *is* notable is that it is **stable** rather than
-degrading - which, given Section 6.4's finding, is mostly a statement about
-`JMbayes2` degrading on its comparable parameter (the covariance block that
-`rho` is derived from), not about `jmjax` doing anything specifically clever
-for `rho`. This is exactly the generic NUTS/HMC-vs-block-Gibbs distinction
-in Section 2.2 and 2.4 (Hoffman & Gelman 2014; Roberts & Sahu 1997;
-Betancourt 2017): a gradient-based sampler that jointly explores the full
-parameter vector via Hamiltonian dynamics has no equivalent of "conditional
-on the other blocks' current values," and so has no equivalent mechanism by
-which growing inter-parameter correlation specifically degrades one block's
-own updates. This is real, well-documented, general MCMC theory - not a
-`jmjax`-specific architectural achievement, and the write-up should not
-claim it as one.
+This layer no longer needs to be inferred indirectly from `rho`'s stability
+under growing `k` (though that evidence, kept below, still corroborates
+it). Sections 6.3 and 7.1 now report `alpha`'s own ESS/sec, isolated from
+any orthogonalization, directly against `JMbayes2`: 5.7x-8.1x in
+simulation, 2.44x on real `aids` data, with `orthogonalize_b` contributing
+little to nothing further (0.91x-1.15x in simulation; a real but secondary
+1.49x on the real dataset). This is exactly the generic NUTS/HMC-vs-block-
+Gibbs distinction in Sections 2.2 and 2.4 (Hoffman & Gelman 2014; Roberts &
+Sahu 1997; Betancourt 2017): a gradient-based sampler that jointly explores
+the full parameter vector via Hamiltonian dynamics has no equivalent of
+"conditional on the other blocks' current values," and so has no
+equivalent mechanism by which growing inter-parameter correlation
+specifically degrades one block's own updates.
 
-### 8.2 Layer 2: the targeted reparameterization (this package's actual, specific contribution)
+The corroborating, indirect evidence: `rho`'s own mixing under `jmjax` is,
+on its own terms, unremarkable - its ESS/draw bounces in a narrow band
+(roughly 0.06-0.12 across the k-sweep) with no trend as `k` grows, since
+neither `orthogonalize_b0` nor `orthogonalize_b` touches `rho` at all. What
+is notable is that it is stable rather than degrading - which, given
+Section 6.4's finding, is mostly a statement about `JMbayes2` degrading on
+its comparable parameter (the covariance block `rho` is derived from), not
+about `jmjax` doing anything specifically clever for `rho`.
 
-The large, k-independent, highly statistically significant regression-only
-advantage (Section 6.3) is not explained by Layer 1 alone - `beta_1`
-degrades under the *default* `jmjax` fit too (that is precisely what makes
-`orthogonalize_b` measurably better than `orthogonalize_b0`, and both
-measurably better than neither). This is Section 3's specific,
-data-verified diagnosis and fix: a real degeneracy, present at any `k`,
-removed by a construction that reads the actual design matrices rather than
-assuming a fixed formula shape, proved not to change the model (Section 4) and verified so empirically (Section 5), and shown to recover the specific factor of efficiency the degeneracy
-was costing (Sections 3.5, 6.3, 7.1).
+Taken together, this is real, well-documented, general MCMC theory, now
+backed by a direct, reparameterization-free measurement on the parameter
+that matters most to a joint-model analysis - not a `jmjax`-specific
+architectural achievement, but the part of the comparison that should
+carry the paper's headline claim, precisely because it needs no caveat
+about which coordinate is being measured.
+
+### 8.2 Layer 2: the targeted reparameterization (a real, verified, but more modest contribution than first measured)
+
+The large, k-independent, highly statistically significant *swept-beta*
+advantage (Section 6.3) is real and is not explained by Layer 1 alone -
+`beta_1` degrades under the *default* `jmjax` fit too, and orthogonalizing
+it removes a genuine, source-verified degeneracy (Section 3), proved not
+to change the model (Section 4) and verified so empirically (Section 5).
+What Sections 9.1 and 9.1.1 add is that this large effect is specific to
+the *swept* coordinate, not to the identified quantity a user reports:
+measured on `beta_corrected`, the reportable estimand, the gain is a
+pilot-measured 1.25x-1.31x (Section 9.1.1), not 13x-15x. The option's
+honest efficiency contribution is therefore modest - closer in size to
+Layer 1's own secondary effect on `alpha` (Section 7.1's 1.49x) than to
+the headline number this document originally reported for it. Its more
+durable contribution is the one Section 9.1 documents at length:
+diagnosing and correcting a real posterior-calibration bug that silently
+miscalibrates credible intervals for swept coefficients, in exactly the
+way an earlier, retracted attempt at the same problem did.
 
 ### 8.3 Synthesis
 
-The user-observed pattern that motivated this document - "the sampler works
-well and consistently for all regression parameters, and is merely
-unremarkable-but-not-bad on nuisance parameters, and even the nuisance-
-parameter comparison still favors jmjax" - holds up under scrutiny, but in a
-specific, qualified form rather than as a single unified claim: the
-regression-parameter robustness is the combination of a well-established,
-generic sampler-class advantage (Layer 1, not novel) with a targeted,
-verified, data-driven fix for a specific diagnosed degeneracy (Layer 2, the
-actual contribution). The "nuisance-parameter advantage," on inspection, is
-mostly a restatement of `JMbayes2`'s own degradation (Section 6.4) rather
-than independent evidence of anything `jmjax` does specifically well there.
-Framed this way, the claim that this reflects "elegant parameterization and
-problem formulation" is well supported for the regression-parameter case
-specifically - that is where a genuine, identified problem was found and a
-principled, literature-grounded fix was applied and verified - and should
-not be extended, without further evidence, to a claim that `jmjax`'s NUTS
-implementation is unusually good at sampling covariance/correlation
-parameters in general.
+The evidence now supports a different apportionment than the first draft's:
+the large, robust, statistically significant, twice-replicated (simulated
+and real-data) advantage over `JMbayes2` on the parameter a joint-model
+analysis is usually run to estimate - `alpha` - is Layer 1, present in
+`jmjax`'s default fit with no option enabled, and is well-established,
+generic HMC/NUTS-vs-block-Gibbs theory rather than a novel architectural
+claim of this package. `orthogonalize_b0`/`orthogonalize_b` (Layer 2) is a
+genuine, source-verified, formally proved fix for a real identifiability
+bug that recurs for any random slope on time - worth reporting on its own,
+narrower terms - but its own efficiency contribution, honestly measured on
+the coordinates it is safe to report, is modest, not the order-of-magnitude
+figure it appeared to be before Section 9.1.1's measurement. Framed this
+way, the claim that `jmjax` reflects "elegant parameterization and problem
+formulation" is well supported for the calibration-bug diagnosis and fix
+specifically; the claim that it explains most of `jmjax`'s speed advantage
+over `JMbayes2` is not, and should not be made in the paper's headline.
 
 ## 9. Limitations and open questions
 
@@ -1378,6 +1483,79 @@ and is what a user should report. The sampler still works in the
 well-conditioned geometry - that is the entire point - and the reporting
 is done in the identified coordinates afterwards.
 
+### 9.1.1 A second negative result: the correction's own effective sample size
+
+Restoring calibration is not the same as restoring efficiency, and this
+mattered enough to check before the corrected estimand's efficiency was
+assumed rather than measured. `dev/pilot_ess_corrected.R` computes
+`beta_corrected`'s own R-hat/ESS via the package's own estimator
+(`recompute_site_diagnostics()`, the same routine `jm_fit()` uses for the
+standardize_covariates back-transform), applied post hoc to an
+orthogonalized fit's stored draws - no backend change, no refit.
+
+At 2 seeds (`n = 300`, 500 warmup + 1000 samples x 2 chains, the `linear`
+design), `E vs A` ESS/sec:
+
+| parameter | `beta` (swept) | `beta_corrected` (reportable) |
+|---|---:|---:|
+| `beta_0` | 9.08x-9.11x | 1.25x-1.29x |
+| `beta_slope` | 15.02x | 1.28x-1.31x |
+
+The swept coordinate's own gain replicates the k-sweep and `aids` findings
+closely (Sections 6.3, 7.1); the reportable estimand's does not. This
+document had earlier predicted the opposite here - that `beta_corrected`
+would mix close to `beta`'s own rate, because the swept component "is
+unconstrained by the likelihood and therefore mixes at essentially the
+prior's rate." That prediction is falsified by this measurement, and the
+reason is instructive rather than merely disappointing.
+
+**Why the prediction failed.** Section 2.7 (Geyer, 1992) is the general
+point: ESS belongs to a specific scalar functional of the chain, not to
+"the sampler." The sampled `beta` in an orthogonalized fit is $\tilde\beta$
+in Section 4.9's notation, and `beta_corrected` is $\Phi$'s inverse applied
+to the stored draws - a different linear functional of
+$(\tilde\beta, b_{\mathrm{raw}})$ than $\tilde\beta$ alone, with no general
+guarantee of inheriting its mixing rate. The specific mechanism:
+Proposition 6 defines
+$\tilde\beta = \beta - \Gamma(Q^{\top}b_{\mathrm{raw}}[\cdot, q_\ast])$ for
+the *original*, unconstrained model - the location degeneracy this
+document diagnoses was always a trade-off between $\beta$ and that
+particular linear combination of $b_{\mathrm{raw}}$. Sampling in the
+orthogonalized parameterization and recovering $\beta$ afterwards does not
+remove that trade-off ($\Phi$ is measure-preserving; Proposition 6(i)-(iii)
+show it cannot), it *relocates* which coordinate carries it: $\tilde\beta$
+becomes the well-identified combination (fast-mixing, as Sections 6.3/7.1
+confirm), and the degeneracy is now expressed entirely through
+$Q^{\top}b_{\mathrm{raw}}[\cdot, q_\ast]$ - the very quantity the recovery
+step adds back in. That quantity is not an isolated, prior-dominated
+scalar the way this document's original hypothesis assumed; it lives
+inside a hierarchical random-effects block with its own, separate,
+already-documented curvature pathology (Neal's funnel, correctly
+distinguished from this document's location problem in Section 2.2),
+governed by `sigma_b`/`L_corr` and by the single global step size and mass
+matrix NUTS must use across every direction in `b` simultaneously.
+`orthogonalize_b`/`_b0` was designed against the location problem, not
+against the b-block's own internal conditioning, so the relocated
+direction inherits whatever mixing rate that block already had - which
+this measurement puts close to a default fit's, not close to the prior's.
+
+**What this does and does not affect.** It changes the efficiency claim
+for the swept coefficients specifically: `beta`'s large ESS/sec gain is
+real but not reportable, and `beta_corrected`'s reportable gain is modest.
+It does not touch `alpha`, `gamma`, or any parameter outside the swept
+subspace - `alpha`'s own ESS/sec advantage over `JMbayes2` (Sections 6.3,
+7.1) is a different functional entirely, unaffected by any of this
+machinery, which is exactly why it survives as the paper's central claim
+(Section 8).
+
+**Caveat.** This is a 2-seed pilot for one design (`linear`, `N = 300`).
+The direction is corroborated independently - the `aids` table's own
+`beta_0` numbers (Section 7.1) reproduce a comparable `E`-vs-`A` figure to
+the one this pilot finds for the swept coordinate - which is reassuring
+about the machinery, but the exact 1.25x-1.31x figure for
+`beta_corrected` should be treated as a preliminary estimate, not a final
+number, until more seeds are run.
+
 ### 9.2 Remaining limitations
 
 - **An unrelated finding the same study surfaced, recorded here rather than
@@ -1400,6 +1578,15 @@ is done in the identified coordinates afterwards.
   sample bias in the association parameter is a plausible and
   well-precedented candidate - is separate work, and it should be
   understood before this table is put in front of a referee.
+- **The reparameterization's own efficiency contribution, once correctly
+  measured, is modest.** Section 9.1.1: a 2-seed pilot puts
+  `beta_corrected`'s ESS/sec gain over a default fit at roughly
+  1.25x-1.31x, not the 9x-15x measured for the swept, unreportable `beta`.
+  This does not undermine the calibration fix itself (Section 9.1) or the
+  option's value as a bug fix, but it does mean the option should not be
+  marketed on efficiency grounds alone; Section 8 gives the reattributed
+  picture, with `alpha`'s own advantage over `JMbayes2` (Sections 6.3, 7.1)
+  now carrying the paper's central efficiency claim instead.
 - The option currently requires `q >= 2`, `random_effects_corr = TRUE`, and
   `random_effects_method = "nuts"` (the default); other combinations raise
   an informative error rather than silently no-op'ing, but the option's
@@ -1442,19 +1629,16 @@ is done in the identified coordinates afterwards.
 
 ### 9.3 Next validation steps, in priority order
 
-1. **Effective sample size of the corrected estimand.** This is the one
-   that could still change the option's value proposition. `beta_corrected`
-   is what a user reports, so its ESS - not `beta`'s - is the figure that
-   matters, and it is not currently computed: the correction is applied to
-   the pooled draws, downstream of the per-chain summary. The expectation
-   is that it is close to `beta`'s, because the swept component is
-   unconstrained by the likelihood and therefore mixes at essentially the
-   prior's rate, nearly independently between iterations. But that is an
-   argument, not a measurement, and if it is wrong - if $\tilde\beta$'s ESS
-   falls back to the unmodified fit's - then the option buys fast sampling
-   of a quantity that cannot be reported and slow effective sampling of the
-   one that can. Computing the correction on the by-chain draws as well
-   would settle it and costs one array reshape.
+1. **More seeds for the corrected estimand's effective sample size.**
+   Section 9.1.1 answers this at pilot scale (2 seeds): the expectation
+   stated in the first draft of this item - that `beta_corrected` would mix
+   close to `beta`'s own rate - was wrong, and the reportable gain is
+   roughly 1.25x-1.31x, not 9x-15x. What remains is to firm up that number:
+   more seeds (4-8 is cheap, same script), and computing the correction on
+   the by-chain draws directly (rather than post hoc via
+   `recompute_site_diagnostics()` on pooled draws) so the number in a
+   future revision comes from the same pipeline as every other table in
+   this document.
 2. **The prior-weight diagnostic of Proposition 7.** $w$ is computable draw
    by draw from quantities already stored; reporting
    $\mathrm{ESS}(\{w\})$, or simply $\mathrm{sd}(\log w)$, converts
@@ -1481,41 +1665,67 @@ matters for Hamiltonian/NUTS samplers (Betancourt & Girolami 2013;
 Betancourt 2017; Hoffman & Gelman 2014; Neal 2003 for the related-but-
 distinct funnel case), (c) the complementary account of why block/Gibbs
 samplers are specifically vulnerable to the resulting growing correlation
-(Roberts & Sahu 1997), and (d) applied precedent for this failure mode in
-hierarchical Bayesian models generally (Ogle et al. 2020). Its contribution
-is the specific diagnosis, source-verified mechanism, and replicated
-empirical characterization of this problem for joint longitudinal-survival
-models, and the finding that a substantial, previously unexplained part of
-`jmjax`'s efficiency advantage over `JMbayes2` traces to this rather than to
-covariate count as such.
+(Roberts & Sahu 1997), (d) applied precedent for this failure mode in
+hierarchical Bayesian models generally (Ogle et al. 2020), and (e) the
+classical fact that effective sample size is a property of the specific
+functional of the chain being monitored rather than of the sampler itself
+(Geyer 1992) - needed in Section 9.1.1 to explain why the swept coordinate
+and the identified estimand recovered from it can, and here do, have very
+different effective sample sizes. Its contribution is the specific
+diagnosis, source-verified mechanism, and replicated empirical
+characterization of the location-degeneracy problem for joint
+longitudinal-survival models; the finding, on direct measurement, that
+`jmjax`'s efficiency advantage over `JMbayes2` on the parameters a user
+actually reports is predominantly a generic HMC/NUTS-vs-block-Gibbs effect
+(Section 8) rather than a product of this reparameterization; and a
+correction, proved exact, that restores calibration for the swept
+coefficients this document's fix affects.
 
 ## 11. Conclusion
 
-`jmjax`'s regression-parameter efficiency advantage over `JMbayes2` is real,
-large, statistically significant, replicated across simulated and (for the
-`aids` dataset) genuinely independent real data, and mechanistically
-understood down to the level of source code rather than only observed as an
-aggregate benchmark number. It is best explained as the product of a
-generic, well-documented sampler-class robustness (gradient-based HMC/NUTS
-versus block-Gibbs/Metropolis) and a specific, targeted, verified
-reparameterization of a real, diagnosed identifiability problem that recurs
-- independently of covariate count - for any random slope on time. The
-weaker, still-favorable nuisance-parameter comparison is better understood
-as `JMbayes2`'s own degradation under growing inter-block correlation than
-as an independent `jmjax` achievement.
+`jmjax`'s efficiency advantage over `JMbayes2` is real, large, statistically
+significant, and replicated across simulated and (for the `aids` dataset)
+genuinely independent real data - but it belongs mainly to `jmjax`'s
+generic NUTS/HMC engine, not to the reparameterization this document set
+out to validate. Measured directly and without any option enabled, a
+default `jmjax` fit already beats `JMbayes2` on `alpha`'s own ESS/second -
+the association parameter a joint-model analysis is usually run to
+estimate - by 5.7x-8.1x in simulation and 2.44x on real data (Sections 6.3,
+7.1). This is well-documented, general sampler-class theory (gradient-based
+HMC/NUTS versus block-Gibbs/Metropolis, Section 8.1), demonstrated here
+rather than only argued for, and it is the claim this paper should lead
+with.
 
-The calibration question that the first draft named as the blocker has
-been answered, and the answer is more interesting than a clean pass would
-have been. The reparameterization miscalibrates the coordinates it
-reports, exactly as its retracted predecessor did - but unlike that
-predecessor it only *relocates* the uncertainty rather than destroying it,
-and the relocation is invertible in closed form. A fit can therefore
-sample in the well-conditioned geometry and report in the identified one,
-which is what the option was always supposed to deliver and what it now
-actually does. The remaining item before submission is narrow: the
-effective sample size of the corrected estimand, which is the figure a
-reader would quote and the last place the efficiency claim could still
-come apart.
+`orthogonalize_b0`/`orthogonalize_b` remains a genuine, worthwhile
+contribution, but on narrower terms than first drafted. The
+reparameterization diagnoses and fixes a real identifiability problem - a
+location degeneracy between subject-constant fixed effects and matching
+random effects, that recurs independently of covariate count for any
+random slope on time - down to the level of source code, and proves the
+fix does not change the model (Section 4). It also uncovers, and repairs,
+a real posterior-calibration bug: the swept coordinates it reports come
+back miscalibrated, exactly as an earlier, retracted attempt at the same
+problem was, and the correction of Section 4.9 restores both coverage and
+interval width in closed form, with no refit. What it does *not* deliver,
+on the evidence in Section 9.1.1, is a large efficiency gain for the
+coefficients it targets, once measured on the coordinates a user may
+actually report: a pilot puts that gain at roughly 1.25x-1.31x, an order
+of magnitude short of the swept coordinate's own, unreportable 9x-15x. The
+option is best described, honestly, as a correctness fix with a modest
+efficiency side benefit, not as an efficiency feature.
+
+The calibration question the first draft named as the blocker has been
+answered, and answering it is what surfaced the ESS question that, in
+turn, changed this document's central claim. Both findings share the same
+shape: a reparameterization can make a chosen coordinate look excellent -
+unbiased and fast-mixing - while the quantity a user actually needs is a
+different functional of the same draws, subject to no such guarantee
+(Section 2.7). The practical upshot for this package is a clean division
+of labor: report `alpha`, `gamma`, and other unswept parameters from a
+default fit and credit the sampler; use
+`orthogonalize_b0`/`orthogonalize_b` when a swept coefficient's calibration
+matters, report `beta_corrected` rather than `beta`, and expect a modest,
+not dramatic, efficiency dividend for doing so.
 
 ## 12. Note on publication venue
 
@@ -1535,10 +1745,16 @@ here, is now closed in both directions: the negative result is measured and
 the correction is proved and validated (Sections 4.9 and 9.1). That
 strengthens rather than weakens the submission - a reviewer in this area
 would have asked for the coverage study, and the honest answer now comes
-with a remedy attached rather than a caveat. The remaining item worth
-having in hand first is the effective sample size of the corrected
-estimand (Section 9.3, item 1), since the efficiency claim is the paper's
-headline and `beta_corrected` is the quantity a reader would report.
+with a remedy attached rather than a caveat. Following that check to its
+conclusion also moved the paper's own headline (Sections 8, 9.1.1, 11): the
+efficiency claim a reviewer should be shown first is now `alpha`'s
+reparameterization-independent advantage over `JMbayes2` (real and large on
+two datasets), not the reparameterization's own effect on swept
+coefficients (real but modest once measured on `beta_corrected`). The
+remaining item worth having in hand before submission is a few more seeds
+of the `beta_corrected` ESS pilot (Section 9.3, item 1), to firm up the
+1.25x-1.31x figure rather than change the paper's central claim, which no
+longer rests on it.
 
 ## References
 
@@ -1546,6 +1762,8 @@ headline and `beta_corrected` is the quantity a reader would report.
   Hierarchical Models. arXiv:1312.0906.
 - Betancourt, M. (2017). A Conceptual Introduction to Hamiltonian Monte
   Carlo. arXiv:1701.02434.
+- Geyer, C. J. (1992). Practical Markov Chain Monte Carlo. *Statistical
+  Science*, 7(4), 473-483.
 - Guo, X. & Carlin, B. P. (2004). Separate and Joint Modeling of
   Longitudinal and Event Time Data Using Standard Computer Packages. *The
   American Statistician*, 58(1), 16-24.
