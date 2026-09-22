@@ -99,6 +99,12 @@
 #   know whether b_std was rotated). Run alongside D directly comparably:
 #   CAL_ARMS=A,D,D_rot Rscript dev/study_calibration.R
 #
+#   D_rotall / E_rotall (also opt-in): control$orthogonalize_rotate_all on
+#   top of D / E - the all-column Householder rotation of vignette Section
+#   4.10. Same logic as D_rot: equality with D / E is predicted exactly.
+#   CAL_OUT=dev/calibration_results_rotall.csv CAL_ARMS=A,D,D_rotall,E,E_rotall \
+#     CAL_REPS=100 CAL_DESIGNS=linear,mixing Rscript dev/study_calibration.R
+#
 # DESIGNS.
 #   linear  y ~ time + covariates. Each term is its own column, so the
 #           per-column and exact basis constructions agree (vignette
@@ -263,6 +269,12 @@ fit_one <- function(design, arm, rep_id) {
   if (arm == "D_rot")   { ctl$orthogonalize_b0 <- TRUE; ctl$orthogonalize_b0_rotate <- TRUE }
   if (arm == "D_dense") { ctl$orthogonalize_b0 <- TRUE; ctl$orthogonalize_b0_rotate <- TRUE
                            ctl$dense_mass_b0_generator <- TRUE }
+  # D_rotall / E_rotall: control$orthogonalize_rotate_all (every
+  # random-effect column rotated by one Householder matrix; vignette
+  # Section 4.10, Corollary 4). Proposition 8 predicts calibration EQUAL to
+  # D's / E's, so these arms check the implementation, as D_rot did.
+  if (arm == "D_rotall") { ctl$orthogonalize_b0 <- TRUE; ctl$orthogonalize_rotate_all <- TRUE }
+  if (arm == "E_rotall") { ctl$orthogonalize_b  <- TRUE; ctl$orthogonalize_rotate_all <- TRUE }
 
   tm <- system.time(f <- jm_fit(
     long_formula = spec$lform,
