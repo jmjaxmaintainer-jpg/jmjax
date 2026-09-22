@@ -1171,6 +1171,30 @@ calibration comparison came out as it did: equality between `D` and
 `D_rot` was predicted exactly, so that study tested the *implementation* -
 a bug would have shown up as a difference - rather than the construction.
 
+*Remark (what is rotated, and on which side).* Two choices in
+Proposition 8 are what make it safe, and both are easy to get wrong.
+First, the rotation acts on the *sampled*, standardized coordinates
+$b_{\mathrm{std}}$. Computing a rotated quantity from the draws after
+sampling, as a deterministic transform, would leave the sampler's geometry
+unchanged and could not affect mixing. Rotating the centered effects
+$b_{\mathrm{raw}}$ instead would make the rotated prior covariance depend
+on $\sigma_b$ and $\rho$, which reintroduces the funnel-type coupling that
+the non-centred parameterization exists to remove. Second, the rotation
+acts on the *subject* index, with the same $R$ for every column:
+$\operatorname{vec}(b_{\mathrm{std}}) \mapsto (I_q \otimes R)\,
+\operatorname{vec}(b_{\mathrm{std}})$. Because $L$ acts on the column
+index, the two commute, $R^{\top} b_{\mathrm{raw}} = (R^{\top}
+b_{\mathrm{std}})\, L^{\top}$. So the variance components enter exactly as
+before, and the prior on the rotated coordinates is still independent
+standard normal, $(I_q \otimes R)^{\top}(I_q \otimes R) = I$, for every
+value of $\sigma_b$ and $\rho$. A generic rotation of the concatenated
+$Nq$-vector, built to align the corrections' loading vectors with the
+first coordinate axes, is also exact when applied to $b_{\mathrm{std}}$.
+But those loading vectors, expressed in $b_{\mathrm{std}}$ coordinates,
+depend on $L$, so a fixed rotation of that kind aligns them only at one
+value of $\rho$. Lemma 1 is what shows that the subject-side rotation by
+$Q_{\cup}$ does not have this problem.
+
 **Proposition 9 (the flat coordinates are a posteriori exactly their
 prior).** Fix $\theta$, let $B_{\theta}$ be an orthonormal basis of
 $\mathcal{F}(\theta)$ (Frobenius inner product), and let $\xi$ and $\zeta$
