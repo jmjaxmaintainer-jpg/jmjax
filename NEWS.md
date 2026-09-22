@@ -312,8 +312,6 @@
   clean run is weak evidence while a dirty run is strong evidence. It runs
   in well under a second and is stage 1 of `dev/check_orth_repair.sh`.
 
-# jmjax (development)
-
 ## New
 
 * **`control$mcmc_warm_start` (default `TRUE`) starts the NUTS chains from
@@ -360,8 +358,6 @@
   units WORSE than random - a tight `sigma_e` supplied alongside a
   uniform-random `beta` - and the self-check caught it before it ran.
   Outcome is recorded in `fit$convergence$warm_start`.
-
-# jmjax (development)
 
 ## Bug fixes
 
@@ -421,8 +417,6 @@
   that declaring dependencies via `Config/reticulate` would NOT serve this
   purpose, since reticulate's `configure_environment()` returns early in
   non-interactive sessions.
-
-# jmjax (development version)
 
 ## New: optional EM warm start for the MLE paths
 
