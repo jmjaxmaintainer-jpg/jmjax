@@ -51,27 +51,48 @@ R/summary.jmjax.R  -> summary(), print()  (formatted like JM::summary.jointModel
   (e.g. directly from Python for development, or from a future non-R
   frontend).
 
-## Deliberate v1 scope limits (see design discussion this grew out of)
+## Current scope and limits
 
-1. **MLE methods (`weibull-PH-aGH`, `spline-PH-aGH`) support only a 1D
-   random intercept.** Adaptive GH's per-subject Newton mode-finding is
-   scalar; multivariate random effects would need vector Newton + a real
-   Hessian + tensor-product GH nodes, which is a bigger lift and was
-   deliberately deferred. `spline-PH-mcmc` supports random intercept +
-   slope today, because NUTS doesn't have this scaling problem.
-2. **Longitudinal formulas may only depend on `time_var`.** `build_time_design()`
-   evaluates the formula's RHS at survival/quadrature times, which
-   requires knowing what to hold fixed for any other covariate - not yet
-   implemented. Extending to `y ~ time * treatment`-style formulas is a
-   natural v2 step once this path is validated end-to-end.
-3. **Only intercept-only relative-risk survival formulas** (`Surv(time,
-   event) ~ 1`) are supported; baseline covariates in the survival
-   submodel are not yet wired through.
+(Supersedes an earlier "deliberate v1 scope limits" list here, which
+described several restrictions - MLE methods stuck at a 1D random
+intercept, longitudinal formulas depending only on `time_var`,
+intercept-only survival formulas - that have since been implemented.
+`?jm_fit`'s Details section is the authoritative source for the exact
+supported combinations; this is a summary.)
+
+1. **Longitudinal formulas may include time-constant baseline
+   covariates** (e.g. `y ~ time + age`), for all four methods. At
+   `random_effects = "intercept_slope"` with a `long_formula` that
+   isn't linear in `time_var` (e.g. a polynomial or spline term),
+   supply `random_formula` explicitly rather than relying on the
+   default "first `q` columns of `X`" convention.
+2. **Survival formulas may include baseline covariates** (e.g.
+   `Surv(time, event) ~ age + sex`). Fully supported by both MCMC
+   methods at any `random_effects`/`functional_forms` combination;
+   supported by the two MLE methods only with `random_effects` of
+   `"intercept"` or `"intercept_slope"` and no `functional_forms`
+   beyond the default value-only association.
+3. **The two MLE methods now support 2D random effects**
+   (`random_effects = "intercept_slope"`) via vector Newton
+   mode-finding and tensor-product adaptive GH quadrature - the
+   scalar-Newton limitation this section used to describe no longer
+   applies. `functional_forms` beyond value-only association is more
+   restricted for the MLE methods than for the MCMC methods, and in
+   one case (`delta` at `q = 1` with a spline baseline hazard)
+   restricted for a genuine identifiability reason rather than an
+   implementation gap - see `?jm_fit`'s Details for the exact rules.
 4. **Survival submodel must come from `coxph()`, not `survreg()`.**
    `survreg`-based (AFT) specs produced a confirmed internal-scale quirk
    in `JM` itself during prototyping (its `Time` ended up on an
    `exp(time)` scale) - this package sidesteps that class of issue
    entirely rather than replicating it.
+5. **`control$orthogonalize_b0`/`control$orthogonalize_b`** (location-
+   degeneracy reparameterization, experimental): requires
+   `random_effects_corr = TRUE`, `q >= 2`, and the default
+   `random_effects_method = "nuts"`. Correctness (fitted values
+   unaffected) is verified; calibration/coverage has not yet been
+   checked, which is why the option remains opt-in. See `?jm_fit` and
+   `vignette("jmjax-reparameterization")`.
 
 ## Testing
 
@@ -99,6 +120,15 @@ Three tiers, from cheapest/always-run to most expensive/most-informative:
    properly separated (see `ranef()`), that diagnostics are real R-hat/ESS
    values rather than a placeholder, and that the fit recovers known
    simulation parameters within a loose tolerance.
+
+Beyond these four tiers, a growing set of feature-specific files
+(`test-baseline-covariates.R`, `test-functional-forms.R`,
+`test-random-formula.R`, `test-spline-q2.R`, `test-penalized-spline.R`,
+`test-precision.R`, `test-standardize-interaction.R`,
+`test-orthogonalize.R` for `control$orthogonalize_b0`/`orthogonalize_b`,
+and others) each targets one capability documented in `?jm_fit`; each
+file's own header comment describes its scope rather than repeating it
+here.
 
 All Python-dependent tests call `skip_if_no_backend()` / `skip_if_no_JM()`
 (in `helper-python.R`) so a missing environment shows up as **skipped**,
