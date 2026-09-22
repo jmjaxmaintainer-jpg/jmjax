@@ -307,3 +307,73 @@ test_that("beta_corrected materially restores the posterior spread orthogonalize
   expect_lt(bc0_sd, 3 * b0_def_sd)
   expect_gt(bc0_sd, b0_def_sd / 3)
 })
+
+test_that("orthogonalize_rotate_all refuses unsupported combinations", {
+  skip_if_no_backend()
+
+  sim <- simulate_joint_data_re2(n = 100, seed = 18)
+  common <- list(
+    long_formula = y ~ time,
+    surv_formula = survival::Surv(time, event) ~ 1,
+    data_long = sim$data_long, data_surv = sim$data_surv,
+    id_var = "id", time_var = "time",
+    method = "spline-PH-mcmc", random_effects = "intercept_slope"
+  )
+  ctrl <- list(num_warmup = 20, num_samples = 20, num_chains = 1, progress_bar = FALSE)
+
+  # Only changes how a swept degeneracy is sampled: nothing swept, refuse.
+  expect_error(
+    do.call(jm_fit, c(common, list(control = c(ctrl, list(orthogonalize_rotate_all = TRUE))))),
+    "requires orthogonalize_b0 or orthogonalize_b"
+  )
+  # The two rotations are alternatives, not layers.
+  expect_error(
+    do.call(jm_fit, c(common, list(control = c(ctrl, list(
+      orthogonalize_b = TRUE, orthogonalize_rotate_all = TRUE,
+      orthogonalize_b0_rotate = TRUE))))),
+    "request at most one"
+  )
+})
+
+test_that("orthogonalize_rotate_all is exact: same fit as the unrotated sweep", {
+  skip_if_no_backend()
+  skip_if_slow_mcmc()
+
+  # Proposition 8 of vignette("jmjax-reparameterization"), Section 4.10:
+  # rotating every column of b_std by one fixed orthogonal matrix cannot
+  # change the posterior of any model quantity. This checks the
+  # implementation, with loose multiple-of-SE tolerances as elsewhere in
+  # this file - it is not the efficiency study (dev/pilot_rotate_grid.R).
+  sim <- simulate_joint_data_re2(n = 200, seed = 19)
+  common <- list(
+    long_formula = y ~ time,
+    surv_formula = survival::Surv(time, event) ~ 1,
+    data_long = sim$data_long, data_surv = sim$data_surv,
+    id_var = "id", time_var = "time",
+    method = "spline-PH-mcmc", random_effects = "intercept_slope"
+  )
+  ctrl <- list(num_warmup = 400, num_samples = 600, num_chains = 1, progress_bar = FALSE)
+
+  fit_e <- do.call(jm_fit, c(common, list(control = c(ctrl, list(orthogonalize_b = TRUE)))))
+  fit_r <- do.call(jm_fit, c(common, list(control = c(ctrl, list(
+    orthogonalize_b = TRUE, orthogonalize_rotate_all = TRUE)))))
+
+  rot <- fit_r$convergence$orthogonalize$rotation
+  expect_false(is.null(rot))
+  expect_identical(rot$mode, "all_columns")
+  expect_true(isTRUE(rot$applied))
+  expect_gte(as.integer(rot$k), 1L)
+  expect_false(is.null(fit_r$posterior_samples$b_gen_U))
+
+  for (pname in c("alpha", "beta_0", "beta_1", "sigma_e")) {
+    tol <- 3 * max(fit_e$se[[pname]], fit_r$se[[pname]])
+    expect_lt(abs(fit_e$estimates[[pname]] - fit_r$estimates[[pname]]), tol)
+  }
+  bc <- function(f, j) mean(vapply(f$posterior_samples$beta_corrected,
+                                   function(z) as.numeric(unlist(z))[j], numeric(1)))
+  bcs <- function(f, j) stats::sd(vapply(f$posterior_samples$beta_corrected,
+                                         function(z) as.numeric(unlist(z))[j], numeric(1)))
+  for (j in 1:2) {
+    expect_lt(abs(bc(fit_e, j) - bc(fit_r, j)), 3 * max(bcs(fit_e, j), bcs(fit_r, j)))
+  }
+})

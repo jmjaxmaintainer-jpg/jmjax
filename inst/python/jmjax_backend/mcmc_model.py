@@ -405,8 +405,12 @@ def _orthogonal_complement(Q, seed=0):
     direction is sigma_b[1] * (rho * b_std[:, 0] + sqrt(1-rho^2) *
     b_std[:, 1]) - a combination that depends on the SAMPLED correlation
     rho, so a fixed, precomputed rotation cannot isolate it the same way.
-    Extending this construction to the slope column is future work, not
-    something this function silently attempts.
+    (Superseded for that purpose by control$orthogonalize_rotate_all - see
+    _householder_reflectors(): rotating EVERY column by the same fixed
+    basis of the union of the swept spaces contains the rho-dependent
+    direction inside a small explicit block for every rho, by Lemma 1 of
+    vignette("jmjax-reparameterization") Section 4.10. This function and
+    the intercept-only option are kept unchanged for comparison.)
 
     Returns None if Q is None, if Q.shape[1] >= Q.shape[0] (nothing left
     to complement), or if the construction fails its own verification
@@ -437,6 +441,98 @@ def _orthogonal_complement(Q, seed=0):
     return Qperp
 
 
+def _union_basis(bases, tol=1e-8):
+    """Orthonormal basis of span(union of the non-None bases), or None.
+
+    SEPARATE, OPT-IN TRACK (control$orthogonalize_rotate_all). Q_cup in
+    vignette("jmjax-reparameterization"), Section 4.10: by Lemma 1 there,
+    every flat direction of the swept model - for every value of the
+    sampled correlation - has all of its random-effect columns inside
+    span(Q_cup), so rotating EVERY column of b_std by one fixed orthogonal
+    matrix whose first k columns span Q_cup puts the whole flat subspace
+    inside an explicit [k, q] coordinate block. Computed by SVD with an
+    explicit rank cut, because the per-column bases usually overlap (the
+    intercept's span{1, age, sex} contains the slope's span{1}).
+    """
+    cols = [np.asarray(Qb, dtype=float) for Qb in (bases or []) if Qb is not None]
+    if not cols:
+        return None
+    S = np.concatenate(cols, axis=1)
+    U, sv, _ = np.linalg.svd(S, full_matrices=False)
+    r = int((sv > tol * max(float(sv.max()), 1.0)).sum())
+    if r == 0:
+        return None
+    return np.ascontiguousarray(U[:, :r])
+
+
+def _householder_reflectors(Q, tol=1e-10):
+    """Householder vectors for an orthogonal H whose first k columns span Q.
+
+    SEPARATE, OPT-IN TRACK (control$orthogonalize_rotate_all). Returns
+    V [N, k] with unit columns v_j (zero in rows < j) such that
+    H = H_0 H_1 ... H_{k-1}, H_j = I - 2 v_j v_j^T, is orthogonal and
+    H[:, :k] = Q @ diag(+-1). H is never formed: applying it costs O(N k)
+    (see _apply_reflectors), against O(N^2) memory and work for the dense
+    random completion _orthogonal_complement() builds for the older
+    intercept-only rotation - about 0.5 GB in float64 at N = 8000. The
+    Householder completion's columns k..N-1 are also close to the
+    coordinate axes (each is e_j plus an O(1/sqrt(N)) perturbation), so
+    the per-subject coordinates keep their own mass-matrix entries.
+
+    Verified before return (defensive, like _orthogonal_complement): H^T Q
+    must vanish below row k, and H must preserve norms on random probes.
+    Returns None if the check fails.
+    """
+    if Q is None:
+        return None
+    A = np.array(Q, dtype=float, copy=True)
+    N, k = A.shape
+    if k == 0 or k >= N:
+        return None
+    V = np.zeros((N, k))
+    for j in range(k):
+        x = A[j:, j].copy()
+        nx = float(np.linalg.norm(x))
+        if nx <= tol:
+            return None
+        alpha = -nx if x[0] >= 0 else nx          # stable sign choice
+        v = x
+        v[0] -= alpha
+        v /= float(np.linalg.norm(v))
+        V[j:, j] = v
+        A[j:, :] -= 2.0 * np.outer(v, v @ A[j:, :])
+    # --- verification ---------------------------------------------------
+    HtQ = _apply_reflectors(V, np.asarray(Q, dtype=float), transpose=True)
+    below = float(np.abs(HtQ[k:]).max()) if N > k else 0.0
+    rng = np.random.default_rng(0)
+    X = rng.standard_normal((N, 3))
+    HX = _apply_reflectors(V, X)
+    norm_err = float(np.abs(np.linalg.norm(HX, axis=0) - np.linalg.norm(X, axis=0)).max())
+    back_err = float(np.abs(_apply_reflectors(V, HX, transpose=True) - X).max())
+    if below > 1e-8 or norm_err > 1e-8 * np.sqrt(N) or back_err > 1e-8 * np.sqrt(N):
+        warnings.warn(
+            "orthogonalize_rotate_all: the Householder construction did not "
+            "verify (below=%.2e, norm_err=%.2e, back_err=%.2e); falling back "
+            "to the unrotated sampling for this fit." % (below, norm_err, back_err),
+            RuntimeWarning, stacklevel=2)
+        return None
+    return V
+
+
+def _apply_reflectors(V, X, transpose=False):
+    """H @ X (or H.T @ X) for H = H_0 ... H_{k-1} given by V; NumPy or JAX.
+
+    H_j is symmetric, so H.T = H_{k-1} ... H_0: H @ X applies the
+    reflectors last-to-first, H.T @ X first-to-last. O(N k m) for X [N, m].
+    """
+    k = V.shape[1]
+    order = range(k) if transpose else range(k - 1, -1, -1)
+    for j in order:
+        v = V[:, j:j + 1]
+        X = X - 2.0 * (v @ (v.T @ X))
+    return X
+
+
 def build_model(p, q, n_splines, max_obs, alpha_prior_sd=2.0,
                  sigma_e_prior_mean=None, sigma_e_prior_shape=5.0,
                  lkj_concentration=3.0,
@@ -451,7 +547,8 @@ def build_model(p, q, n_splines, max_obs, alpha_prior_sd=2.0,
                  rw2_implementation="scan",
                  wishart_eb_scale=False,
                  b_orth_bases=None,
-                 b0_gen_perp=None):
+                 b0_gen_perp=None,
+                 gen_reflectors=None):
     """
     Factory for the joint-model log-density, shared by fit_nuts() (which
     runs NUTS against it) and evaluate_log_density() (which evaluates it at
@@ -821,7 +918,37 @@ def build_model(p, q, n_splines, max_obs, alpha_prior_sd=2.0,
                     # toward zero correlation.
                     L_corr = numpyro.sample("L_corr", dist.LKJCholesky(q, concentration=lkj_concentration))
                     L = sigma_b[:, None] * L_corr
-                    if b0_gen_perp is not None and q >= 2:
+                    if gen_reflectors is not None and q >= 2:
+                        # ------------------------------------------------
+                        # EXPERIMENTAL, opt-in (control$orthogonalize_rotate_all).
+                        # Every column of b_std is rotated by the SAME fixed
+                        # orthogonal H (Householder, first k columns spanning
+                        # Q_cup - see _householder_reflectors()). Exact by
+                        # Proposition 8 of vignette("jmjax-reparameterization")
+                        # Section 4.10: H acts on the subject index and L on
+                        # the column index, so they commute, the prior on
+                        # (b_gen_U, b_gen_V) is iid N(0, 1) whatever sigma_b
+                        # and rho are, and b_std is exactly N(0, I) as before.
+                        # By Lemma 1 the flat subspace lies in the [k, q]
+                        # block b_gen_U for every rho, which is what the
+                        # intercept-only rotation below cannot guarantee.
+                        assert int(gen_reflectors.shape[0]) == int(N_sub), (
+                            "gen_reflectors has %d rows for %d subjects"
+                            % (int(gen_reflectors.shape[0]), int(N_sub)))
+                        _Vh = jnp.asarray(gen_reflectors)
+                        _kg = int(gen_reflectors.shape[1])
+                        b_gen_U = numpyro.sample(
+                            "b_gen_U",
+                            dist.Normal(0.0, 1.0).expand([_kg, q]).to_event(2))
+                        b_gen_V = numpyro.sample(
+                            "b_gen_V",
+                            dist.Normal(0.0, 1.0).expand(
+                                [int(gen_reflectors.shape[0]) - _kg, q]).to_event(2))
+                        b_std = numpyro.deterministic(
+                            "b_std",
+                            _apply_reflectors(
+                                _Vh, jnp.concatenate([b_gen_U, b_gen_V], axis=0)))
+                    elif b0_gen_perp is not None and q >= 2:
                         # ------------------------------------------------
                         # EXPERIMENTAL, opt-in (control$orthogonalize_b0_rotate).
                         # See _orthogonal_complement()'s docstring for the
@@ -1294,9 +1421,28 @@ def fit_nuts(X_long, y_long, n_obs, X_time_surv, X_time_quad,
     # whenever column 0 is touched at all, i.e. whenever orthogonalize_b0
     # or orthogonalize_b is requested (both compute b_orth_bases[0]).
     # Intercept-only: the analogous slope direction depends on the sampled
-    # correlation rho, so this does not (yet) extend to orthogonalize_b's
-    # slope column - see the same docstring.
+    # correlation rho, so this does not extend to orthogonalize_b's slope
+    # column - see the same docstring, and control$orthogonalize_rotate_all
+    # just below for the construction that does.
     _orth_int_rotate = bool(control.get("orthogonalize_b0_rotate", False))
+    # SEPARATE, OPT-IN TRACK (control$orthogonalize_rotate_all): the
+    # generalization vignette("jmjax-reparameterization") Section 4.10
+    # (Corollary 4) derives - every random-effect column rotated by one
+    # fixed Householder matrix built from the UNION of the swept bases.
+    # Mutually exclusive with the intercept-only rotation above, which it
+    # supersedes; kept separate so the two can be compared on equal seeds.
+    _rot_all = bool(control.get("orthogonalize_rotate_all", False))
+    if _rot_all and not (_orth_all or _orth_int):
+        raise ValueError(
+            "control$orthogonalize_rotate_all = TRUE requires "
+            "orthogonalize_b0 or orthogonalize_b to also be TRUE - it only "
+            "changes how the swept degeneracy is sampled, not whether it is "
+            "swept at all.")
+    if _rot_all and _orth_int_rotate:
+        raise ValueError(
+            "control$orthogonalize_rotate_all and "
+            "control$orthogonalize_b0_rotate are alternative constructions; "
+            "request at most one.")
     if _orth_int_rotate and not (_orth_all or _orth_int):
         raise ValueError(
             "control$orthogonalize_b0_rotate = TRUE requires "
@@ -1332,6 +1478,8 @@ def fit_nuts(X_long, y_long, n_obs, X_time_surv, X_time_quad,
     # non-orthogonalized fit - caught by the install script's self-check
     # (dev/install_jmjax.sh step 4/4) on its plain penalized-spline fit.
     _b0_gen_perp = None
+    # Same reasoning: build_model() receives gen_reflectors on every fit.
+    _gen_reflectors = None
     if _orth_all or _orth_int:
         if not (q >= 2 and random_effects_corr
                 and random_effects_method == "nuts"):
@@ -1479,6 +1627,27 @@ def fit_nuts(X_long, y_long, n_obs, X_time_surv, X_time_quad,
                 RuntimeWarning)
             b_orth_bases = None
             _correction_bases = None
+        if _rot_all:
+            _Qu = _union_basis(b_orth_bases) if b_orth_bases is not None else None
+            if _Qu is not None:
+                _gen_reflectors = _householder_reflectors(_Qu)
+            if _gen_reflectors is None:
+                warnings.warn(
+                    "control$orthogonalize_rotate_all = TRUE had no effect: "
+                    "no swept direction to rotate (or the construction did "
+                    "not verify). The fit uses the unrotated sweep.",
+                    RuntimeWarning, stacklevel=2)
+            orthogonalize_report["rotation"] = {
+                "mode": "all_columns",
+                "applied": _gen_reflectors is not None,
+                "k": 0 if _gen_reflectors is None else int(_gen_reflectors.shape[1]),
+            }
+        elif _orth_int_rotate:
+            orthogonalize_report["rotation"] = {
+                "mode": "intercept",
+                "applied": _b0_gen_perp is not None,
+                "k": 0 if _b0_gen_perp is None else int(N_sub - _b0_gen_perp.shape[1]),
+            }
 
     model = build_model(p, q, n_splines, max_obs, alpha_prior_sd=alpha_prior_sd,
                          baseline_hazard=baseline_hazard,
@@ -1498,7 +1667,8 @@ def fit_nuts(X_long, y_long, n_obs, X_time_surv, X_time_quad,
                          rw2_implementation=rw2_implementation,
                          wishart_eb_scale=bool(control.get("wishart_eb_scale", False)),
                          b_orth_bases=b_orth_bases,
-                         b0_gen_perp=_b0_gen_perp)
+                         b0_gen_perp=_b0_gen_perp,
+                         gen_reflectors=_gen_reflectors)
 
     # Targeted dense_mass for the spline coefficients specifically -
     # distinct from the global control$dense_mass (which covers EVERY
@@ -1655,6 +1825,20 @@ def fit_nuts(X_long, y_long, n_obs, X_time_surv, X_time_quad,
                 "either the option was not requested, or no absorbable "
                 "intercept direction was found).")
         _blocks.append(("b0_gen_u",))
+
+    # EXPERIMENTAL, opt-in: dense block over the [k, q] generator block of
+    # control$orthogonalize_rotate_all. Proposition 10(c) of the vignette's
+    # Section 4.10 bounds the slow side of each generator row by q under a
+    # DIAGONAL metric, but when |corr(U[m, 0], U[m, 1])| is near 1 the row
+    # also has a narrow direction (1 - |r|) that can shrink the step size;
+    # a dense block over this small site removes both.
+    if control.get("dense_mass_generator", False):
+        if _gen_reflectors is None:
+            raise ValueError(
+                "control$dense_mass_generator = TRUE requires "
+                "control$orthogonalize_rotate_all = TRUE to have actually "
+                "created the b_gen_U site (it did not for this fit).")
+        _blocks.append(("b_gen_U",))
 
     if _blocks:
         dense_mass_arg = _blocks
@@ -1825,16 +2009,15 @@ def fit_nuts(X_long, y_long, n_obs, X_time_surv, X_time_quad,
     # constraint survives automatically - sigmas stay positive, L_corr
     # stays a valid Cholesky factor - with no special cases.
     #
-    # KNOWN GAP: control["orthogonalize_b0_rotate"] and a warm-started
-    # "b_std" value do not combine. The check just below only substitutes
-    # sites where site["type"] == "sample"; when the rotation is active,
-    # "b_std" is rebuilt as a numpyro.deterministic from "b0_gen_u" /
-    # "b0_gen_v" / "b_std_rest" (see build_model()), so a warm start
-    # supplied for "b_std" is silently skipped for those columns - NUTS
-    # falls back to its default init for them instead of erroring. This is
-    # a soft degradation, not a correctness bug (the model is unchanged),
-    # but it means a warm-started, rotated fit gets less benefit from the
-    # warm start than an unrotated one until this is addressed.
+    # ROTATIONS AND THE WARM START. Under control$orthogonalize_b0_rotate
+    # or control$orthogonalize_rotate_all, "b_std" is a numpyro.deterministic
+    # rebuilt from rotated sample sites, and the substitution below only
+    # touches sites of type "sample" - so a warm start given for "b_std"
+    # used to be silently skipped for the rotated columns (a soft
+    # degradation, first seen as warm-start self-check rejections in
+    # dev/pilot_b0_rotate_weibull.R). It is now mapped onto the rotated
+    # sites: the rotations are orthogonal, so the rotated coordinates of a
+    # given b_std are just its transpose-rotation, exactly.
     _init_vals = control.get("init_values")
     if _init_vals:
         from numpyro.infer import initialization as _init
@@ -1843,6 +2026,25 @@ def fit_nuts(X_long, y_long, n_obs, X_time_surv, X_time_quad,
 
         _jit_scale = float(control.get("warm_start_jitter", 0.1))
         _vals = {str(k): jnp.asarray(v) for k, v in dict(_init_vals).items()}
+        if "b_std" in _vals and (_gen_reflectors is not None
+                                 or _b0_gen_perp is not None):
+            try:
+                _bs = np.asarray(_vals["b_std"], dtype=float).reshape(N_sub, q)
+                if _gen_reflectors is not None:
+                    _Zw = _apply_reflectors(_gen_reflectors, _bs, transpose=True)
+                    _kw = int(_gen_reflectors.shape[1])
+                    _vals["b_gen_U"] = jnp.asarray(_Zw[:_kw])
+                    _vals["b_gen_V"] = jnp.asarray(_Zw[_kw:])
+                elif _b0_gen_perp is not None and b_orth_bases is not None:
+                    _Q0w = np.asarray(b_orth_bases[0], dtype=float)
+                    _vals["b0_gen_u"] = jnp.asarray(_Q0w.T @ _bs[:, 0])
+                    _vals["b0_gen_v"] = jnp.asarray(_b0_gen_perp.T @ _bs[:, 0])
+                    _vals["b_std_rest"] = jnp.asarray(_bs[:, 1:])
+            except Exception as _e:   # a malformed value is the self-check's job
+                warnings.warn("warm start: could not map b_std onto the "
+                              "rotated sites (%s); they start from the "
+                              "default initialization." % (_e,),
+                              RuntimeWarning, stacklevel=2)
 
         def _init_to_value_jittered(site=None, values=None, scale=0.1):
             if site is None:
@@ -1992,7 +2194,12 @@ def fit_nuts(X_long, y_long, n_obs, X_time_surv, X_time_quad,
             # exp(alpha * m_i(t)), where a modest error is amplified.
             _blocks = {
                 "longitudinal": ("beta", "sigma_e", "sigma_b", "L_corr",
-                                 "b_std", "b"),
+                                 "b_std", "b",
+                                 # rotated stand-ins for b_std (seeded from
+                                 # it above), so holding back the block
+                                 # really holds back the random effects
+                                 "b_gen_U", "b_gen_V",
+                                 "b0_gen_u", "b0_gen_v", "b_std_rest"),
                 "survival": ("alpha", "alpha_value", "alpha_delta",
                              "alpha_area", "alpha_area_avg", "gamma",
                              "W01", "z_step", "tau_w"),
@@ -2383,6 +2590,14 @@ def fit_nuts(X_long, y_long, n_obs, X_time_surv, X_time_quad,
 
     samples = mcmc.get_samples(group_by_chain=False)
     samples_by_chain = mcmc.get_samples(group_by_chain=True)
+    # control$orthogonalize_rotate_all: b_gen_V is [draws, N_sub - k, q]
+    # and carries exactly the information already in the deterministic
+    # b_std (b_std = H [b_gen_U; b_gen_V], H orthogonal), so it is dropped
+    # rather than shipped to R as a third per-subject array per draw.
+    # b_gen_U (small, [draws, k, q]) is kept: it is the coordinate block the
+    # option exists to create, and its mixing is what pilots measure.
+    samples.pop("b_gen_V", None)
+    samples_by_chain.pop("b_gen_V", None)
 
     # Derive rho (and, for wishart_gibbs, sigma_b itself) from the raw
     # matrix-valued site actually sampled, injecting them as their own
@@ -2494,7 +2709,7 @@ def fit_nuts(X_long, y_long, n_obs, X_time_surv, X_time_quad,
     # explicit generator coordinate that option creates, and its own
     # R-hat/ESS is the whole diagnostic this prototype needs.
     _per_subject_sites = {"b", "b_std", "b_raw", "z_step",
-                          "b_std_rest", "b0_gen_v"}
+                          "b_std_rest", "b0_gen_v", "b_gen_V"}
     samples_by_chain_for_diag = {k: v for k, v in samples_by_chain.items() if k not in _per_subject_sites}
     diag = numpyro_summary(samples_by_chain_for_diag, group_by_chain=True)
 
