@@ -19,8 +19,7 @@ knitr::opts_chunk$set(
 `jmjax` samples joint longitudinal-survival models with NUTS/HMC and, on
 identical data, mixes dramatically better than `JMbayes2`'s block-Gibbs/
 Metropolis sampler - by more than an order of magnitude on regression
-parameters in several of the comparisons below. This document does three
-things. First, it names the mechanism precisely: a location degeneracy
+parameters in several of the comparisons below. This document does four things. First, it names the mechanism precisely: a location degeneracy
 between subject-constant fixed effects and the matching linear combination
 of correlated random effects, which the likelihood pins only through their
 *sum*. This is not specific to the random intercept - this document shows,
@@ -31,8 +30,16 @@ model. Second, it describes `jmjax`'s fix (`control$orthogonalize_b0` /
 absorbable directions from the random-effect prior rather than imposing an
 exact constraint, and explains concretely why it is a different (and, on
 current evidence, better-behaved) approach than an earlier, already-retracted
-attempt at the same problem (`wishart_gibbs_centered`). Third, it reports a
-replicated simulation study across a covariate-count sweep (k = 1, 4, 8, 12
+attempt at the same problem (`wishart_gibbs_centered`). Third, it gives the
+fix a formal treatment: a precise definition of the absorbable set, an
+exact characterization of it, and a proof that the construction removes
+only genuinely absorbable directions - so that the model is provably, not
+just empirically, unchanged. The same analysis shows the construction is
+*not* complete: because it inspects one design column at a time while the
+absorbable set depends only on the column space, a spline or
+orthogonal-polynomial longitudinal mean paired with a random slope defeats
+it silently, and a basis-independent replacement is given. Fourth, it
+reports a replicated simulation study across a covariate-count sweep (k = 1, 4, 8, 12
 extra covariates) and an independent real-data check (the `aids` clinical
 trial data, never used to build any of the diagnostics below), both showing
 the same pattern: the regression-parameter efficiency advantage over
@@ -53,7 +60,7 @@ was found wanting.
 
 Across every real and simulated dataset `jmjax` has been benchmarked on, its
 NUTS/HMC sampler mixes better than `JMbayes2`'s sampler - sometimes by a
-modest, explainable margin (Section 6, and the existing benchmark section of
+modest, explainable margin (Section 7, and the existing benchmark section of
 `vignette("jmjax-validation")`), sometimes by a striking one. The striking
 cases concentrate on regression parameters, are essentially unaffected by
 whether `JMbayes2`'s *own* diagnostics have converged, and get *more*
@@ -64,12 +71,12 @@ covariates favor gradient-based samplers" in general.
 This is worth writing up carefully rather than reporting only the headline
 ratios, for two reasons. First, the mechanism is real, reproducible, and -
 as far as a genuine literature search turned up - not previously documented
-in exactly this form (Section 2.7), which makes it worth a citable record
+in exactly this form (Section 2.6), which makes it worth a citable record
 rather than only inline code comments. Second, an honest accounting has to
 separate what is actually attributable to `jmjax`'s design (a targeted
 reparameterization of a diagnosed degeneracy) from what is actually
 attributable to `JMbayes2`'s degradation under conditions its sampler was
-not designed to be robust to (Section 7). Conflating the two would overstate
+not designed to be robust to (Section 8). Conflating the two would overstate
 `jmjax`'s novelty on the axis where the advantage is smallest (nuisance
 parameters) and understate the well-grounded, citable case for it on the
 axis where the advantage is largest (regression parameters).
@@ -159,7 +166,7 @@ any numbers specific to `jmjax` below.
 Roberts & Sahu (1997), "Updating Schemes, Correlation Structure, Blocking
 and Parameterization for the Gibbs Sampler," *Journal of the Royal
 Statistical Society, Series B*, 59(2), 291-317, is the classical reference
-for the complementary fact this document needs for Section 7: a Gibbs
+for the complementary fact this document needs for Section 8: a Gibbs
 sampler that updates parameters in blocks (as `JMbayes2`'s does - it
 combines Metropolis-within-Gibbs updates for regression coefficients with a
 closed-form conditional update for the random-effects covariance) degrades
@@ -170,7 +177,7 @@ mechanism from the location degeneracy itself: it does not require an
 unidentified direction, only a strongly correlated one, and it predicts
 degradation that tracks *inter-block correlation growing with problem size*
 even in a model that is *fully* identified everywhere - which is exactly
-the shape of the `JMbayes2` covariance-collapse finding in Section 5.4.
+the shape of the `JMbayes2` covariance-collapse finding in Section 6.4.
 
 ### 2.5 Applied precedent
 
@@ -253,10 +260,10 @@ observation) that more covariates create more room for `beta_0`-type
 degeneracies and so a larger advantage for the orthogonalized fit. A fast
 `n = 500`, `k in {1, 3}` readout initially seemed to support this - but it
 was a single seed per cell, and the much larger, replicated sweep in
-Section 5 overturns it: the regression-parameter advantage of full
+Section 6 overturns it: the regression-parameter advantage of full
 orthogonalization (`orthogonalize_b`, "arm E" below) over the default fit
 ("arm A") is **flat across k = 1, 4, 8, 12** (roughly 11-15x throughout, no
-trend - Table 5.3), not growing with covariate count as first guessed.
+trend - Table 6.3), not growing with covariate count as first guessed.
 
 The explanation, verified directly against `jmjax`'s own source
 (`inst/python/jmjax_backend/mcmc_model.py`, the `_absorbable_basis`
@@ -279,7 +286,7 @@ model with a fixed slope on time does) and there is a correlated random
 slope on time, the fixed slope and the mean random slope are aliased in
 exactly the same "sum is identified, split is not" sense as the intercept
 case - and this holds at `k = 0` extra covariates just as much as at
-`k = 12`. This was directly confirmed by the replicated log in Section 5:
+`k = 12`. This was directly confirmed by the replicated log in Section 6:
 across every `k` tested, the *binding* (lowest-ESS) regression parameter
 under the default fit is consistently `beta_1`, never one of the `k`
 covariate coefficients themselves - and `orthogonalize_b` (which sweeps the
@@ -307,11 +314,13 @@ should be.
 column lies in a column space `beta` already spans, so for any posterior
 draw there exists a shift of `beta` that reproduces identical fitted values
 - the set of achievable mean structures is exactly the same before and
-after. What changes is only which parameterization NUTS samples in. Section
-4 verifies this empirically (it has to hold as a consequence of the
-construction, but "the algebra says so" and "the implementation does what
-the algebra says" are different claims, and only the second was previously
-untested at general `k`).
+after. What changes is only which parameterization NUTS samples in. Section 4 proves this (Corollary 1), and Section 5 verifies it
+empirically - "the algebra says so" and "the implementation does what the
+algebra says" are different claims, and both are now addressed: the first
+in Section 4, the second at general `k` in Section 5. Section 4 also shows
+that the *converse* claim - that the construction removes every absorbable
+direction - holds only under a condition on the design basis that a spline
+or orthogonal-polynomial longitudinal mean violates (Section 4.5).
 
 The option is data-driven rather than assumption-driven in a second sense
 worth noting: if the design has no intercept and no column matching a
@@ -319,7 +328,7 @@ random-effect term, `_absorbable_basis` returns no basis and the option is
 a documented no-op with a warning, rather than silently doing nothing or
 erroring. The implementation also reports, via a `RuntimeWarning` at fit
 time, exactly which basis (if any) was constructed for each column and from
-which `X` columns - the log excerpts quoted in Section 5 include these
+which `X` columns - the log excerpts quoted in Section 6 include these
 messages verbatim, which is what makes it possible to state with confidence
 *which* directions were actually removed on each run, rather than inferring
 it indirectly from downstream ESS numbers.
@@ -357,9 +366,9 @@ one did not.
 It is important to be equally direct about the corresponding open question.
 `wishart_gibbs_centered`'s efficiency gain was checked for calibration and
 found wanting (Section 3.2). `orthogonalize_b0`/`orthogonalize_b` have, to
-date, been checked for correctness in the point-estimate sense (Section 4:
+date, been checked for correctness in the point-estimate sense (Section 5:
 fitted values and posterior means are unaffected, as the construction
-requires) and extensively for efficiency (Sections 5-6), but **not yet for
+requires) and extensively for efficiency (Sections 6-7), but **not yet for
 calibration** - whether reported credible intervals for `beta_0`/`beta_1`
 under the swept-basis prior have correct frequentist coverage. There is a
 plausible mechanistic reason to expect this fix behaves differently on that
@@ -367,17 +376,365 @@ axis (it changes the prior's *support*, not the likelihood's identification
 of a specific value the way an exact zero-sum constraint does), but this is
 a hypothesis, not yet a checked result, and the package documentation
 correctly marks the option experimental / opt-in pending exactly this. This
-document does not close that question; Section 8 returns to it as the
+document does not close that question; Section 9 returns to it as the
 single most important piece of unfinished validation work.
 
-## 4. Correctness validation
+## 4. Formal correctness of the absorbable-basis construction
+
+Section 3.4 states, informally, that `_absorbable_basis` removes exactly
+the directions the fixed effects can absorb, and that the model is
+therefore unchanged. Section 5 checks the consequence empirically. This
+section states and proves the claim, and in doing so establishes three
+things the informal argument does not: a precise condition under which the
+construction is sound for the *joint* model rather than the longitudinal
+submodel alone (Section 4.4), a precise condition under which it is
+*complete*, together with a natural design where completeness fails
+(Section 4.5), and a stronger justification than uniformity for the
+treatment of subjects whose longitudinal data does not determine their own
+ratio (Section 4.6).
+
+### 4.1 Notation
+
+Index subjects by $i = 1, \dots, N$ and subject $i$'s longitudinal
+observations by $j = 1, \dots, n_i$, taken at times $t_{ij}$. Write
+$X_i \in \mathbb{R}^{n_i \times p}$ for subject $i$'s longitudinal
+fixed-effects design and $Z_i \in \mathbb{R}^{n_i \times q}$ for its
+random-effects design, and let $z_i \in \mathbb{R}^{n_i}$ denote the
+column $Z_i[\,\cdot\,, q_\ast]$ of the particular random-effect column
+$q_\ast$ under consideration (the index is suppressed from here on).
+Let $b \in \mathbb{R}^{N \times q}$ collect the random effects and
+$\beta \in \mathbb{R}^{p}$ the fixed effects.
+
+The random effects enter the joint likelihood in exactly two ways: through
+the longitudinal mean
+
+$$\mu_{ij} = x_{ij}^{\top}\beta + z_{ij}^{\top} b_i,$$
+
+and through the shared trajectory $m_i(t) = x_i(t)^{\top}\beta +
+z_i(t)^{\top} b_i$, which enters the hazard through $\alpha$ and is
+evaluated at the event time $T_i$ and at the Gauss-Legendre quadrature
+nodes used for the cumulative hazard. This second channel matters for what
+follows and is easy to overlook: `_absorbable_basis` inspects `X_long` and
+`Z_long` only, while `b` also reaches the likelihood through
+`X_time_surv`/`Z_time_surv` and `X_time_quad`/`Z_time_quad`. Both of those
+are built by `build_time_design()` from the *same* `long_formula` and
+`random_formula`, evaluated at new time points with the subject's baseline
+covariates, so each design column is a fixed function of time,
+$f_j(t; c_i)$ for $X$ and $g(t; c_i)$ for the random-effect column, with
+$c_i$ subject $i$'s baseline covariates.
+
+### 4.2 What "absorbable" means
+
+**Definition 1.** A vector $v \in \mathbb{R}^{N}$ is an *absorbable
+direction* for random-effect column $q_\ast$ if there exists
+$d \in \mathbb{R}^{p}$ such that, for every $c \in \mathbb{R}$, the
+simultaneous shift
+
+$$b[\,\cdot\,, q_\ast] \;\leftarrow\; b[\,\cdot\,, q_\ast] + c\,v,
+\qquad \beta \;\leftarrow\; \beta + c\,d$$
+
+leaves $\mu_{ij}$ unchanged for every $(i,j)$ and $m_i(t)$ unchanged for
+every $i$ and every $t \in [0, \tau]$. Write $\mathcal{A}$ for the set of
+absorbable directions.
+
+Because both shifts are linear in $c$, it suffices to check $c = 1$, and
+$\mathcal{A}$ is a linear subspace of $\mathbb{R}^{N}$. Two remarks fix
+the scope of the definition. First, invariance of $\mu$ and $m$ implies
+invariance of the whole joint likelihood, since the likelihood depends on
+$b$ only through those two quantities; the definition is therefore about
+*likelihood* invariance. Second, it is emphatically not about invariance
+of the prior or the posterior - the prior on $b$ is not invariant under
+these shifts, and that asymmetry is the entire point of the
+reparameterization. Section 4.7 returns to this.
+
+Definition 1 splits into a longitudinal requirement,
+
+$$X_i\,d \;=\; -\,v_i\,z_i \qquad \text{for every } i, \tag{L}$$
+
+and a trajectory requirement,
+
+$$x_i(t)^{\top} d \;=\; -\,v_i\, g(t; c_i)
+\qquad \text{for every } i \text{ and every } t \in [0, \tau]. \tag{T}$$
+
+### 4.3 Exact characterization
+
+Let $\bigoplus_i \mathbb{R}^{n_i}$ denote the space of stacked
+per-subject observation vectors, and define two linear maps into it:
+
+$$\mathcal{T}: \mathbb{R}^{p} \to \bigoplus_i \mathbb{R}^{n_i},
+\quad (\mathcal{T}d)_i = X_i d,
+\qquad
+\mathcal{U}: \mathbb{R}^{N} \to \bigoplus_i \mathbb{R}^{n_i},
+\quad (\mathcal{U}v)_i = v_i z_i .$$
+
+$\mathcal{T}$ is the map from a shift in $\beta$ to its effect on the
+fitted longitudinal means; $\mathcal{U}$ is the map from a shift in the
+random-effect column to its effect on the same quantity.
+
+**Proposition 1 (characterization).** Under requirement (L) alone - that
+is, for the longitudinal submodel in isolation - the set of absorbable
+directions is
+
+$$\mathcal{A}^{\mathrm{long}}
+= \mathcal{U}^{-1}\!\big(\operatorname{range}\mathcal{T}\big)
+= \{\, v \in \mathbb{R}^{N} : \mathcal{U}v \in \operatorname{range}
+\mathcal{T} \,\}.$$
+
+*Proof.* Condition (L) says precisely that $\mathcal{T}d = -\mathcal{U}v$
+for some $d$, i.e. that $-\mathcal{U}v \in \operatorname{range}
+\mathcal{T}$. Since $\operatorname{range}\mathcal{T}$ is a subspace it is
+closed under negation, so this holds if and only if $\mathcal{U}v \in
+\operatorname{range}\mathcal{T}$. $\square$
+
+Proposition 1 is worth stating because it makes the target of the
+construction a property of the *column space* of $X$ - not of any
+particular basis for it. That observation is what Section 4.5 turns on.
+
+### 4.4 Soundness, and the condition the survival submodel imposes
+
+`_absorbable_basis` computes, in the notation above, the index set
+
+$$K = \{\, j : \exists\, s^{(j)} \in \mathbb{R}^{N}
+\text{ with } X_i e_j = s^{(j)}_i z_i \text{ for every } i \,\}$$
+
+- the columns of $X$ that are *individually* subject-constant multiples of
+the random-effect column - and returns an orthonormal basis $Q$ of
+$\operatorname{span}\{ s^{(j)} : j \in K \}$, obtained by QR with a
+rank-revealing tolerance on $|\mathrm{diag}(R)|$.
+
+**Proposition 2 (soundness, longitudinal).**
+$\operatorname{span}(Q) \subseteq \mathcal{A}^{\mathrm{long}}$.
+
+*Proof.* For $j \in K$ we have $X e_j = \mathcal{U}s^{(j)}$ by
+construction, so $\mathcal{U}s^{(j)} \in \operatorname{range}\mathcal{T}$,
+hence $s^{(j)} \in \mathcal{A}^{\mathrm{long}}$ by Proposition 1. Since
+$\mathcal{A}^{\mathrm{long}}$ is a subspace it contains the span of the
+$s^{(j)}$, and $\operatorname{span}(Q)$ is that span. $\square$
+
+Soundness for the *joint* model requires more, because the ratio test is
+evaluated only on the observed grid $\{t_{ij}\}$ while requirement (T)
+quantifies over all $t \in [0,\tau]$.
+
+**Condition (S) - structural extension.** For each $j \in K$, the
+grid identity $f_j(t_{ij}; c_i) = s^{(j)}_i\, g(t_{ij}; c_i)$,
+$j = 1,\dots,n_i$, extends to $f_j(t; c_i) = s^{(j)}_i\, g(t; c_i)$ for
+all $t \in [0,\tau]$.
+
+**Proposition 3 (soundness, joint model).** If (S) holds, then
+$\operatorname{span}(Q) \subseteq \mathcal{A}$.
+
+*Proof.* Proposition 2 gives (L). Under (S), $x_i(t)^{\top}e_j =
+f_j(t; c_i) = s^{(j)}_i g(t; c_i)$ for all $t$, so taking $d = -e_j$
+satisfies (T) for the direction $s^{(j)}$; linearity extends this to the
+span. $\square$
+
+(S) is not automatic, but it holds in every case the option currently
+targets: a subject-constant column has $f_j \equiv c$ and $g \equiv 1$,
+a `time` column has $f_j(t) = t = 1 \cdot g(t)$, and a covariate-by-time
+interaction has $f_j(t) = c_i t = c_i\, g(t)$ - all identities in $t$,
+not coincidences on a grid. In general, if $f_j - s_i g$ lies in a linear
+function space of dimension at most $n_i$ that is determined by its values
+at $n_i$ distinct points (polynomials of degree $< n_i$, for instance),
+then (S) follows from the grid identity. It can fail for subjects with few
+observations relative to the dimension of the spanning basis, where the
+relation may hold at the observed points by coincidence.
+
+(S) is also *checkable* rather than merely assumable, at negligible cost:
+`X_time_quad` and `Z_time_quad` are already constructed and passed to the
+backend, so running the same ratio test on the quadrature grid and
+confirming the same $s^{(j)}$ would verify (S) directly instead of
+resting on the argument above. This is recommended in Section 4.8.
+
+### 4.5 Completeness, and a design where it fails
+
+Soundness says nothing is wrongly swept. Completeness - that nothing
+absorbable is *missed* - is a separate claim, and it is the one that does
+not hold in general.
+
+Assume for this subsection that $z_i \neq 0$ for every $i$ (every subject
+has at least one observation at which the random-effect column is
+nonzero); Section 4.6 treats the remaining case. Then $\mathcal{U}$ is
+injective, and Proposition 1 gives
+$\mathcal{A}^{\mathrm{long}} = \mathcal{U}^{-1}(\operatorname{range}
+\mathcal{T} \cap \operatorname{range}\mathcal{U})$.
+
+**Proposition 4 (completeness criterion).**
+$\operatorname{span}(Q) = \mathcal{A}^{\mathrm{long}}$ if and only if
+
+$$\operatorname{range}\mathcal{T} \cap \operatorname{range}\mathcal{U}
+= \operatorname{span}\{\, X e_j : j \in K \,\}. \tag{C}$$
+
+*Proof.* $\mathcal{U}$ is injective, so it is a bijection from
+$\mathbb{R}^N$ onto $\operatorname{range}\mathcal{U}$, and it carries
+$\mathcal{A}^{\mathrm{long}}$ onto $\operatorname{range}\mathcal{T} \cap
+\operatorname{range}\mathcal{U}$ and $\operatorname{span}(Q)$ onto
+$\operatorname{span}\{X e_j : j \in K\}$. Equality of the two subspaces
+upstairs is therefore equivalent to equality downstairs. The inclusion
+$\subseteq$ of the right side in the left always holds, by Proposition 2.
+$\square$
+
+Condition (C) says that every vector lying in both the column space of $X$
+and the image of $\mathcal{U}$ is a combination of those *individual*
+columns of $X$ that lie in the image of $\mathcal{U}$. This is a
+restriction on the basis, not on the model, and it can fail.
+
+**Example 1 (completeness fails for a spline or orthogonal-polynomial
+longitudinal mean).** Let every subject be observed at the same
+$m \geq 3$ distinct times, let $Z = [\,1,\ t\,]$ with $q_\ast$ the slope
+column, and let
+
+$$X = [\,1,\ \ t + \tfrac{1}{2}t^{2},\ \ t^{2}\,].$$
+
+No single column of $X$ is a subject-constant multiple of $t$: the ratios
+are $1/t_{ij}$, $1 + \tfrac12 t_{ij}$ and $t_{ij}$ respectively, none
+constant in $j$. So $K = \emptyset$ and the construction returns no basis
+for the slope column. Yet $d = (0, 1, -\tfrac12)$ gives $Xd = t$ exactly,
+so the uniform direction $v = \mathbf{1}_N$ satisfies (L) and (T), and
+$\mathbf{1}_N \in \mathcal{A}$. Hence
+$\operatorname{span}(Q) = \{0\} \subsetneq \mathcal{A}$.
+
+This was confirmed directly against the shipped implementation (extracted
+and run on constructed designs; `dev/verify_absorbable_basis.py`): on
+$X = [1, t, x]$ the slope column correctly yields one direction from
+column 1, while on the $X$ above it yields `None`, with the compensating
+$\beta$ shift verified to reproduce $t$ to machine precision.
+
+The example is not contrived. The column space in Example 1 is
+$\operatorname{span}\{1, t, t^2\}$ - exactly what `y ~ poly(time, 2)` or a
+natural-spline longitudinal mean produces. The raw monomial spelling
+`y ~ time + I(time^2)` *is* caught, because there `time` appears as its
+own column; the orthogonalized or spline basis for the very same function
+space is not. By Proposition 1 the absorbable set depends only on
+$\operatorname{span}(X)$, whereas the construction's answer depends on
+which basis of that span `model.matrix()` happens to emit. That gap is the
+precise statement of the limitation.
+
+Its practical consequence is sharper than the generic caution in
+Section 9. With a spline or orthogonal-polynomial longitudinal mean and a
+random slope, `orthogonalize_b` would silently fail to remove the
+$\beta_1 \leftrightarrow \overline{b_{i1}}$ degeneracy that Section 3.3
+identifies as the *dominant* source of the efficiency advantage - and the
+existing no-op warning would not fire, because the intercept column still
+yields a basis (verified: in Example 1 the intercept column returns one
+direction). The user would see the option accepted, a basis reported for
+`b[:,0]`, and no indication that the slope column was left untreated.
+
+There is a constructive repair, and it follows directly from
+Proposition 1. Writing $P_{\mathcal{T}}$ for the orthogonal projector onto
+$\operatorname{range}\mathcal{T}$,
+
+$$\mathcal{A}^{\mathrm{long}}
+= \ker\!\big( (I - P_{\mathcal{T}})\,\mathcal{U} \big),$$
+
+so the correct basis is an orthonormal basis of the null space of the
+$\big(\sum_i n_i\big) \times N$ matrix $(I - P_{\mathcal{T}})\mathcal{U}$,
+computable with one SVD and no loop over columns. This is basis-independent
+by construction, recovers the current answer whenever (C) holds, and costs
+a single decomposition performed once outside the sampler.
+
+### 4.6 Subjects whose own data does not determine their ratio
+
+Drop the assumption that $z_i \neq 0$. If subject $i$ has $z_i = 0$ - no
+observation at which the random-effect column is nonzero, for instance a
+baseline-only trajectory when $q_\ast$ is the time-slope column - then
+$e_i \in \ker\mathcal{U}$, so requirement (L) places no constraint
+whatever on $v_i$. Read through the longitudinal submodel alone, *any*
+value of $v_i$ is absorbable, which is what the source comment at the
+imputation branch asserts.
+
+For the joint model this is not so, and the distinction matters.
+
+**Proposition 5.** Suppose $v \in \mathcal{A}$ with witness $d$, and let
+$i$ be a subject with $z_i = 0$. If $g(t; c_i) \neq 0$ for some
+$t \in \{T_i\} \cup \{\text{quadrature nodes for } i\}$, then $v_i$ is
+uniquely determined by $d$, namely $v_i = -x_i(t)^{\top}d / g(t; c_i)$.
+
+*Proof.* Immediate from requirement (T) at that $t$. $\square$
+
+Since $d$ is already pinned by the subjects whose data does determine the
+ratio, and since under (S) those subjects all agree on a single structural
+value, Proposition 5 says that a silent subject's entry is not free at all
+in the joint model: it must take that same consensus value. This gives a
+stronger justification for the implementation's behavior than the one
+recorded in the source. The `BUG FIX` comment in `_absorbable_basis`
+motivates imputing the median of the determined ratios on the grounds that
+the alternative left $Q[:,0]$ non-uniform and so projected out a
+subject-weighted quantity rather than the simple mean. Proposition 5 shows
+the imputation is not merely tidier: the previous fallback of $s_i = 0$
+produced a direction that is *not* in $\mathcal{A}$, so the old code swept
+a direction the survival submodel does identify, while the median
+imputation is the unique choice consistent with joint-model invariance.
+The empirical symptom recorded in `dev/diag_slope_projection.R` -
+$\overline{b_{i1}}$ left at 0.04-0.07 instead of pinned near machine zero -
+is the visible trace of that. (Checked against the shipped code: with five
+baseline-only subjects among twenty-five, the returned basis vector is
+uniform to $2.7 \times 10^{-17}$.)
+
+### 4.7 What this does and does not establish
+
+**Corollary 1 (model invariance).** Let $v \in \mathcal{A}$ with witness
+$d$. Then for any parameter values, replacing $(\beta, b)$ by
+$(\beta + c\,d,\; b + c\,v\,e_{q_\ast}^{\top})$ leaves $\mu_{ij}$,
+$m_i(t)$, the hazard, and hence the entire joint likelihood exactly
+unchanged. Consequently the set of achievable mean structures is identical
+with and without the reparameterization.
+
+This is the claim Section 3.4 makes informally and Section 5 verifies
+empirically, and Propositions 2, 3 and 5 establish it for the directions
+the implementation actually removes, given (S).
+
+It is worth being exact about the boundary of the result. What is proved
+is *likelihood* invariance. What is not proved, and does not follow, is
+anything about the posterior. The reparameterized column
+$b[\,\cdot\,, q_\ast]$ is supported on the orthogonal complement of
+$\operatorname{span}(Q)$, a proper subspace, so the implied prior is
+singular there, while `sigma_b` continues to govern the unconstrained
+`b_raw` and the swept directions sample their prior unmodified. Whether
+the resulting credible intervals for $\beta_0$ and $\beta_1$ have correct
+frequentist coverage is exactly the open question of Section 9, and this
+section does not close it. A construction can be provably
+likelihood-invariant and still be miscalibrated; indeed
+`wishart_gibbs_centered` was likelihood-invariant in the same sense and
+was found wanting on precisely that axis.
+
+### 4.8 Consequences for the implementation
+
+Three concrete items follow, in descending order of importance:
+
+1. **Guard against the completeness failure.** Either replace the
+   column-wise search with the null-space computation at the end of
+   Section 4.5 - which is basis-independent, no more expensive in any
+   practically relevant regime, and provably exact - or, at minimum, detect
+   the failure and warn: compare $\dim(\operatorname{range}\mathcal{T}
+   \cap \operatorname{range}\mathcal{U})$ against
+   $\operatorname{rank}(Q)$ and raise if they differ. The silent case
+   (spline or orthogonal-polynomial longitudinal mean plus a random slope)
+   leaves the paper's dominant mechanism untreated while reporting
+   success, which is the worst available failure mode.
+2. **Verify (S) rather than assume it.** Run the existing ratio test a
+   second time on `X_time_quad`/`Z_time_quad` and confirm the same
+   $s^{(j)}$, turning Condition (S) from an argument into a check. The
+   arrays are already built and passed to `fit_nuts()`.
+3. **Record the justification for the imputation.** The source comment
+   presents the median fallback as restoring uniformity; Proposition 5
+   shows it is forced by joint-model invariance. Worth stating in the
+   comment, since the weaker justification invites a future reader to
+   "simplify" it back.
+
+None of the three affects any number reported in Sections 5 through 7:
+every design used in this document spells `time` as its own column, so
+$K$ contains it, (C) holds, and the construction is exactly complete
+there. They bear on the option's behavior outside the designs tested,
+which is the subject of Section 9.
+
+## 5. Correctness validation
 
 Because the reparameterization cannot change the set of achievable fitted
-values (Section 3.4), `beta`, `alpha`, and fitted values must agree between
+values (Section 3.4, proved as Corollary 1 in Section 4.7), `beta`, `alpha`, and fitted values must agree between
 the default fit ("arm A") and the orthogonalized fits ("arm D" =
 `orthogonalize_b0` only, "arm E" = `orthogonalize_b`, full) up to Monte
 Carlo error. This was checked directly in the replicated covariate-count
-sweep (Section 5): comparing `alpha`'s posterior mean between arms A and D
+sweep (Section 6): comparing `alpha`'s posterior mean between arms A and D
 across every `k` tested,
 
 | k | truth | A | D |
@@ -403,14 +760,14 @@ to build a null distribution for how much two fits of the *same* model
 should differ by chance alone, so that an apparent "A vs D" difference can
 be judged against genuine sampling variability rather than eyeballed.
 
-## 5. Efficiency: simulated covariate-count sweep
+## 6. Efficiency: simulated covariate-count sweep
 
-### 5.1 Design
+### 6.1 Design
 
 `dev/sim_joint.R` was generalized this session to support an arbitrary
 number of extra covariates `k_extra` (previously capped at 3): baseline
 covariates are `age` (re-centered at mean 0 this session, removing a
-covariate-scale confound - see Section 5.1.1), `sex`, `trt`, and, beyond
+covariate-scale confound - see Section 6.1.1), `sex`, `trt`, and, beyond
 those three, independent standard-normal covariates `x4, x5, ...` with
 geometrically decaying true coefficients. `dev/study_orth_vs_jmbayes2.R`
 runs arms `A` (default), `D` (`orthogonalize_b0`), `E` (`orthogonalize_b`),
@@ -424,7 +781,7 @@ its own package default of 3,500/500 - specifically so that any
 `JMbayes2` under-performance cannot be attributed to giving it fewer draws
 than it needed.
 
-#### 5.1.1 A covariate-scale confound removed before this sweep
+#### 6.1.1 A covariate-scale confound removed before this sweep
 
 `age` was originally simulated as `N(50, 10)` (a realistic clinical scale).
 As documented separately (`vignette("jmjax-validation")`, "Covariate scale:
@@ -438,10 +795,10 @@ with k" with "does an unrelated fixed-effects scale issue scale with k."
 `age` was re-centered to `N(0, 10)` in `sim_joint.R` before this sweep was
 run, isolating the effect this document is actually about.
 
-### 5.2 Why two R-hat gates are needed
+### 6.2 Why two R-hat gates are needed
 
 `JMbayes2`'s random-effects covariance parameters degrade sharply with `k`
-(Section 5.4), which fails an all-parameters R-hat convergence gate well
+(Section 6.4), which fails an all-parameters R-hat convergence gate well
 before `k = 8` - but this says nothing about whether the *regression*
 parameters being compared are themselves trustworthy. Mirroring the pattern
 already used in the real-data study (`dev/study_realdata_aids.R`), the
@@ -453,7 +810,7 @@ orders of magnitude - meaning the regression-parameter comparisons below
 can be trusted even in the cells where the headline "ESS/sec, all
 parameters" comparison cannot.
 
-### 5.3 Results
+### 6.3 Results
 
 Regression-only figures are `min(ESS/sec)` over `{beta, alpha, gamma}` only
 ("the REPORTING view"); all-parameters figures are `min(ESS/sec)` over
@@ -472,7 +829,7 @@ directly.
 seed-1 (cached) plus seeds 2-3 for the point estimates shown, but the
 formal significance test was run specifically at k=8 and k=12, the two
 most extreme, most decisively informative cells, as the targeted
-replication (see Section 5.1). The point estimates at k=1 and k=4 are
+replication (see Section 6.1). The point estimates at k=1 and k=4 are
 consistent with the same pattern.*
 
 Two things stand out, both consistent with the mechanism in Section 3.3.
@@ -487,14 +844,14 @@ whose degeneracy with `mean(b_i1)` does not depend on `k` at all.
 Second, **the all-parameters comparison is statistically indistinguishable
 from 1x at both tested points** (both 95% CIs include 1x), while the
 regression-only comparison is highly significant at both. This is the
-formal version of the R-hat-gate finding in 5.2: once nuisance parameters
+formal version of the R-hat-gate finding in 6.2: once nuisance parameters
 (dominated by `rho`, which orthogonalization does not touch - see Section
-7.1) are allowed to set the pace, the *aggregate* comparison is noisy and
+8.1) are allowed to set the pace, the *aggregate* comparison is noisy and
 not clearly different from parity; the real, replicated, large effect is
 specific to the regression parameters the reparameterization actually
 targets.
 
-### 5.4 JMbayes2's own degradation with k
+### 6.4 JMbayes2's own degradation with k
 
 Independently of anything about `jmjax`, `JMbayes2`'s random-effects
 covariance parameter (`D.D[...]`, a fixed 2x2 block regardless of `k`)
@@ -522,9 +879,9 @@ reparameterization did - which is the reason this document reports the
 regression-only comparison as the trustworthy one, not the larger raw
 number.
 
-## 6. Efficiency: real data
+## 7. Efficiency: real data
 
-### 6.1 AIDS clinical trial data - an independent generalization check
+### 7.1 AIDS clinical trial data - an independent generalization check
 
 The `aids` dataset bundled with `JMbayes2` (n = 467 patients, CD4 count
 over time modeled as `sqrt(CD4) ~ obstime + drug + ...`, `Surv(Time, death)
@@ -560,7 +917,7 @@ regression-vs-nuisance split seen throughout this document, now confirmed
 on a dataset that played no role in developing any of the diagnostics that
 found it.
 
-### 6.2 PBC2
+### 7.2 PBC2
 
 The pre-existing PBC2 benchmark in `vignette("jmjax-validation")`
 ("Benchmark: jmjax vs JMbayes2" and "Performance tuning") reports a
@@ -575,7 +932,7 @@ tuning options in that combined figure. Both are accurately described as
 included here for completeness, and because Section 3.5's numbers are the
 direct empirical basis for the mechanism explained in Section 3.
 
-## 7. Mechanism: two architectural layers, not one
+## 8. Mechanism: two architectural layers, not one
 
 A natural reading of the results above is that `jmjax`'s NUTS/HMC sampler is
 simply, generally superior to `JMbayes2`'s block sampler - including on
@@ -584,13 +941,13 @@ reparameterization in this package touches at all. That reading is half
 right and worth separating into its two actual components, because they
 have different degrees of novelty and different literature backing.
 
-### 7.1 Layer 1: generic gradient-based robustness (well-established, not jmjax-specific)
+### 8.1 Layer 1: generic gradient-based robustness (well-established, not jmjax-specific)
 
 `rho`'s own mixing under `jmjax` is, on its own terms, unremarkable: its
 ESS/draw bounces in a narrow band (roughly 0.06-0.12 across the k-sweep) with
 no trend as `k` grows, since neither `orthogonalize_b0` nor `orthogonalize_b`
 touches `rho` at all. What *is* notable is that it is **stable** rather than
-degrading - which, given Section 5.4's finding, is mostly a statement about
+degrading - which, given Section 6.4's finding, is mostly a statement about
 `JMbayes2` degrading on its comparable parameter (the covariance block that
 `rho` is derived from), not about `jmjax` doing anything specifically clever
 for `rho`. This is exactly the generic NUTS/HMC-vs-block-Gibbs distinction
@@ -603,20 +960,19 @@ own updates. This is real, well-documented, general MCMC theory - not a
 `jmjax`-specific architectural achievement, and the write-up should not
 claim it as one.
 
-### 7.2 Layer 2: the targeted reparameterization (this package's actual, specific contribution)
+### 8.2 Layer 2: the targeted reparameterization (this package's actual, specific contribution)
 
 The large, k-independent, highly statistically significant regression-only
-advantage (Section 5.3) is not explained by Layer 1 alone - `beta_1`
+advantage (Section 6.3) is not explained by Layer 1 alone - `beta_1`
 degrades under the *default* `jmjax` fit too (that is precisely what makes
 `orthogonalize_b` measurably better than `orthogonalize_b0`, and both
 measurably better than neither). This is Section 3's specific,
 data-verified diagnosis and fix: a real degeneracy, present at any `k`,
 removed by a construction that reads the actual design matrices rather than
-assuming a fixed formula shape, verified not to change the model (Section
-4), and shown to recover the specific factor of efficiency the degeneracy
-was costing (Sections 3.5, 5.3, 6.1).
+assuming a fixed formula shape, proved not to change the model (Section 4) and verified so empirically (Section 5), and shown to recover the specific factor of efficiency the degeneracy
+was costing (Sections 3.5, 6.3, 7.1).
 
-### 7.3 Synthesis
+### 8.3 Synthesis
 
 The user-observed pattern that motivated this document - "the sampler works
 well and consistently for all regression parameters, and is merely
@@ -627,7 +983,7 @@ regression-parameter robustness is the combination of a well-established,
 generic sampler-class advantage (Layer 1, not novel) with a targeted,
 verified, data-driven fix for a specific diagnosed degeneracy (Layer 2, the
 actual contribution). The "nuisance-parameter advantage," on inspection, is
-mostly a restatement of `JMbayes2`'s own degradation (Section 5.4) rather
+mostly a restatement of `JMbayes2`'s own degradation (Section 6.4) rather
 than independent evidence of anything `jmjax` does specifically well there.
 Framed this way, the claim that this reflects "elegant parameterization and
 problem formulation" is well supported for the regression-parameter case
@@ -637,7 +993,7 @@ not be extended, without further evidence, to a claim that `jmjax`'s NUTS
 implementation is unusually good at sampling covariance/correlation
 parameters in general.
 
-## 8. Limitations and open questions
+## 9. Limitations and open questions
 
 - **Posterior calibration has not been checked** for `orthogonalize_b0`/
   `orthogonalize_b`, unlike `wishart_gibbs_centered`, which *was* checked on
@@ -658,13 +1014,29 @@ parameters in general.
   priority (per an explicit, deliberate scope decision - see project
   history); a proper `n`-scaling characterization, orthogonal to the
   `k`-sweep reported here, remains open.
-- `_absorbable_basis`'s correctness rests on an algorithmic construction
-  (verified to do what it claims by direct inspection of its logic) plus
-  empirical checks (`verify_orth_slope.R`, and the correctness table in
-  Section 4) - not a written mathematical proof. A formal statement and
-  proof of correctness (the swept subspace is exactly the set of directions
-  absorbable by `beta`, no more and no less) would strengthen any
-  submission-quality version of this document.
+- **`_absorbable_basis` is sound but not complete.** Section 4 supplies the
+  formal treatment this list previously called for, and the result is
+  two-sided. Soundness holds: every direction the construction removes is
+  genuinely absorbable by `beta` (Propositions 2 and 3), so Corollary 1's
+  model-invariance claim - which underwrites every number in Sections 5
+  to 8 - is now established rather than assumed. Completeness does *not*
+  hold in general (Proposition 4 and Example 1): the search tests one
+  column of `X` at a time, so it finds only those absorbable directions
+  that the particular basis `model.matrix()` emits happens to expose, while
+  the absorbable set itself depends only on the column space. A spline or
+  orthogonal-polynomial longitudinal mean together with a random slope is a
+  concrete failure case - the slope degeneracy this document identifies as
+  dominant would be left untreated, with no warning, because the intercept
+  column still yields a basis. Section 4.8 gives a basis-independent
+  replacement (a single null-space computation) that closes this; it is not
+  yet implemented.
+- **Condition (S) is argued, not checked.** The ratio test runs on the
+  observed longitudinal grid, while joint-model invariance also requires
+  the same proportionality at the event and quadrature times
+  (Section 4.4). It holds by construction for every column type the option
+  currently targets, but the code does not verify it - and Section 4.8
+  notes that it could, at negligible cost, using arrays it already
+  builds.
 - The simulation design here uses a Weibull survival submodel and a
   specific covariate structure (three named covariates plus independent
   Gaussian extras). Generalization to the spline-baseline hazard, to
@@ -674,7 +1046,7 @@ parameters in general.
   all, is plausible by construction but not separately re-verified by the
   study in this document.
 
-## 9. Related work summary
+## 10. Related work summary
 
 Section 2 covers this in full; in brief, this document sits at the
 intersection of (a) general non-centered/centered reparameterization theory
@@ -692,7 +1064,7 @@ models, and the finding that a substantial, previously unexplained part of
 `jmjax`'s efficiency advantage over `JMbayes2` traces to this rather than to
 covariate count as such.
 
-## 10. Conclusion
+## 11. Conclusion
 
 `jmjax`'s regression-parameter efficiency advantage over `JMbayes2` is real,
 large, statistically significant, replicated across simulated and (for the
@@ -710,12 +1082,12 @@ this work is submission-ready is a calibration/coverage check of the fix
 itself, precisely because the one directly comparable earlier attempt
 failed that exact check.
 
-## 11. Note on publication venue
+## 12. Note on publication venue
 
 For the record, and as requested: this material is suited to a package
 vignette regardless of any further venue (this document); beyond that, the
 combination of a general, citable methodological contribution (Sections 2-
-3, 7-8) with a software package it ships in and validates (Sections 4-6)
+3, 8-9) with a software package it ships in and validates (Sections 5-7)
 fits the scope of the *Journal of Statistical Software* or *The R Journal*
 best (both have precedent for exactly this pairing - `JMbayes2` itself was
 introduced this way). A parallel arXiv preprint (`stat.CO` or `stat.ME`) is
@@ -723,7 +1095,7 @@ low-cost and would establish priority independently of review timelines.
 `Bayesian Analysis`, `Statistics in Medicine`, and `Computational Statistics
 & Data Analysis` are reasonable alternates if a narrower statistical-
 methodology framing (rather than software-paper framing) is preferred.
-Before any of these, Section 8's calibration gap should be closed - a
+Before any of these, Section 9's calibration gap should be closed - a
 reviewer working in this area would be expected to ask for it, and it is
 better to have the answer already in hand.
 

@@ -107,6 +107,27 @@ def _absorbable_basis(X_long, Z_long, n_obs, q_idx, tol=1e-8):
                 # subject-WEIGHTED quantity instead of the simple mean,
                 # and mean_i(b_i1) was left as large as 0.04-0.07 instead
                 # of pinned to ~1e-16 like the intercept column always was.
+                #
+                # THE STRONGER REASON (Proposition 5, Section 4.6 of
+                # vignette("jmjax-reparameterization")). Restoring
+                # uniformity is the visible symptom, not the actual
+                # justification, and stating only the symptom invites a
+                # future reader to "simplify" this back. Read through the
+                # LONGITUDINAL submodel alone, a silent subject's s_i is
+                # genuinely free - any value leaves their fitted values
+                # unchanged, which is what the paragraph above says. But b
+                # also reaches the likelihood through the shared trajectory
+                # m_i(t) at the event time and the quadrature nodes, and
+                # there Z_q is generally NOT zero for that subject. The
+                # compensating beta shift is already pinned by the subjects
+                # whose data does determine the ratio, so the silent
+                # subject's entry is forced to that same consensus value -
+                # it is not free at all in the JOINT model. The old 0.0
+                # fallback therefore produced a direction that is not
+                # absorbable, i.e. one the survival submodel does identify,
+                # and sweeping it changed the model rather than only its
+                # coordinates. The median over the determined subjects is
+                # the unique choice consistent with joint-model invariance.
                 det = np.isfinite(rmin)
                 s_fill = float(np.nanmedian(rmin)) if det.any() else 0.0
                 s_i = np.where(det, rmin, s_fill)
@@ -125,6 +146,152 @@ def _absorbable_basis(X_long, Z_long, n_obs, q_idx, tol=1e-8):
         return None, []
     return Q, [keep[i] for i, g in enumerate(good) if g]
 
+
+def _absorbable_basis_exact(X_long, Z_long, n_obs, q_idx, tol=1e-8):
+    """Basis-INDEPENDENT absorbable basis for random-effect column `q_idx`.
+
+    WHY THIS EXISTS ALONGSIDE _absorbable_basis(). The column-wise search
+    above asks, of each fixed-effects column separately, "is this column a
+    subject-constant multiple of Z_q?". But a shift in b[:, q] is absorbed
+    by beta whenever SOME LINEAR COMBINATION of X's columns reproduces it -
+    the absorbable set depends only on the column SPACE of X, not on which
+    basis for that space model.matrix() happened to emit. Those are not the
+    same question, and the gap is not academic: with
+
+        X = [1, t + t^2/2, t^2]     (span{1, t, t^2}, i.e. what poly() or
+                                     ns() emit for a smooth longitudinal
+                                     mean)
+
+    no single column is a subject-constant multiple of `time`, so the
+    column-wise search returns NOTHING for the slope column - yet
+    d = (0, 1, -1/2) gives X d = t exactly, so mean(b_i1) is absorbable and
+    the beta_1 location degeneracy is fully present. Worse, the failure is
+    silent: the intercept column still yields a basis, so the "no absorbable
+    direction" warning does not fire either. See
+    vignette("jmjax-reparameterization"), Section 4.5 (Example 1).
+
+    HOW. v is absorbable iff there is a beta-shift d with A_i d = v_i z_i
+    for every subject i, where A_i is subject i's fixed-effects block and
+    z_i its Z_q column. Read as a condition on d, that says A_i d must lie
+    in span(z_i) for every i - a condition in R^p, NOT in R^N_sub. So
+
+        D = ker( stack_i [ (I - P_i) A_i ] ),   P_i = proj onto span(z_i)
+
+    is the null space of a [sum_i n_i, p] matrix (p is small: one SVD, no
+    loop over columns, 0.06s at N_sub = 8000), and each d in a basis of D
+    induces the absorbable direction v_i = (z_i^T A_i d) / (z_i^T z_i).
+    Subjects with z_i = 0 contribute the constraint A_i d = 0 (their own
+    data cannot determine a ratio) and take the consensus ratio, for the
+    reason given in Proposition 5 of the vignette - the survival submodel
+    DOES identify their entry even when the longitudinal one does not.
+
+    Every candidate direction is verified against the defining identity
+    before being returned, so the result is sound by construction rather
+    than by tolerance choice: a direction that only NEARLY satisfies
+    A_i d = v_i z_i is discarded rather than swept.
+
+    Returns (Q, gens) with Q an [N_sub, k] orthonormal basis, or (None, []).
+    `gens` is the list of (v, d) generator pairs, used by
+    _structural_extension_residual() to check Condition (S).
+    """
+    X = np.asarray(X_long, dtype=float)
+    Z = np.asarray(Z_long, dtype=float)
+    if X.ndim != 3 or Z.ndim != 3 or q_idx >= Z.shape[2]:
+        return None, []
+    N_sub, max_obs, p = X.shape
+    n = np.asarray(n_obs).astype(int).reshape(-1)
+    if n.shape[0] != N_sub or N_sub == 0 or p == 0:
+        return None, []
+
+    mask = (np.arange(max_obs)[None, :] < n[:, None]).astype(float)
+    flat = mask.reshape(-1) > 0
+    if int(flat.sum()) < p:
+        return None, []                      # fewer observations than columns
+    zq = Z[:, :, q_idx] * mask
+    Xm = X * mask[:, :, None]
+
+    c = np.einsum("no,no->n", zq, zq)                     # z_i^T z_i
+    num = np.einsum("no,nop->np", zq, Xm)                 # z_i^T A_i
+    cmax = max(float(c.max()) if c.size else 1.0, 1.0)
+    det = c > (tol ** 2) * cmax              # subjects whose data fixes v_i
+    ratio = np.zeros((N_sub, p))
+    ratio[det] = num[det] / c[det][:, None]
+
+    # (I - P_i) A_i, which reduces to A_i exactly where z_i = 0.
+    C = (Xm - zq[:, :, None] * ratio[:, None, :]).reshape(N_sub * max_obs, p)[flat]
+    X_f = Xm.reshape(N_sub * max_obs, p)[flat]
+    colnorm = np.linalg.norm(X_f, axis=0)    # so the rank test is unit-free
+    scale = np.where(colnorm > tol, colnorm, 1.0)
+
+    # full_matrices=False keeps U at [M, p] rather than [M, M]; M can be
+    # ~10^5, so the full form would allocate hundreds of GB.
+    _, sv, Vt = np.linalg.svd(C / scale, full_matrices=False)
+    smax = float(sv.max()) if sv.size else 0.0
+    rank = int((sv > tol * max(smax, 1.0)).sum())
+    if rank >= p:
+        return None, []
+    D = Vt[rank:].T / scale[:, None]                      # [p, dim D]
+
+    zq_f = zq.reshape(-1)[flat]
+    subj = np.repeat(np.arange(N_sub), max_obs)[flat]
+    gens = []
+    for k in range(D.shape[1]):
+        d = D[:, k]
+        v = ratio @ d
+        if det.any() and not det.all():
+            v = np.where(det, v, float(np.median(ratio[det] @ d)))
+        if np.abs(v).max() <= tol:
+            continue
+        lhs = X_f @ d
+        rhs = v[subj] * zq_f
+        denom = max(float(np.abs(rhs).max()), float(np.abs(lhs).max()), 1.0)
+        if float(np.abs(lhs - rhs).max()) / denom > 1e-7:
+            continue                         # not genuinely absorbable
+        gens.append((v, d))
+    if not gens:
+        return None, []
+
+    S = np.stack([g[0] for g in gens], axis=1)
+    Q, R = np.linalg.qr(S)
+    r = np.abs(np.diag(R))
+    good = r > tol * max(float(r.max()), 1.0)
+    Q = np.ascontiguousarray(Q[:, good], dtype=float)
+    if Q.shape[1] == 0:
+        return None, []
+    return Q, gens
+
+
+def _structural_extension_residual(gens, q_idx, X_time_surv, Z_time_surv,
+                                    X_time_quad, Z_time_quad):
+    """Check Condition (S): does absorbability extend off the observed grid?
+
+    The ratio test runs on the longitudinal grid {t_ij}, but `b` also
+    reaches the likelihood through the shared trajectory m_i(t), evaluated
+    at the event time T_i and at the quadrature nodes. Invariance there is
+    a SEPARATE requirement: it needs f_j(t) = s_i g_q(t) as an identity in
+    t, not merely at the observed times. It holds by construction for every
+    column type this option targets (a subject-constant column, `time`
+    itself, a covariate-by-time interaction), but "holds by construction"
+    and "holds for the arrays actually passed in" are different claims, and
+    checking costs one einsum over arrays that are already built.
+
+    Returns the worst relative residual over the generators; the caller
+    warns if it is not negligible.
+    """
+    if not gens:
+        return 0.0
+    worst = 0.0
+    Xs = np.asarray(X_time_surv, dtype=float)
+    Zs = np.asarray(Z_time_surv, dtype=float)
+    Xq = np.asarray(X_time_quad, dtype=float)
+    Zq = np.asarray(Z_time_quad, dtype=float)
+    for v, d in gens:
+        for lhs, rhs in ((Xs @ d, v * Zs[:, q_idx]),
+                          (np.einsum("nkp,p->nk", Xq, d),
+                           v[:, None] * Zq[:, :, q_idx])):
+            denom = max(float(np.abs(rhs).max()), float(np.abs(lhs).max()), 1.0)
+            worst = max(worst, float(np.abs(lhs - rhs).max()) / denom)
+    return worst
 
 def build_model(p, q, n_splines, max_obs, alpha_prior_sd=2.0,
                  sigma_e_prior_mean=None, sigma_e_prior_shape=5.0,
@@ -965,22 +1132,78 @@ def fit_nuts(X_long, y_long, n_obs, X_time_surv, X_time_quad,
         b_orth_bases = []
         _orth_report = []
         _orth_columns = []
+        _s_resid = 0.0
         for _q in range(q):
             if _q < _qmax:
-                _Q, _kept = _absorbable_basis(X_long, Z_long, n_obs, _q)
+                # TWO constructions, deliberately. The per-column search is
+                # kept for ATTRIBUTION - it names which X columns expose each
+                # direction, which is what makes the report diagnostic rather
+                # than just a dimension count. The exact construction is
+                # AUTHORITATIVE: it depends only on X's column space, so it
+                # cannot miss directions that a spline or orthogonal-
+                # polynomial basis hides from the per-column test. See
+                # _absorbable_basis_exact's docstring and Section 4.5 of
+                # vignette("jmjax-reparameterization").
+                _Qcol, _kept = _absorbable_basis(X_long, Z_long, n_obs, _q)
+                _Q, _gens = _absorbable_basis_exact(X_long, Z_long, n_obs, _q)
+                _ncol = 0 if _Qcol is None else _Qcol.shape[1]
+                _nex = 0 if _Q is None else _Q.shape[1]
+                if _nex > _ncol:
+                    warnings.warn(
+                        "orthogonalize_b: b[:,%d] - the per-column search "
+                        "found %d absorbable direction(s)%s, but %d exist. "
+                        "The extra direction(s) are absorbable only by a "
+                        "COMBINATION of fixed-effects columns that no single "
+                        "column exposes, which is what a spline or "
+                        "orthogonal-polynomial longitudinal mean produces. "
+                        "The exact (basis-independent) basis is being used, "
+                        "so the degeneracy IS removed; this notice exists "
+                        "because the per-column answer alone would have "
+                        "silently left it in place. See "
+                        "vignette('jmjax-reparameterization'), Section 4.5."
+                        % (_q, _ncol,
+                           "" if not _kept else " (from X columns %s)" % (_kept,),
+                           _nex),
+                        RuntimeWarning, stacklevel=2)
+                elif _nex < _ncol:
+                    # Proposition 2 says this cannot happen: every
+                    # per-column direction is absorbable, so the exact basis
+                    # must contain it. If it ever fires, one of the two
+                    # constructions is wrong and the fit should not be
+                    # quietly trusted.
+                    warnings.warn(
+                        "orthogonalize_b: b[:,%d] - the exact construction "
+                        "found FEWER directions (%d) than the per-column "
+                        "search (%d). This contradicts the soundness result "
+                        "and should be reported as a bug; the exact basis is "
+                        "being used." % (_q, _nex, _ncol),
+                        RuntimeWarning, stacklevel=2)
+                _s_resid = max(_s_resid, _structural_extension_residual(
+                    _gens, _q, X_time_surv, Z_time_surv,
+                    X_time_quad, Z_time_quad))
             else:
-                _Q, _kept = None, []
+                _Q, _kept, _ncol, _nex = None, [], 0, 0
             b_orth_bases.append(_Q)
-            _orth_report.append(
-                "b[:,%d] <- %s" % (
-                    _q,
-                    ("no basis (unconstrained)" if _Q is None else
-                     "%d direction(s) from X columns %s" % (_Q.shape[1], _kept))))
+            if _Q is None:
+                _desc = "no basis (unconstrained)"
+            elif _nex == _ncol:
+                # wording unchanged in the ordinary case, so existing logs
+                # and the vignette's quoted excerpts stay comparable
+                _desc = "%d direction(s) from X columns %s" % (_nex, _kept)
+            else:
+                _desc = ("%d direction(s) (%d from X columns %s, %d from "
+                         "column combinations)" % (_nex, _ncol, _kept,
+                                                    _nex - _ncol))
+            _orth_report.append("b[:,%d] <- %s" % (_q, _desc))
             _orth_columns.append({
                 "column": int(_q),
                 "applied": _Q is not None,
-                "n_directions": int(_Q.shape[1]) if _Q is not None else 0,
+                "n_directions": int(_nex),
                 "source_X_columns": [int(j) for j in _kept],
+                # exposes the per-column search's answer separately, so a
+                # caller can detect the spline/poly case programmatically
+                # rather than by reading the warning text
+                "n_directions_column_search": int(_ncol),
             })
         # Say what was ACTUALLY constrained, rather than leaving it to be
         # inferred from downstream behaviour. A verification run found
@@ -992,6 +1215,23 @@ def fit_nuts(X_long, y_long, n_obs, X_time_surv, X_time_quad,
         # by inference from a second experiment.
         warnings.warn("orthogonalize_b: " + "; ".join(_orth_report),
                       RuntimeWarning, stacklevel=2)
+        if _s_resid > 1e-6:
+            # Condition (S) of vignette("jmjax-reparameterization"),
+            # Section 4.4: absorbability is established on the longitudinal
+            # grid, but `b` also enters through m_i(t) at the event and
+            # quadrature times. If the proportionality does not extend
+            # there, the swept direction is NOT likelihood-invariant, and
+            # the reparameterization would change the model rather than
+            # only its coordinates.
+            warnings.warn(
+                "orthogonalize_b: the absorbable directions do not extend "
+                "to the survival/quadrature time grid (worst relative "
+                "residual %.2e). Condition (S) of "
+                "vignette('jmjax-reparameterization') Section 4.4 fails, so "
+                "the reparameterization is NOT guaranteed to leave the joint "
+                "likelihood unchanged for this design. Treat results from "
+                "this fit as unvalidated." % _s_resid,
+                RuntimeWarning, stacklevel=2)
         _orth_any_applied = any(_Q is not None for _Q in b_orth_bases)
         orthogonalize_report = {
             "requested": "b" if _orth_all else "b0",

@@ -44,6 +44,59 @@
 * Full mechanism, literature grounding, and validation detail:
   `vignette("jmjax-reparameterization")`.
 
+* **The absorbable-basis construction is now basis-independent, closing a
+  silent failure mode.** `_absorbable_basis()` searched one fixed-effects
+  column at a time, asking whether *that column* is a subject-constant
+  multiple of the random-effect column. But a shift in `b[:, q]` is
+  absorbed by `beta` whenever some *linear combination* of `X`'s columns
+  reproduces it, so the absorbable set depends only on `X`'s column
+  **space**, not on the basis `model.matrix()` happens to emit. The two
+  questions differ exactly when the longitudinal mean uses a spline or
+  orthogonal-polynomial basis: with `y ~ poly(time, 2)` or a natural
+  spline, no single column is a multiple of `time`, so the per-column
+  search returned nothing for the slope column and the `beta_1`/
+  `mean(b_i1)` degeneracy was left fully in place - while the intercept
+  column still produced a basis, so the "no absorbable direction" warning
+  did not fire either. A new `_absorbable_basis_exact()` computes the
+  absorbable set directly (one SVD of a `[sum n_i, p]` matrix; ~0.06s at
+  n = 8000) and is now authoritative; the per-column search is retained
+  for attribution, and a `RuntimeWarning` reports any disagreement. Every
+  returned direction is verified against the defining identity before use,
+  so the basis is sound by construction rather than by tolerance choice.
+  **Results already reported are unaffected**: on designs that spell each
+  term as its own column - every design in `dev/sim_joint.R` and both
+  study scripts - the two constructions return the same subspace, which
+  `dev/verify_absorbable_basis.py` checks directly.
+
+* **Condition (S) is now checked rather than assumed.** Absorbability was
+  established on the longitudinal grid, but `b` also enters the
+  likelihood through the shared trajectory `m_i(t)` at the event and
+  quadrature times. `_structural_extension_residual()` verifies the same
+  proportionality holds there, using arrays the backend already builds,
+  and warns if it does not - a design can satisfy the grid test by
+  coincidence (few observations per subject) while failing off-grid, in
+  which case the reparameterization would change the model rather than
+  only its coordinates.
+
+* **New: `dev/verify_absorbable_basis.py`** - 34 checks covering soundness,
+  the completeness repair, the consensus imputation for subjects whose own
+  data cannot determine their ratio, the Condition (S) check on a design
+  constructed to violate it, and a randomized sweep confirming the exact
+  construction never loses a direction the per-column search found.
+  `fit$convergence$orthogonalize` gains `n_directions_column_search`, so
+  the spline/polynomial case is detectable programmatically rather than by
+  reading warning text. **`dev/check_orth_repair.sh`** runs the whole
+  verification end to end in four stages, cheapest first, so a failure
+  stops before the expensive part: static checks, the algebra, a reinstall
+  plus confirmation that the edit actually reached the INSTALLED copy of
+  `mcmc_model.py` (it is copied at install time, so editing the source
+  tree alone changes nothing), and finally `test-orthogonalize.R`.
+
+* Formal treatment - definition of the absorbable set, exact
+  characterization, soundness and completeness propositions, and the
+  worked counterexample above - is in
+  `vignette("jmjax-reparameterization")`, Section 4.
+
 * **Test coverage added** (`tests/testthat/test-orthogonalize.R`): the
   option's supported-configuration guards, that a default fit reports
   `fit$convergence$orthogonalize = NULL` while an orthogonalized one
