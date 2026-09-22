@@ -2597,6 +2597,22 @@ jm_fit <- function(long_formula,
         py_result$posterior_samples$beta <-
           lapply(seq_len(nrow(.bm)), function(i) .bm[i, ])
 
+        # beta_corrected (SEPARATE, OPT-IN TRACK - see the "beta_corrected"
+        # block in mcmc_model.py's fit_nuts(), added for
+        # dev/study_calibration.R's analytical-correction test) is exactly
+        # the same kind of p-dimensional coefficient vector as beta, on the
+        # same (standardized) scale it was sampled on - the identical
+        # standardized-to-original map applies unchanged. Absent unless
+        # control$orthogonalize_b/_b0 found at least one absorbable
+        # direction, so this only ever ADDS a transform; it is never
+        # required and never touches beta itself.
+        if (!is.null(.ps$beta_corrected)) {
+          .bmc <- t(sapply(.ps$beta_corrected, function(z) as.numeric(unlist(z))))
+          .bmc <- .bmc %*% t(.A)
+          py_result$posterior_samples$beta_corrected <-
+            lapply(seq_len(nrow(.bmc)), function(i) .bmc[i, ])
+        }
+
         # ---- and the DIAGNOSTICS, which were being left behind ----------
         # estimates, se and posterior_samples above are all rewritten to
         # the original covariate scale. diagnostics$ess and $rhat were not:

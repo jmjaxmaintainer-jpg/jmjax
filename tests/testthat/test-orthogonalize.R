@@ -217,3 +217,93 @@ test_that("orthogonalize_b materially improves beta_1 mixing over the default fi
   expect_true(is.finite(ess_a) && is.finite(ess_e))
   expect_gt(ess_e, 1.5 * ess_a)
 })
+
+# ==============================================================================
+# beta_corrected: the SEPARATE, opt-in analytical-correction track added
+# after dev/study_calibration.R's pilot run found orthogonalize_b/_b0
+# reproduce wishart_gibbs_centered's retracted miscalibration (unbiased
+# point estimates, too-narrow credible intervals for the swept
+# parameter(s) -- see NEWS.md and vignette("jmjax-reparameterization")
+# Section 9). fit_nuts() computes beta_corrected as pure post-processing of
+# draws it already produces (b_std, sigma_b, L_corr, beta) -- no new
+# numpyro site, no refit -- so these tests check it is present exactly
+# when expected, shaped like beta, and materially restores the posterior
+# spread orthogonalization removed. The underlying algebra (the beta-shift
+# matrix's defining identity, and that it exactly reproduces the
+# unconstrained model's fitted values) is checked independently of any
+# MCMC run in dev/verify_beta_correction.py; these tests check the
+# INTEGRATION into a real fit instead.
+# ==============================================================================
+
+test_that("beta_corrected is present iff orthogonalize_b0/_b actually swept a direction", {
+  skip_if_no_backend()
+  skip_if_slow_mcmc()
+
+  sim <- simulate_joint_data_re2(n = 150, seed = 16)
+  common <- list(
+    long_formula = y ~ time,
+    surv_formula = survival::Surv(time, event) ~ 1,
+    data_long = sim$data_long, data_surv = sim$data_surv,
+    id_var = "id", time_var = "time",
+    method = "spline-PH-mcmc", random_effects = "intercept_slope"
+  )
+  ctrl <- list(num_warmup = 150, num_samples = 200, num_chains = 1, progress_bar = FALSE)
+
+  fit_a <- do.call(jm_fit, c(common, list(control = ctrl)))
+  fit_d <- do.call(jm_fit, c(common, list(control = c(ctrl, list(orthogonalize_b0 = TRUE)))))
+  fit_e <- do.call(jm_fit, c(common, list(control = c(ctrl, list(orthogonalize_b = TRUE)))))
+
+  # Default fit: nothing swept, nothing to correct.
+  expect_null(fit_a$posterior_samples$beta_corrected)
+
+  # Both D and E sweep the intercept column on this design (see the
+  # "fit$convergence$orthogonalize reports..." test above), so both should
+  # report a correction shaped exactly like beta: same number of draws,
+  # same per-draw length.
+  for (f in list(fit_d, fit_e)) {
+    bc <- f$posterior_samples$beta_corrected
+    b  <- f$posterior_samples$beta
+    expect_false(is.null(bc))
+    expect_length(bc, length(b))
+    expect_length(bc[[1]], length(b[[1]]))
+  }
+})
+
+test_that("beta_corrected materially restores the posterior spread orthogonalize_b removes", {
+  skip_if_no_backend()
+  skip_if_slow_mcmc()
+
+  # Same n/settings as the ESS-improvement test above, so this reuses a
+  # cost profile already accepted into the suite. Loose, single-seed
+  # tolerances in the same spirit as that test -- this is a regression
+  # guard against the correction silently breaking or no-op'ing, not a
+  # replication of dev/study_calibration.R's calibration study.
+  sim <- simulate_joint_data_re2(n = 300, seed = 17)
+  common <- list(
+    long_formula = y ~ time,
+    surv_formula = survival::Surv(time, event) ~ 1,
+    data_long = sim$data_long, data_surv = sim$data_surv,
+    id_var = "id", time_var = "time",
+    method = "spline-PH-mcmc", random_effects = "intercept_slope"
+  )
+  ctrl <- list(num_warmup = 500, num_samples = 800, num_chains = 1, progress_bar = FALSE)
+
+  fit_a <- do.call(jm_fit, c(common, list(control = ctrl)))
+  fit_e <- do.call(jm_fit, c(common, list(control = c(ctrl, list(orthogonalize_b = TRUE)))))
+
+  bc0 <- vapply(fit_e$posterior_samples$beta_corrected,
+                function(z) as.numeric(unlist(z))[1], numeric(1))
+  bc0_sd     <- stats::sd(bc0)
+  b0_orth_sd <- fit_e$se[["beta_0"]]
+  b0_def_sd  <- fit_a$se[["beta_0"]]
+
+  # The whole point: beta_corrected's spread for the swept parameter should
+  # be materially larger than the (miscalibrated, too-narrow) orthogonalized
+  # beta_0's own SE -- not just numerically different from it.
+  expect_gt(bc0_sd, 1.5 * b0_orth_sd)
+  # And in the right ballpark of the default fit's SE -- generous bounds
+  # (a factor of 3 either way) because this is a single seed at moderate n,
+  # not a claim of exact agreement.
+  expect_lt(bc0_sd, 3 * b0_def_sd)
+  expect_gt(bc0_sd, b0_def_sd / 3)
+})

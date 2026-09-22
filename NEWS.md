@@ -44,6 +44,49 @@
 * Full mechanism, literature grounding, and validation detail:
   `vignette("jmjax-reparameterization")`.
 
+* **Calibration/coverage HAS now been checked, and the result is negative:
+  `orthogonalize_b0`/`orthogonalize_b` reproduce `wishart_gibbs_centered`'s
+  retracted failure mode.** `dev/study_calibration.R`'s simulation-based
+  coverage study found unbiased point estimates (Corollary 1's model-
+  invariance holds, confirmed per-replicate) but credible intervals for
+  exactly the swept parameter(s) too narrow by roughly the theoretically
+  predicted `sigma_b/sqrt(N)`: `sd_ratio` ~ 0.27-0.29 (1.0 is calibrated)
+  and 95% coverage ~ 0.40 for `beta_0` under `orthogonalize_b0`/`_b` and for
+  `beta_slope` under `orthogonalize_b`, against ~1.0 coverage for both the
+  negative control (`alpha`, which never touches the swept subspace) and
+  for these same parameters under a default fit. The mechanism: the swept
+  component of `b_raw` is unidentified by the likelihood once removed from
+  `b`, so it simply draws from its prior/conditional distribution, and
+  nothing downstream reflects that uncertainty in `beta`'s own posterior.
+  This refutes the hypothesis, previously recorded in
+  `vignette("jmjax-reparameterization")` Section 4.7, that changing the
+  *prior's support* (rather than imposing an exact Gibbs constraint) might
+  avoid this failure mode - it does not.
+
+* **New, opt-in analytical-correction track: `posterior_samples$beta_corrected`.**
+  Since the swept component of `b_raw` is available in every fit's own
+  draws (`b_std`, `sigma_b`, `L_corr`) and its relationship to `beta` is
+  linear and known in closed form, the missing uncertainty can be added
+  back as PURE POST-PROCESSING, with no refit: `fit_nuts()` now computes,
+  whenever `orthogonalize_b0`/`orthogonalize_b` actually swept at least one
+  direction, `beta_corrected = beta_orth - (the beta-shift matching the
+  swept component of b_raw)` and reports it as an additional
+  `posterior_samples` key alongside the untouched `beta` (new function
+  `_absorbable_generator_matrix()` in `mcmc_model.py`; the standardized-
+  covariate back-transform in `jm_fit()` now also carries `beta_corrected`
+  when present, using the same transform already applied to `beta`). This
+  is a SEPARATE code path from the orthogonalize machinery itself - it
+  changes no sampled quantity - added specifically to test whether it
+  restores arm-A-equivalent calibration while keeping the efficiency
+  gains; empirical validation is in progress (see
+  `dev/study_calibration.R`'s `*_corrected` estimands) and is not yet
+  concluded. **New: `dev/verify_beta_correction.py`** - 34 checks
+  confirming, independent of any MCMC run, that the beta-shift matrix
+  satisfies its defining identity and that the derived correction exactly
+  reproduces the unconstrained model's fitted values, on both coordinate-
+  aligned and spline/orthogonal-polynomial (Example 1 style) designs, and
+  with multiple random-effect columns swept simultaneously.
+
 * **The absorbable-basis construction is now basis-independent, closing a
   silent failure mode.** `_absorbable_basis()` searched one fixed-effects
   column at a time, asking whether *that column* is a subject-constant

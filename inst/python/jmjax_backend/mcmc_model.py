@@ -293,6 +293,75 @@ def _structural_extension_residual(gens, q_idx, X_time_surv, Z_time_surv,
             worst = max(worst, float(np.abs(lhs - rhs).max()) / denom)
     return worst
 
+
+def _absorbable_generator_matrix(Q, gens, tol=1e-8):
+    """Beta-shift matrix matching Q's columns - the analytical-correction
+    track's only new piece of linear algebra.
+
+    SEPARATE, OPT-IN TRACK. Not used by orthogonalize_b/_b0's own sampling
+    at all (that only ever needs Q, not this). It exists for the
+    "beta_corrected" post-processing block in fit_nuts(), added after
+    dev/study_calibration.R's pilot run showed that orthogonalize_b/_b0
+    reproduce random_effects_method = "wishart_gibbs_centered"'s retracted
+    failure mode: unbiased point estimates but too-narrow credible
+    intervals for exactly the swept parameter(s), because the swept
+    component of b_raw is unidentified under the likelihood and simply
+    samples its prior, with nothing downstream reflecting that uncertainty.
+    See vignette("jmjax-reparameterization"), Section 9.
+
+    WHY THIS RECOVERS WHAT IS NEEDED. _absorbable_basis_exact() already
+    verifies, for each raw generator pair (v, d) in `gens`, the identity
+
+        X_i @ d  ==  v_i * Z_i,q(t)      for every subject i (all t)
+
+    - that is what "absorbable" means, and it is exactly the identity
+    orthogonalize_b/_b0 relies on to subtract Q's columns from b[:, q]
+    without changing any fitted value. Q is then an ORTHONORMAL basis
+    (via QR) of span(v_1, v_2, ...), so Q's own columns are themselves
+    linear combinations of those v's - and because the map d -> v = ratio @ d
+    is LINEAR, the SAME combination of the matching d's satisfies the
+    identity for Q's columns instead of the raw generators':
+
+        X_i @ Dmat[:, m]  ==  Q[:, m]_i * Z_i,q(t)
+
+    which is precisely the beta-shift a caller needs: subtracting
+    Q[:, m] * c_m from b[:, q] changes the fitted values by
+    -c_m * Q[:, m]_i * Z_i,q(t) = -c_m * X_i @ Dmat[:, m], so adding
+    c_m * Dmat[:, m] back to beta restores them. Summed over m via
+    c = Q.T @ b_raw[:, q] (the actual swept component of a given draw),
+    this is exactly what recovers an unconstrained-equivalent beta from an
+    orthogonalized fit's own posterior draws, with no refit.
+
+    HOW THE COMBINATION IS FOUND. Q lies in span(S) exactly by
+    construction (S = the raw v's stacked as columns), so solving
+    Q = S @ coeffs by least squares recovers `coeffs` to numerical
+    precision; Dmat = Dg @ coeffs (Dg = the raw d's stacked as columns)
+    applies that same combination to the d side. Verified before being
+    returned, in the same spirit as _absorbable_basis_exact's own
+    per-generator check - a silent near-miss here would surface as a
+    biased, not just mis-scaled, beta_corrected.
+
+    Returns a [p, k] array (k = Q.shape[1]), or None (with a warning) if
+    the recovery does not check out - defensive; should not happen for any
+    Q actually returned by _absorbable_basis_exact.
+    """
+    if Q is None or not gens:
+        return None
+    S = np.stack([g[0] for g in gens], axis=1)            # [N_sub, k0]
+    Dg = np.stack([g[1] for g in gens], axis=1)            # [p, k0]
+    coeffs, _, _, _ = np.linalg.lstsq(S, Q, rcond=None)    # [k0, k]
+    resid = float(np.abs(S @ coeffs - Q).max())
+    scale = max(float(np.abs(Q).max()), 1.0)
+    if resid > 1e-6 * scale:
+        warnings.warn(
+            "orthogonalize_b: could not recover a matching beta-shift basis "
+            "for the analytical-correction track (residual %.2e); "
+            "beta_corrected will not be reported for this column." % resid,
+            RuntimeWarning, stacklevel=2)
+        return None
+    return Dg @ coeffs                                     # [p, k]
+
+
 def build_model(p, q, n_splines, max_obs, alpha_prior_sd=2.0,
                  sigma_e_prior_mean=None, sigma_e_prior_shape=5.0,
                  lkj_concentration=3.0,
@@ -1108,6 +1177,16 @@ def fit_nuts(X_long, y_long, n_obs, X_time_surv, X_time_quad,
     _orth_all  = bool(control.get("orthogonalize_b", False))
     _orth_int  = bool(control.get("orthogonalize_b0", False))
     b_orth_bases = None
+    # SEPARATE, OPT-IN TRACK (see the "beta_corrected" block after
+    # mcmc.get_samples() below, and _absorbable_generator_matrix() near
+    # _absorbable_basis_exact()). Parallel to b_orth_bases: _correction_bases
+    # holds, per random-effect column, the [p, k] matrix Dmat matching the
+    # SAME Q that b_orth_bases[q] holds, i.e. the beta-shift that keeps
+    # fitted values unchanged when Q's columns are subtracted from b[:, q].
+    # This does not change what is sampled - it is read only to turn the
+    # already-sampled b_std/L_corr/sigma_b/beta draws into a corrected
+    # estimand, entirely after the fact.
+    _correction_bases = None
     # Structured record of what orthogonalize_b/_b0 actually did, surfaced
     # to R as fit$convergence$orthogonalize (NULL unless the option was
     # requested). This exists for the same reason warm_start_check does:
@@ -1130,6 +1209,7 @@ def fit_nuts(X_long, y_long, n_obs, X_time_surv, X_time_quad,
                 % (q, bool(random_effects_corr), random_effects_method))
         _qmax = q if _orth_all else 1
         b_orth_bases = []
+        _correction_bases = []
         _orth_report = []
         _orth_columns = []
         _s_resid = 0.0
@@ -1181,9 +1261,16 @@ def fit_nuts(X_long, y_long, n_obs, X_time_surv, X_time_quad,
                 _s_resid = max(_s_resid, _structural_extension_residual(
                     _gens, _q, X_time_surv, Z_time_surv,
                     X_time_quad, Z_time_quad))
+                # SEPARATE, OPT-IN TRACK: the beta-shift basis matching Q,
+                # for the "beta_corrected" post-processing block below. Reuses
+                # _Q/_gens already computed above at no extra cost (no second
+                # call into _absorbable_basis_exact).
+                _Dmat = _absorbable_generator_matrix(_Q, _gens) if _Q is not None else None
             else:
                 _Q, _kept, _ncol, _nex = None, [], 0, 0
+                _Dmat = None
             b_orth_bases.append(_Q)
+            _correction_bases.append(_Dmat)
             if _Q is None:
                 _desc = "no basis (unconstrained)"
             elif _nex == _ncol:
@@ -1247,6 +1334,7 @@ def fit_nuts(X_long, y_long, n_obs, X_time_surv, X_time_quad,
                 "column matching a random-effect term.",
                 RuntimeWarning)
             b_orth_bases = None
+            _correction_bases = None
 
     model = build_model(p, q, n_splines, max_obs, alpha_prior_sd=alpha_prior_sd,
                          baseline_hazard=baseline_hazard,
@@ -2142,6 +2230,62 @@ def fit_nuts(X_long, y_long, n_obs, X_time_surv, X_time_quad,
         samples["rho"] = L_corr_flat[:, 1, 0]
         L_corr_bc = np.asarray(samples_by_chain["L_corr"])
         samples_by_chain["rho"] = jnp.array(L_corr_bc[..., 1, 0])
+
+    # ------------------------------------------------------------------
+    # SEPARATE, OPT-IN TRACK: "beta_corrected", an analytically
+    # un-orthogonalized beta.
+    #
+    # WHY THIS EXISTS. dev/study_calibration.R's pilot run found that
+    # orthogonalize_b/_b0 reproduce random_effects_method =
+    # "wishart_gibbs_centered"'s retracted failure mode: unbiased point
+    # estimates for the swept parameter(s) (Corollary 1's model-invariance
+    # holds), but posterior SD too small by close to the theoretically
+    # predicted sigma_b/sqrt(N) - because the swept component of b_raw,
+    # c = Q^T b_raw[:, q], is unidentified under the likelihood and simply
+    # draws from its prior/conditional distribution, with that uncertainty
+    # reflected nowhere in beta's own posterior. This refutes the escape
+    # hypothesis raised in vignette("jmjax-reparameterization") Section 4.7;
+    # see Section 9 for the numbers.
+    #
+    # WHAT IT COMPUTES. For every draw, beta_orth and b_raw are related to
+    # beta_default (what an UNCONSTRAINED fit's beta would be, given the
+    # SAME b_raw draw) by
+    #
+    #     beta_default = beta_orth - sum_q  Dmat_q @ (Q_q^T @ b_raw[:, q])
+    #
+    # (see _absorbable_generator_matrix()'s docstring for the derivation).
+    # This is PURE POST-PROCESSING of draws this fit already produced - no
+    # new numpyro site, no refit - computed whenever orthogonalize_b/_b0
+    # found at least one absorbable direction, with no separate control
+    # flag: it only adds a new "beta_corrected" key, so it cannot change
+    # any existing output ("beta" itself is untouched).
+    #
+    # NOT YET HANDLED: control$standardize_covariates / control$scale_time
+    # (R/jm_fit.R) back-transform posterior_samples$beta but do not know
+    # about this key - a fit using either option will have beta_corrected
+    # on the SAMPLED, not the back-transformed, scale. Not exercised by
+    # dev/study_calibration.R, which uses neither; flagged here so a future
+    # caller does not assume otherwise.
+    # ------------------------------------------------------------------
+    if (_correction_bases is not None
+            and any(_D is not None for _D in _correction_bases)
+            and "beta" in samples and "b_std" in samples
+            and "L_corr" in samples and "sigma_b" in samples):
+        _beta_d = np.asarray(samples["beta"])              # [n_draws, p]
+        _bstd_d = np.asarray(samples["b_std"])              # [n_draws, N_sub, q]
+        _Lcorr_d = np.asarray(samples["L_corr"])            # [n_draws, q, q]
+        _sigb_d = np.asarray(samples["sigma_b"])            # [n_draws, q]
+        _L_d = _sigb_d[:, :, None] * _Lcorr_d               # [n_draws, q, q]
+        # b_raw = b_std @ L.T, batched over draws.
+        _braw_d = np.einsum("dnq,dpq->dnp", _bstd_d, _L_d)  # [n_draws, N_sub, q]
+        _delta = np.zeros_like(_beta_d)
+        for _q_idx, _Dmat in enumerate(_correction_bases):
+            if _Dmat is None:
+                continue
+            _Qb = b_orth_bases[_q_idx]                      # [N_sub, k]
+            _c = np.einsum("nk,dn->dk", _Qb, _braw_d[:, :, _q_idx])  # [n_draws, k]
+            _delta += _c @ _Dmat.T                           # [n_draws, p]
+        samples["beta_corrected"] = _beta_d - _delta
 
     # "b" (q=1's directly-sampled site, or q=2's deterministic b_std @
     # L.T transform, or q=2 wishart_gibbs's directly-sampled site) and
