@@ -98,7 +98,10 @@ within Monte Carlo noise on the one design checked so far. It is reported
 for completeness, because the evidence is consistent across every
 configuration tried, not because it has yet received the breadth of
 validation (multiple designs, real data, the random-slope column) the
-rest of this document's claims have. The document closes by connecting
+rest of this document's claims have. Section 4.10 proves the construction exact, shows that a conditioning
+effect of NUTS's diagonal mass matrix is sufficient to explain its gain
+without the funnel-type pathology first suspected, and derives an extension to the
+random-slope column that remains to be implemented and tested. The document closes by connecting
 this to established reparameterization and MCMC literature, including the
 specific point (Geyer, 1992) that explains why a sampled coordinate can
 mix beautifully while the linear combination needed to recover the
@@ -849,6 +852,23 @@ Definition 1 its effect on the fitted values is *exactly* reproducible by
 a shift in $\beta$. Recovering the unconstrained parameterization is
 therefore a matter of applying that shift.
 
+**Prior work.** The same construction appears, for a spatial random
+effect in a linear or generalized linear model, in the restricted spatial
+regression literature (Reich, Hodges & Zadnik 2006; Hughes & Haran 2013,
+who also motivate the restriction computationally). Hanks et al. (2015,
+eq. 17) give the bijection $\delta = \beta + (X^{\top}X)^{-1}X^{\top}\eta$
+between the unrestricted model's coefficients $\beta$ and the restricted
+model's $\delta$, under which the two likelihoods coincide, and Bradley
+(2024) states the corresponding posterior equivalence in general form.
+Definition 2 and Propositions 6-7 below are the joint-model analogue of the
+inverse map - restricted to unrestricted, hence the opposite sign - with
+the absorbable set $\mathcal{A}$ in place of the column space of $X$ and
+Condition (S) carrying the argument through the survival submodel. The
+narrow intervals of the uncorrected, restricted coefficient that Section
+9.1 measures are likewise the joint-model counterpart of Khan & Calder's
+(2022) finding for restricted spatial regression. Earlier versions of
+this section did not cite this literature.
+
 **Definition 2 (generator map).** Let $Q \in \mathbb{R}^{N \times k}$ be
 the orthonormal basis of swept directions, with
 $\operatorname{span}(Q) \subseteq \mathcal{A}$ by Proposition 3. For each
@@ -1041,6 +1061,401 @@ the statements above:
    combination that QR applies to the directions, and verifies the
    resulting identity before use; `dev/verify_beta_correction.py` checks
    this independently of any MCMC run.
+
+### 4.10 Why the corrected estimand mixed slowly, and an exact rotation that fixes it
+
+Section 9.1.1 measures that `beta_corrected` inherits almost none of the
+swept coefficient's efficiency gain, and Section 9.1.2 measures that
+rotating `b_std[:, 0]` recovers most of it. This subsection explains both
+measurements, states when the recovery is guaranteed and when it is not,
+and derives two changes to the construction that the theory predicts will
+carry it to the slope column and to strongly correlated random effects.
+The results come in three grades, kept separate on purpose. Lemma 1 and
+Propositions 8 and 9 are exact for the full joint model. Proposition 10 is
+exact for the model with the variance components held fixed, under the
+oracle diagonal metric that NUTS's adaptation estimates; with the variance
+components sampled, it describes the conditional geometry that sampling
+averages over. The step from
+that geometry to effective sample size is a stylised model of NUTS, and is
+labelled as one.
+
+**Setting.** The random effects are sampled non-centred:
+$b_{\mathrm{raw}} = b_{\mathrm{std}} L^{\top}$, with the entries of
+$b_{\mathrm{std}} \in \mathbb{R}^{N \times q}$ independent
+$\mathcal{N}(0, 1)$ a priori and $L = \operatorname{diag}(\sigma_b)\,
+L_{\mathrm{corr}}$ lower-triangular. For $q = 2$,
+
+$$L = \begin{pmatrix} \sigma_0 & 0 \\ \rho\,\sigma_1 & s\,\sigma_1
+\end{pmatrix}, \qquad s = \sqrt{1 - \rho^{2}}.$$
+
+Let $\mathcal{S}$ be the set of swept columns ($\{0\}$ for
+`orthogonalize_b0`; every column with a non-empty basis for
+`orthogonalize_b`), $Q_j \in \mathbb{R}^{N \times k_j}$ the orthonormal
+basis swept from column $j$, and $Q_{\cup} \in \mathbb{R}^{N \times k}$ an
+orthonormal basis of $\operatorname{span}\bigcup_{j \in \mathcal{S}} Q_j$.
+The swept random effects are $b = \operatorname{sw}(b_{\mathrm{raw}})$,
+where $\operatorname{sw}(W)[\,\cdot\,, j] = (I - Q_j Q_j^{\top})\,
+W[\,\cdot\,, j]$ for $j \in \mathcal{S}$ and $W[\,\cdot\,, j]$ otherwise,
+and the orthogonalized likelihood $L^{\mathrm{orth}}$ depends on
+$b_{\mathrm{std}}$ only through $b$. Write $\theta$ for every other
+parameter, including $\beta$, $\sigma_b$ and $L_{\mathrm{corr}}$.
+
+**Definition 3 (flat subspace).** For fixed $\theta$,
+$\mathcal{F}(\theta) = \{\Delta \in \mathbb{R}^{N \times q} :
+\operatorname{sw}(\Delta L^{\top}) = 0\}$.
+
+Because $\operatorname{sw}$ is linear, $L^{\mathrm{orth}}$ is unchanged by
+$b_{\mathrm{std}} \mapsto b_{\mathrm{std}} + \Delta$ for every
+$\Delta \in \mathcal{F}(\theta)$. These are exactly the directions that,
+in Section 9.1's words, "simply sample their prior".
+
+**Lemma 1 (where the flat subspace lives).** $\Delta \in
+\mathcal{F}(\theta)$ if and only if $\Delta = W (L^{\top})^{-1}$ for some
+$W$ with $W[\,\cdot\,, j] \in \operatorname{span}(Q_j)$ for
+$j \in \mathcal{S}$ and $W[\,\cdot\,, j] = 0$ otherwise. Hence
+$\dim \mathcal{F}(\theta) = \sum_{j \in \mathcal{S}} k_j$, and every
+column of every $\Delta \in \mathcal{F}(\theta)$ lies in
+$\operatorname{span}(Q_{\cup})$ - for every value of $\theta$, even though
+$\mathcal{F}(\theta)$ itself moves with $L$.
+
+*Proof.* Put $W = \Delta L^{\top}$; $L$ is invertible. $\operatorname{sw}
+(W) = 0$ holds exactly when every swept column satisfies
+$(I - Q_j Q_j^{\top}) W[\,\cdot\,, j] = 0$, that is
+$W[\,\cdot\,, j] \in \operatorname{span}(Q_j)$, and every unswept column is
+zero. $W \mapsto W (L^{\top})^{-1}$ is a bijection, which gives the
+dimension, and each column of $W (L^{\top})^{-1}$ is a linear combination
+of columns of $W$, all of which lie in $\operatorname{span}(Q_{\cup})$.
+$\square$
+
+For the case every pilot in this document used ($q = 2$,
+$\mathcal{S} = \{0\}$, $Q_{\cup} = Q_0$), Lemma 1 gives the flat subspace
+explicitly. With $W = [\,Q_0 c,\; 0\,]$ and
+$(L^{\top})^{-1} = \begin{pmatrix} 1/\sigma_0 & -\rho/(s\sigma_0) \\
+0 & 1/(s\sigma_1) \end{pmatrix}$,
+
+$$\Delta = \frac{1}{s\,\sigma_0}\,\big[\; s\,Q_0 c,\;\; -\rho\,Q_0 c
+\;\big]:$$
+
+each flat direction is $s$ parts intercept column and $-\rho$ parts slope
+column, both along $\operatorname{span}(Q_0)$. Only at $\rho = 0$ does it
+lie entirely in the intercept column.
+
+**Proposition 8 (fixed rotations are exact).** Let
+$R = [\,Q_{\cup} \mid Q_{\perp}\,]$ be any fixed $N \times N$ orthogonal
+matrix, and $\mathcal{C} \subseteq \{0, \dots, q-1\}$ any set of columns.
+Reparameterize $b_{\mathrm{std}}[\,\cdot\,, j] = Q_{\cup} U[\,\cdot\,, j]
++ Q_{\perp} V[\,\cdot\,, j]$ for $j \in \mathcal{C}$ (other columns
+unchanged), with independent $\mathcal{N}(0, 1)$ priors on the entries of
+$U \in \mathbb{R}^{k \times \lvert\mathcal{C}\rvert}$ and
+$V \in \mathbb{R}^{(N-k) \times \lvert\mathcal{C}\rvert}$.
+Then (i) the map $(U, V) \mapsto b_{\mathrm{std}}$ is linear with
+$\lvert\det\rvert = 1$; (ii) the prior it induces on $b_{\mathrm{std}}$ is
+exactly the original one; (iii) consequently the posterior of every model
+quantity - $\beta$, $b_{\mathrm{raw}}$, $b$, $\theta$ and `beta_corrected`
+- is identical to the unrotated parameterization's, and so is every
+calibration property of every estimand, up to Monte Carlo error; and (iv)
+$U[\,\cdot\,, j] = Q_{\cup}^{\top} b_{\mathrm{std}}[\,\cdot\,, j]$.
+
+*Proof.* On each rotated column the map is multiplication by the
+orthogonal $R$, so $\lvert\det\rvert = 1$ and
+$R\,\mathcal{N}(0, I_N) = \mathcal{N}(0, R R^{\top}) = \mathcal{N}(0, I_N)$,
+giving (i) and (ii). The likelihood is a function of $b_{\mathrm{std}}$
+and $\theta$, whose joint prior is unchanged, so the posterior pushed
+forward to the original coordinates is unchanged: (iii). (iv) follows from
+$Q_{\cup}^{\top} Q_{\perp} = 0$. $\square$
+
+`orthogonalize_b0_rotate` as implemented is the case
+$\mathcal{C} = \{0\}$, $Q_{\cup} = Q_0$, with $Q_{\perp}$ a seeded random
+completion. Proposition 8(iii) is why Section 9.1.2's $R = 100$
+calibration comparison came out as it did: equality between `D` and
+`D_rot` was predicted exactly, so that study tested the *implementation* -
+a bug would have shown up as a difference - rather than the construction.
+
+**Proposition 9 (the flat coordinates are a posteriori exactly their
+prior).** Fix $\theta$, let $B_{\theta}$ be an orthonormal basis of
+$\mathcal{F}(\theta)$ (Frobenius inner product), and let $\xi$ and $\zeta$
+be the coordinates of $b_{\mathrm{std}}$ along $\mathcal{F}(\theta)$ and
+along its orthogonal complement. Then, under the full joint model,
+
+$$p(\xi \mid \zeta, \theta, y) \;=\; \mathcal{N}\big(\xi;\, 0,\,
+I_{\dim\mathcal{F}}\big).$$
+
+Because the right-hand side does not involve $(\zeta, \theta)$, $\xi$ is a
+posteriori exactly standard normal and independent of $(\zeta, \theta)$,
+even though the subspace it is measured along moves with $\theta$.
+
+*Proof.* The prior on $b_{\mathrm{std}}$ is rotation-invariant, so
+$(\xi, \zeta) \mid \theta$ are independent standard normal.
+$L^{\mathrm{orth}}$ depends on $b_{\mathrm{std}}$ only through
+$\operatorname{sw}(b_{\mathrm{std}} L^{\top})$, which by construction
+depends on $\zeta$ alone. Hence
+$p(\xi, \zeta, \theta \mid y) \propto \pi(\theta)\,
+\mathcal{N}(\xi; 0, I)\, \mathcal{N}(\zeta; 0, I)\,
+L^{\mathrm{orth}}(\zeta, \theta)$, which factorizes in $\xi$. (Only the
+fact that the likelihood sees the swept $b$ is used; Condition (S) is
+what gives `beta_corrected` its meaning, not what makes $\xi$ flat.)
+$\square$
+
+This is the standard fact that data carry no information about
+non-identified parameters beyond what the identified ones carry (Dawid
+1979; Poirier 1998; Gustafson 2015). What Proposition 9 adds is the
+location of those parameters in `jmjax`'s own coordinates, and the
+observation that they carry most of `beta_corrected`'s uncertainty: by
+Proposition 6, `beta_corrected` $= \tilde\beta = \beta - \Gamma\,\sigma_0\,
+Q_0^{\top} b_{\mathrm{std}}[\,\cdot\,, 0]$ with $\beta$ the sampled, swept
+coefficient, and in the closed-form check below the flat coordinates carry
+87-96% of its posterior variance at $\lvert\rho\rvert \le 0.3$, falling to
+about 27% at $\rho = 0.9$.
+
+**Corollary 3 (the intercept-only case).** Take $q = 2$,
+$\mathcal{S} = \{0\}$, and write $u = Q_0^{\top} b_{\mathrm{std}}
+[\,\cdot\,, 0]$ and $w = Q_0^{\top} b_{\mathrm{std}}[\,\cdot\,, 1]$ for the
+intercept and slope columns' generator coordinates. The flat coordinates
+are $\xi = s\,u - \rho\,w$, and the identified coordinates in the same
+plane are $\eta = \rho\,u + s\,w$; equivalently $u = s\,\xi + \rho\,\eta$
+and $w = -\rho\,\xi + s\,\eta$. Consequently:
+
+(i) if $\rho = 0$, $u$ is a posteriori exactly $\mathcal{N}(0, I_k)$ and
+independent of everything else, so the covariance a dense mass block on
+$u$ would try to learn is the identity. $\rho = 0$ has probability zero
+under a sampled correlation, and the pilots generated data at
+$\rho = 0.3$; but Proposition 10(b) below shows that once $u$ is its own
+coordinate, what remains slow lies along $w$, in the slope column, which a
+dense block on $u$ alone cannot reach. Either way, the pilots' finding
+that `dense_mass_b0_generator` adds nothing (Section 9.1.2) is what the
+theory predicts;
+
+(ii) if $\rho \neq 0$, a fraction $\rho^{2}$ of each flat direction lies
+along $w$ - outside the rotated block, spread across the slope column's
+per-subject coordinates. The current rotation therefore captures the flat
+subspace completely only at $\rho = 0$.
+
+*Proof.* Normalize the direction given after Lemma 1. $\square$
+
+**Proposition 10 (what a diagonal metric sees, with the variance
+components fixed).** Hold the variance components
+$\psi = (\sigma_b, \rho, \sigma_e)$ fixed. Let $\Sigma$ be the posterior
+covariance of the sampled coordinates and $M = \operatorname{diag}(\Sigma)$
+the oracle diagonal metric - the inverse mass matrix (NumPyro's
+`inverse_mass_matrix`) that windowed adaptation estimates. For a direction
+$\delta$ write $\mathcal{R}(\delta) = \delta^{\top}\Sigma\,\delta \big/
+\delta^{\top} M \delta$ for its variance after whitening by $M$; by
+Courant-Fischer $M^{-1/2}\Sigma M^{-1/2}$ has an eigenvalue at least
+$\mathcal{R}(\delta)$, so a large $\mathcal{R}$ certifies a slow direction.
+Take $q = 2$, $\mathcal{S} = \{0\}$, a column $g = Q_0[\,\cdot\,, m]$, the
+generator coordinates $u_m = g^{\top} b_{\mathrm{std}}[\,\cdot\,, 0]$ and
+$w_m = g^{\top} b_{\mathrm{std}}[\,\cdot\,, 1]$ of Corollary 3, the
+posterior variance $\lambda_m \ge 0$ of the identified combination
+$\eta_m = \rho u_m + s w_m$, and the marginal posterior variances $m_{j,i}$
+of $b_{\mathrm{std}}[i, j]$, with $\bar m_j = \sum_i g_i^{2} m_{j,i}$.
+Then
+
+$$\operatorname{Var}(u_m) = s^{2} + \rho^{2}\lambda_m, \quad
+\operatorname{Var}(w_m) = \rho^{2} + s^{2}\lambda_m, \quad
+\operatorname{Cov}(u_m, w_m) = -\rho s\,(1 - \lambda_m),$$
+
+and:
+
+(a) *plain `orthogonalize_b0`*: $\mathcal{R}(u_m) = (s^{2} +
+\rho^{2}\lambda_m)/\bar m_0$, $\mathcal{R}(w_m) = (\rho^{2} +
+s^{2}\lambda_m)/\bar m_1$, and for the flat direction itself
+$\mathcal{R}(\xi_m) = 1/(s^{2}\bar m_0 + \rho^{2}\bar m_1)$;
+
+(b) *column 0 rotated, as implemented*: $\mathcal{R}(u_m) = 1$ and
+$\mathcal{R}(\xi_m) \le 1/s^{4}$, but $\mathcal{R}(w_m)$ is exactly as in
+(a);
+
+(c) *every column rotated by $Q_0$*: $u_m$ and $w_m$ are both coordinates,
+and the whitened covariance restricted to them is their correlation
+matrix, so every direction in their plane has
+$\mathcal{R} \in [1 - \lvert r_m\rvert,\, 1 + \lvert r_m\rvert] \subseteq
+[0, 2]$, where
+$r_m = -\rho s (1 - \lambda_m) \big/ \sqrt{(s^{2} + \rho^{2}\lambda_m)
+(\rho^{2} + s^{2}\lambda_m)}$. With $q$ random-effect columns the same
+argument gives $[0, q]$.
+
+*Proof.* By Proposition 9 with $\psi$ fixed, $\xi_m = s u_m - \rho w_m$ has
+unit variance and is uncorrelated with $\eta_m$; inverting,
+$u_m = s\xi_m + \rho\eta_m$ and $w_m = -\rho\xi_m + s\eta_m$, which gives
+the three moments. In the unrotated coordinates $u_m$ is the direction
+$(g, 0)$ and $w_m$ the direction $(0, g)$, so their denominators are
+$\bar m_0$ and $\bar m_1$; the flat direction is $(s g, -\rho g)$, giving
+(a). In (b), $u_m$ is a coordinate, whose diagonal metric entry is its own
+variance, so $\mathcal{R}(u_m) = 1$; for the flat direction
+$\delta^{\top} M \delta = s^{2}\operatorname{Var}(u_m) + \rho^{2}\bar m_1
+\ge s^{4}$; and column 1 is untouched, so $\mathcal{R}(w_m)$ is unchanged.
+In (c) the restriction of $M^{-1/2}\Sigma M^{-1/2}$ to the two coordinates
+is their correlation matrix, whose eigenvalues are $1 \pm \lvert r_m\rvert$,
+and every Rayleigh quotient lies between them; a $q \times q$ correlation
+matrix has eigenvalues in $[0, q]$. $\square$
+
+*Reading Proposition 10.* The $m_{j,i}$ are per-subject shrinkage factors,
+small when each subject's own data pin down its own random effects: many
+visits, small $\sigma_e$ relative to $\sigma_b$. (In a random-intercept-
+only Gaussian model $m_{0,i} = (1 + n_i\sigma_0^{2}/\sigma_e^{2})^{-1}$
+exactly; a random slope enlarges them through within-subject
+intercept-slope confounding, but the dependence runs the same way.) They
+are $g$-weighted averages, so they do not shrink with $N$. Part (a) says
+both generator coordinates are slow under the plain sweep: at the pilots'
+design `dev/theory_rotation_toy.py` gives $\mathcal{R}(u_m) \approx 14$,
+rising to 22-31 with 8-20 visits per subject. Part (b) says that under the
+current rotation $u$ is no longer certified slow (every coordinate has
+$\mathcal{R} = 1$ under an oracle diagonal metric), but $w$ still is, and
+its variance contains a $\rho^{2}$ share of the flat direction.
+`beta_corrected` for the intercept depends on $u$ alone, but $u$ and $w$
+are correlated ($\lvert r_m\rvert$ from 0.59 to 0.99 in the toy at
+$\sigma_e = 0.3$ with 2-11 or 8-20 visits and $\rho \ge 0.3$; 0.29-0.46
+with 2-4 visits), so a slow $w$ drags $u$ with it. The drag needs both a
+large $\mathcal{R}(w)$, which falls as $\lvert\rho\rvert$ grows, and a
+large $\lvert r_m\rvert$, which rises with it, so it peaks at intermediate
+$\rho$ and grows with the information about individual slopes. Part (c)
+says that rotating every column makes each generator row's plane
+coordinate-aligned: within a row no direction is slower than $q$ times the
+scale of its own coordinates, whatever the data, $N$ or $\rho$. Across
+rows the coordinates can still be correlated through the identified
+combinations $\eta$, so the only general bound for the whole
+$k \times q$ block is $kq$; in the toy the whole block stays below 2 in
+all 24 designs, for both `D` and `E`. What (c)
+does not bound is the fast side: when $\lvert r_m\rvert$ is near 1 the
+plane also contains a narrow direction ($1 - \lvert r_m\rvert$), which can
+shrink NUTS's step size. A dense mass block on the $k \times q$ generator
+block, or the $\theta$-dependent rotation of Corollary 4, removes it.
+
+**From geometry to effective sample size (a model, not a theorem).** HMC's
+step size is limited by the narrowest whitened direction, and NUTS's
+trajectory length is set largely by the bulk of the whitened spectrum
+(Neal 2011, Sections 4.1-4.4; Hoffman & Gelman 2014) - the second half
+of that sentence is the modelling assumption. A direction whose
+whitened variance $\Lambda$ exceeds the bulk's is then crossed
+diffusively, with an integrated autocorrelation time (IAT) growing roughly
+linearly in $\Lambda$. That diagonal preconditioning need not remove a
+poorly scaled direction oblique to the coordinate axes - and can even make
+conditioning worse - is shown by example in Hird & Livingstone (2025); the regression-level instance of the same problem is what Stan's
+QR reparameterization addresses (Stan Development Team, *User's Guide*,
+"The QR reparameterization"). What is specific here is where the direction
+is (Lemma 1), that its whitened variance grows with per-subject
+information (Proposition 10(a)), and that a fixed rotation aligns it with
+the axes without changing the model (Proposition 8). In a stylised model -
+exact Hamiltonian dynamics, integration time uniform on $[0, 2T_0]$ with
+$T_0$ set by the bulk - a direction of whitened variance $\Lambda$ has
+IAT $(1 + r)/(1 - r)$ with $r = \sin(\pi/\sqrt{\Lambda})\big/
+(\pi/\sqrt{\Lambda})$, $\Lambda$ measured relative to the bulk (the
+median whitened eigenvalue, 0.97-1.17 in the toy): 1 at $\Lambda = 1$,
+about $1.2\,\Lambda$ for large $\Lambda$.
+
+This also revises Section 9.1.1's diagnosis. There, the slow mixing was
+attributed to the `b` block's own funnel-type conditioning under
+`sigma_b`. The closed-form check below holds every variance component
+fixed - so no funnel can arise - and still produces slow mixing of the
+corrected estimands under the plain sweep (IAT 13-34 iterations for the
+intercept) and its repair by rotation (IAT 1-5 with the current rotation, 1-2
+rotating every column). Misalignment of the
+generator directions with the coordinate axes is therefore sufficient; the
+funnel is not needed to explain the pattern, though with sampled variance
+components it may still contribute.
+
+**A closed-form check.** `dev/theory_rotation_toy.py` (NumPy only; 10-20
+s) computes the exact posterior of the longitudinal submodel with the
+variance components fixed at `dev/sim_joint.R`'s generating values and
+$N = 300$. It verifies Proposition 9 (the flat coordinates' covariance
+equals $I$, and their covariance with every other coordinate is zero, to
+below $5 \times 10^{-13}$, for $\rho \in \{0, 0.3, 0.6, 0.9\}$), and
+matches every closed form in Proposition 10 - the three moments,
+$\mathcal{R}$ of $u$, $w$ and $\xi$ in (a) and (b), and the plane's
+eigenvalues in (c) - to within $2 \times 10^{-12}$ across 24 designs. Under the stylised NUTS model it gives these
+IATs, in iterations (1 means effectively independent draws; `rot0` is the
+current column-0 rotation, `rot-all` rotates every column by $Q_0$):
+
+| visits per subject | $\rho$ | intercept: `D` | `D` + rot0 | `E` + rot0 | `E` + rot-all | slope: `E` | `E` + rot0 | `E` + rot-all |
+|---|---:|---:|---:|---:|---:|---:|---:|---:|
+| 2-11 | 0.0 | 13.0 | 1.1 | 1.1 | 1.2 | 34.9 | 43.3 | 1.9 |
+| 2-11 | 0.3 | 13.9 | 1.8 | 1.8 | 1.4 | 17.1 | 20.8 | 1.6 |
+| 2-11 | 0.6 | 14.8 | 2.2 | 2.3 | 1.6 | 10.9 | 7.1 | 1.3 |
+| 2-11 | 0.9 | 20.3 | 1.7 | 1.5 | 1.4 | 19.8 | 1.3 | 1.1 |
+| 8-20 | 0.0 | 34.0 | 1.0 | 1.1 | 1.1 | 207.2 | 160.6 | 1.0 |
+| 8-20 | 0.3 | 28.5 | 3.7 | 3.8 | 1.6 | 64.3 | 66.3 | 1.1 |
+| 8-20 | 0.6 | 26.4 | 4.1 | 4.5 | 1.6 | 25.4 | 17.7 | 1.1 |
+| 8-20 | 0.9 | 28.1 | 2.0 | 1.8 | 1.3 | 27.1 | 1.9 | 1.1 |
+
+Three features of this table are predictions the simulations can test.
+First, the current rotation's advantage is reduced at intermediate
+$\rho$ when individual slopes are well identified (8-20 visits,
+$\rho = 0.3$-$0.6$, IAT 3.7-4.5 against about 1 at $\rho = 0$): Proposition
+10(b)'s unrotated $w$, correlated with $u$. Rotating every column removes
+the reduction. Second, the current construction leaves the slope's
+corrected estimand slow except at large $\lvert\rho\rvert$, while rotating
+every column repairs it at every $\rho$. Proposition 10 is stated for
+`orthogonalize_b0`, so this second prediction goes slightly beyond it.
+Under `orthogonalize_b` the slope's correction depends on the slope
+column's generator coordinate along $Q_1$, $\rho\,u + s\,w$ in Corollary
+3's notation, where both columns are swept and both combinations are
+flat. The current rotation makes only $u$ a coordinate, so a share $s^{2}$
+of that quantity stays along the misaligned $w$. That share is large at
+small $\rho$ and small at $\rho = 0.9$, which matches the table: `E` +
+rot0 slope IAT 20.8-160.6 for $\rho \le 0.3$ against 1.3-1.9 at
+$\rho = 0.9$. Extending Proposition 10's statement to both columns swept
+is routine along rows where both are swept, since both coordinates are
+then exactly flat, but it is not written out here. Third, the
+gain does not depend on $N$: for the current rotation (random completion,
+as implemented) at the pilots' design, the model predicts 8.5x ESS per
+gradient over `D` at $N = 150$, 300 and 600.
+
+Against the pilots the agreement is partial, and should be read that way.
+The pilots measured the rotation at 5.8x-7.6x ESS per second over arm `A`,
+with `D` itself at 0.91x-1.05x of `A` - roughly 6x-8x over `D`, close to
+the model's 8.5x (the rotated arm also took about 35% longer per fit,
+which the model does not predict). But the model puts `D` at about 2x `A`
+for the intercept, and `E` at 3x-4x `A` for both the intercept and the
+slope, where the pilots measured about 1x and 1.3x. So the model shows
+that misalignment is sufficient to make the corrected estimands mix
+slowly, and it predicts the rotation's gain well; it does not reproduce
+the pilots' finding that the plain sweep gains almost nothing over a
+default fit. Whatever else contributes to that - sampled variance
+components, the survival submodel, adaptation error - is outside it.
+
+**Corollary 4 (two changes the theory recommends; not yet implemented).**
+
+1. *Rotate every column by the same fixed $Q_{\cup}$* (Proposition 8 with
+   $\mathcal{C}$ = all columns). By Lemma 1 this contains the flat
+   subspace, for every value of $\rho$, inside an explicit $k \times q$
+   block, and by Proposition 10(c) no direction within any one generator row
+   is then slower, after whitening, than 2 (or $q$ with $q$ random-effect
+   columns; the whole block is bounded only by $kq$ in general, though it
+   stays below 2 in the toy). This removes the obstacle `_orthogonal_complement()`'s docstring and
+   Section 9.1.2 give for not extending the rotation to the slope column:
+   the $\rho$-dependence is real, but it now lives inside a small, fixed
+   block instead of across the per-subject coordinates. The remaining
+   factor of at most 2 can be removed either by a dense mass block on
+   that $k \times q$ block, or exactly, by rotating each row of $U$ by the
+   $\theta$-dependent orthogonal matrix that maps it to $(\xi, \eta)$.
+   That map is orthogonal in $U$ for fixed $\theta$, so its full Jacobian
+   is block-triangular with unit determinant, and by Proposition 9 it
+   makes $\xi$ exactly standard normal and a posteriori independent of
+   everything else for every $\theta$. $\xi$ could then even be drawn
+   outside NUTS altogether.
+2. *Replace the seeded random completion $Q_{\perp}$ by the Householder
+   completion.* Both are exact (Proposition 8) and mix identically in the
+   closed-form check (within 1% at $N = 150$-600). The random completion
+   is a dense $N \times (N - k)$ matrix: $O(N^{2})$ memory and
+   $O(N^{2})$ work per gradient evaluation, 0.25-0.5 GB at
+   $N = 8000$ depending on precision. The Householder form ($k$ reflectors) needs $O(Nk)$ for
+   both, and needs no seed.
+
+**What this establishes and what it does not.** Exact for the full joint
+model: Lemma 1, Proposition 8 (including calibration invariance) and
+Proposition 9. Exact conditional on the variance components: Proposition
+10. Not established: that NUTS follows the stylised IAT model once the
+variance components are sampled (where a genuine funnel and a
+$\sigma_b$-dependent mass matrix can add difficulty), with the survival
+submodel present, and with an estimated rather than oracle mass matrix;
+and whether the per-iteration overhead stays small. Those are what the
+simulation plan in Section 9.3 is designed to test. On that evidence, the
+case for making the rotation a default rests on Proposition 8 (it cannot
+change any answer) and Proposition 10(c) (after rotating every column, no
+direction within a generator row is slower than $q$ times its
+coordinates' own scale, whatever the data). The remaining questions are
+about cost - including the narrow direction noted after Proposition 10 -
+and robustness, not about correctness.
 
 ## 5. Correctness validation
 
@@ -1524,20 +1939,20 @@ reason is instructive rather than merely disappointing.
 
 **Why the prediction failed.** Section 2.7 (Geyer, 1992) is the general
 point: ESS belongs to a specific scalar functional of the chain, not to
-"the sampler." The sampled `beta` in an orthogonalized fit is $\tilde\beta$
-in Section 4.9's notation, and `beta_corrected` is $\Phi$'s inverse applied
-to the stored draws - a different linear functional of
-$(\tilde\beta, b_{\mathrm{raw}})$ than $\tilde\beta$ alone, with no general
-guarantee of inheriting its mixing rate. The specific mechanism:
-Proposition 6 defines
-$\tilde\beta = \beta - \Gamma(Q^{\top}b_{\mathrm{raw}}[\cdot, q_\ast])$ for
-the *original*, unconstrained model - the location degeneracy this
-document diagnoses was always a trade-off between $\beta$ and that
-particular linear combination of $b_{\mathrm{raw}}$. Sampling in the
-orthogonalized parameterization and recovering $\beta$ afterwards does not
-remove that trade-off ($\Phi$ is measure-preserving; Proposition 6(i)-(iii)
-show it cannot), it *relocates* which coordinate carries it: $\tilde\beta$
-becomes the well-identified combination (fast-mixing, as Sections 6.3/7.1
+"the sampler." The sampled `beta` in an orthogonalized fit is $\beta$
+in Section 4.9's notation, and `beta_corrected` is $\tilde\beta$, obtained
+by applying $\Phi$ to the stored draws - a different linear functional of
+$(\beta, b_{\mathrm{raw}})$ than $\beta$ alone, with no general guarantee
+of inheriting its mixing rate. (An earlier version of this paragraph used
+the two symbols the other way round.) The specific mechanism: the location
+degeneracy this document diagnoses was always a trade-off, in the
+unconstrained model, between its coefficient - $\tilde\beta$ - and the
+linear combination $Q^{\top}b_{\mathrm{raw}}[\cdot, q_\ast]$ that
+Proposition 6 subtracts. Sampling in the orthogonalized parameterization
+and recovering $\tilde\beta$ afterwards does not remove that trade-off
+($\Phi$ has unit Jacobian and preserves the likelihood; Proposition 6(i)-(iii) show it cannot), it
+*relocates* which coordinate carries it: the sampled $\beta$ becomes the
+well-identified combination (fast-mixing, as Sections 6.3/7.1
 confirm), and the degeneracy is now expressed entirely through
 $Q^{\top}b_{\mathrm{raw}}[\cdot, q_\ast]$ - the very quantity the recovery
 step adds back in. That quantity is not an isolated, prior-dominated
@@ -1551,6 +1966,23 @@ matrix NUTS must use across every direction in `b` simultaneously.
 against the b-block's own internal conditioning, so the relocated
 direction inherits whatever mixing rate that block already had - which
 this measurement puts close to a default fit's, not close to the prior's.
+
+**Correction (Section 4.10).** The mechanism proposed in the paragraph
+above - that the relocated direction inherits the `b` block's funnel-type
+conditioning under `sigma_b` - is not needed to explain this measurement,
+and is kept only as a record of what was believed when it was made.
+Section 4.10 shows, in a closed-form check with every variance component
+held fixed (so no funnel can arise), that misalignment is sufficient: the
+generator coordinate $u = Q_0^{\top} b_{\mathrm{std}}[\cdot, 0]$ that the
+correction adds back is dominated by an exactly flat component (all of it
+when $\rho = 0$) with unit variance given the variance components, lying
+oblique to the per-subject coordinates, so a diagonal mass matrix cannot
+rescale it; its whitened variance grows with the information each subject
+carries about its own random effects (Proposition 10(a)). Whether the
+funnel adds to this once the variance components are sampled is not
+settled by that check. The first half of the paragraph - that ESS belongs
+to the functional, and that the correction relocates the trade-off rather
+than removing it - stands.
 
 **What this does and does not affect.** It changes the efficiency claim
 for the swept coefficients specifically: `beta`'s large ESS/sec gain is
@@ -1604,7 +2036,10 @@ read `b_std`/`L_corr`/`sigma_b` exactly as before and do not know whether
 `b_std` was rotated. The construction is currently scoped to the
 intercept column only - the slope column's analogous direction depends on
 the sampled correlation $\rho$, so a fixed, precomputed rotation cannot
-isolate it the same way.
+isolate it the same way. Section 4.10 (Lemma 1, Corollary 4) shows that this obstacle is
+avoidable: rotating every column by the same fixed basis contains the
+$\rho$-dependent direction inside a small explicit block for every value
+of $\rho$.
 
 **Efficiency.** `beta_corrected`'s own ESS/sec, relative to a default
 fit's `beta_0` (the closest available like-for-like reference, since a
@@ -1623,7 +2058,9 @@ consistently across two baseline-hazard forms and both seed counts tried.
 The additional dense mass-matrix block does not reliably help on top of
 the rotation - it trails it in two of three pilots and ties it in the
 third - unlike the rotation itself, which improved on the plain option in
-every pilot run. A correctness check accompanies every pilot:
+every pilot run. Section 4.10 predicts this: once $u$ is its own coordinate, what remains
+slow lies along the slope column's generator coordinate, which a dense
+block on $u$ alone cannot reach (Corollary 3(i), Proposition 10(b)). A correctness check accompanies every pilot:
 `beta_corrected`'s posterior mean agrees between the rotated and
 unrotated fit at the same seed to within Monte Carlo noise (mean absolute
 difference $0.0009$-$0.0018$ across the three pilots, against posterior
@@ -1654,7 +2091,9 @@ its sd_ratio differs by
 $0.008$ - noise at this replicate count (Monte Carlo SE on 95% coverage is
 about $0.011$ here), nowhere near the fourfold narrowing
 `wishart_gibbs_centered` produced. The negative control does not move
-either. This is also, incidentally, the $R = 100$ confirmation Section 9.1
+either. Proposition 8 (Section 4.10) has since shown the equality is exact,
+so this comparison is best read as a check that the implementation is
+correct, not as evidence about the construction. This is also, incidentally, the $R = 100$ confirmation Section 9.1
 flagged as "in progress" for arm D's own correction: the plain option's
 calibration fix is now confirmed at full replicate count, not only the
 $R = 16$ pilot reported there; arm E's equivalent confirmation remains
@@ -1757,14 +2196,29 @@ reported with the same confidence as Sections 6-8.
 
 ### 9.3 Next validation steps, in priority order
 
-1. **Broader validation of the rotation follow-up (Section 9.1.2).**
-   Before it could be reported with the same confidence as the rest of
-   this document: the covariate-count sweep of Section 6, or at least
-   more than one design; the real-data check of Section 7; extending the
-   construction (or a proof it cannot be extended the same way) to the
-   slope column via `orthogonalize_b`; more replicates on the calibration
-   check (currently $R = 100$, one design); and resolving the warm-start
-   interaction noted in Section 9.1.2's "Status" paragraph.
+1. **Implement Corollary 4, then test Section 4.10's predictions by
+   simulation.** Section 4.10 proves the rotation exact and predicts when,
+   and by roughly how much, it helps, which turns "broader validation"
+   into specific checks that could fail. In order: (a) implement the
+   all-column rotation with a Householder completion as a new opt-in
+   setting alongside the current one, so the two can be compared on the
+   same seeds, including under `orthogonalize_b`; (b) a pilot grid
+   crossing visits per subject (sparse against dense follow-up),
+   $\sigma_e$, and the generating $\rho \in \{0, 0.3, 0.6, 0.9\}$,
+   recording `beta_corrected` ESS/sec for both the intercept and the slope
+   and checking the three predictions stated under Section 4.10's table
+   (the current rotation's dependence on $\rho$, the slope's
+   recovery under the all-column rotation, and invariance in
+   $N \in \{150, 300, 600\}$), together with per-fit wall time and tree
+   depth, since overhead is the one thing the theory does not predict;
+   (c) the $R = 100$ calibration study for the new arm on the `linear`
+   and `mixing` designs - Proposition 8 predicts equality, so this checks
+   the implementation; (d) the real-data check of Section 7 (`aids`,
+   PBC2); and (e) resolving the warm-start interaction noted in Section
+   9.1.2's "Status" paragraph. Only after (b)-(d) would there be grounds
+   to consider the rotation - together with `orthogonalize_b0`/`_b` and
+   reporting `beta_corrected` as the primary estimand - as a default, a
+   user-facing change that would need its own discussion.
 2. **More seeds for the plain correction's effective sample size -
    corroborated, not yet closed.** Section 9.1.1's 2-seed figure
    (1.25x-1.31x) has since been corroborated by two further pilots at 6
@@ -1805,7 +2259,14 @@ classical fact that effective sample size is a property of the specific
 functional of the chain being monitored rather than of the sampler itself
 (Geyer 1992) - needed in Section 9.1.1 to explain why the swept coordinate
 and the identified estimand recovered from it can, and here do, have very
-different effective sample sizes. Its contribution is the specific
+different effective sample sizes. Two further literatures turned out to bear directly on the correction
+and its efficiency: restricted spatial regression (Reich, Hodges & Zadnik 2006; Hughes & Haran 2013;
+Hanks et al. 2015; Khan & Calder 2022; Bradley 2024), whose
+back-transformation Section 4.9 generalizes to joint models, and the
+analysis of linear preconditioning for HMC (Neal 2011; Hird & Livingstone
+2025), on which Section 4.10's account of the rotation rests, together
+with the standard characterization of non-identified parameters (Dawid
+1979; Poirier 1998; Gustafson 2015). Its contribution is the specific
 diagnosis, source-verified mechanism, and replicated empirical
 characterization of the location-degeneracy problem for joint
 longitudinal-survival models; the finding, on direct measurement, that
@@ -1873,7 +2334,10 @@ lists (more designs, real data, the slope column, more calibration
 replicates) before "modest, not dramatic" above should be revised for the
 package as shipped. Until then, the honest summary is: the correctness
 fix is proven and ships; a further efficiency fix on top of it looks
-promising in early testing but is not yet ready to promise.
+promising in early testing but is not yet ready to promise. Section 4.10 has since narrowed what "not yet" means: the construction
+is proven exact, so what remains open is how much it helps and at what
+cost - questions the theory now answers in advance of the simulations that
+must confirm it.
 
 ## 12. Note on publication venue
 
@@ -1914,16 +2378,39 @@ either of these items.
   Hierarchical Models. arXiv:1312.0906.
 - Betancourt, M. (2017). A Conceptual Introduction to Hamiltonian Monte
   Carlo. arXiv:1701.02434.
+- Bradley, J. R. (2024). Spatial Deconfounding is Reasonable Statistical
+  Practice: Interpretations, Clarifications, and New Benefits.
+  arXiv:2408.05106.
+- Dawid, A. P. (1979). Conditional Independence in Statistical Theory.
+  *Journal of the Royal Statistical Society, Series B*, 41(1), 1-31.
 - Geyer, C. J. (1992). Practical Markov Chain Monte Carlo. *Statistical
   Science*, 7(4), 473-483.
 - Guo, X. & Carlin, B. P. (2004). Separate and Joint Modeling of
   Longitudinal and Event Time Data Using Standard Computer Packages. *The
   American Statistician*, 58(1), 16-24.
+- Gustafson, P. (2015). *Bayesian Inference for Partially Identified
+  Models: Exploring the Limits of Limited Data*. Chapman & Hall/CRC.
+- Hanks, E. M., Schliep, E. M., Hooten, M. B. & Hoeting, J. A. (2015).
+  Restricted Spatial Regression in Practice: Geostatistical Models,
+  Confounding, and Robustness under Model Misspecification.
+  *Environmetrics*, 26(4), 243-254.
+- Hird, M. & Livingstone, S. (2025). Quantifying the Effectiveness of
+  Linear Preconditioning in Markov Chain Monte Carlo. *Journal of Machine
+  Learning Research*, 26. arXiv:2312.04898.
 - Hoffman, M. D. & Gelman, A. (2014). The No-U-Turn Sampler: Adaptively
   Setting Path Lengths in Hamiltonian Monte Carlo. *Journal of Machine
   Learning Research*, 15, 1593-1623.
+- Hughes, J. & Haran, M. (2013). Dimension Reduction and Alleviation of
+  Confounding for Spatial Generalized Linear Mixed Models. *Journal of the
+  Royal Statistical Society, Series B*, 75(1), 139-159.
+- Khan, K. & Calder, C. A. (2022). Restricted Spatial Regression Methods:
+  Implications for Inference. *Journal of the American Statistical
+  Association*, 117(537). doi:10.1080/01621459.2020.1788949.
 - Neal, R. M. (2003). Slice Sampling. *Annals of Statistics*, 31(3),
   705-767.
+- Neal, R. M. (2011). MCMC Using Hamiltonian Dynamics. In *Handbook of
+  Markov Chain Monte Carlo* (Brooks, S. et al., eds), Chapman & Hall/CRC.
+  Also arXiv:1206.1901.
 - Ogle, K. et al. (2020). Ensuring Identifiability in Hierarchical Mixed
   Effects Bayesian Models. *Ecological Applications*, 30(7), e02159.
 - Papaspiliopoulos, O. & Roberts, G. O. (2003). Non-Centered
@@ -1933,6 +2420,11 @@ either of these items.
 - Papaspiliopoulos, O., Roberts, G. O. & Sköld, M. (2007). A General
   Framework for the Parametrization of Hierarchical Models. *Statistical
   Science*, 22(1), 59-73. Also arXiv:0708.3797.
+- Poirier, D. J. (1998). Revising Beliefs in Nonidentified Models.
+  *Econometric Theory*, 14(4), 483-509.
+- Reich, B. J., Hodges, J. S. & Zadnik, V. (2006). Effects of Residual
+  Smoothing on the Posterior of the Fixed Effects in Disease-Mapping
+  Models. *Biometrics*, 62(4), 1197-1206.
 - Rizopoulos, D. (2010). JM: An R Package for the Joint Modelling of
   Longitudinal and Time-to-Event Data. *Journal of Statistical Software*,
   35(9).
@@ -1941,3 +2433,5 @@ either of these items.
   of the Royal Statistical Society, Series B*, 59(2), 291-317.
 - Stan Development Team. *Stan User's Guide*, "Problematic Posteriors" /
   collinearity and redundant-intercepts example. https://mc-stan.org/docs/stan-users-guide/problematic-posteriors.html
+- Stan Development Team. *Stan User's Guide*, "The QR
+  Reparameterization". https://mc-stan.org/docs/2_21/stan-users-guide/QR-reparameterization-section.html
