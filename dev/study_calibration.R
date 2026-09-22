@@ -75,6 +75,30 @@
 # optional: it is the reference that separates "the reparameterization
 # miscalibrates" from "this model at this n miscalibrates".
 #
+#   D_rot / D_dense (not run by default - opt in via CAL_ARMS). The rotation
+#   prototype (control$orthogonalize_b0_rotate, +
+#   control$dense_mass_b0_generator for D_dense; see mcmc_model.py's
+#   _orthogonal_complement() and dev/pilot_b0_rotate.R) isolates D's swept
+#   intercept direction as its own small NUTS site instead of leaving it
+#   inside the several-hundred-dimensional b_std block. dev/pilot_b0_rotate.R
+#   found this recovers beta_corrected's ESS/sec from D's ~1x-1.3x (over a
+#   default fit) to roughly 5.8x, over 6 seeds - but that pilot only checked
+#   posterior MEANS agree with D's (to within Monte Carlo noise), which is
+#   necessary but not sufficient for calibration: the wishart_gibbs_centered
+#   retraction this study's header describes ALSO had unbiased point
+#   estimates throughout, and only an interval check caught the problem.
+#   The rotation is a STRONGER guarantee than wishart_gibbs_centered's
+#   likelihood-invariance - it is a proven rotation of a spherical Gaussian,
+#   so the joint prior (and hence posterior) over every original parameter
+#   is unchanged, not merely the likelihood - but "proven exact" and
+#   "empirically confirmed by this study's own instrument" are different
+#   claims, and this is the cheap way to check the second: beta_0_corrected's
+#   coverage/sd_ratio/bias for D_rot (and D_dense) should equal D's own,
+#   since correction is computed identically for both (mcmc_model.py's
+#   beta_corrected block reads b_std/L_corr/sigma_b generically and does not
+#   know whether b_std was rotated). Run alongside D directly comparably:
+#   CAL_ARMS=A,D,D_rot Rscript dev/study_calibration.R
+#
 # DESIGNS.
 #   linear  y ~ time + covariates. Each term is its own column, so the
 #           per-column and exact basis constructions agree (vignette
@@ -114,6 +138,8 @@
 #   Rscript dev/study_calibration.R --dry-run     # verify setup, no MCMC
 #   caffeinate -i Rscript dev/study_calibration.R 2>&1 | tee calib.log
 #   CAL_DESIGNS=mixing CAL_REPS=100 caffeinate -i Rscript dev/study_calibration.R
+#   CAL_ARMS=A,D,D_rot CAL_REPS=100 caffeinate -i Rscript dev/study_calibration.R \
+#     2>&1 | tee calib_rotate.log                  # does the rotation stay calibrated?
 # ==============================================================================
 
 suppressPackageStartupMessages({
@@ -231,6 +257,12 @@ fit_one <- function(design, arm, rep_id) {
               seed = rep_id, progress_bar = FALSE)
   if (arm == "D") ctl$orthogonalize_b0 <- TRUE
   if (arm == "E") ctl$orthogonalize_b  <- TRUE
+  # D_rot/D_dense: the rotation prototype (mcmc_model.py's
+  # _orthogonal_complement()), scoped to D's intercept-only sweep exactly
+  # as D itself is - see the "D_rot / D_dense" paragraph above.
+  if (arm == "D_rot")   { ctl$orthogonalize_b0 <- TRUE; ctl$orthogonalize_b0_rotate <- TRUE }
+  if (arm == "D_dense") { ctl$orthogonalize_b0 <- TRUE; ctl$orthogonalize_b0_rotate <- TRUE
+                           ctl$dense_mass_b0_generator <- TRUE }
 
   tm <- system.time(f <- jm_fit(
     long_formula = spec$lform,
