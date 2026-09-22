@@ -230,14 +230,21 @@ for (a in c("A", "D", "D_rot", "D_dense")) {
                   a, paste0(q, "/", p), nrow(x), mean(x$ess), mean(x$ess_per_sec),
                   max(x$rhat, na.rm = TRUE)))
       if (q == "beta_corrected" && p == "beta_0") means[[a]] <- mean(x$ess_per_sec)
+      # A never has beta_corrected (it is not orthogonalized) - ITS baseline
+      # is its own beta/beta_0 ESS/sec, the actual reported estimand for a
+      # default fit. Tracked separately so the comparison below has a
+      # reference even though arm A contributes nothing to `means` above.
+      if (a == "A" && q == "beta" && p == "beta_0") ref_A <- mean(x$ess_per_sec)
     }
   }
   cat("\n")
 }
 
 cat("-------------------------------------------------------------------------\n")
-cat(" The decisive comparison: beta_corrected/beta_0 ESS/sec, relative to A\n\n")
-ref <- means[["A"]]
+cat(" The decisive comparison: beta_corrected/beta_0 ESS/sec, relative to A's\n")
+cat(" own beta/beta_0 (A never has beta_corrected - it is not orthogonalized;\n")
+cat(" its own beta IS the reported estimand for a default fit)\n\n")
+ref <- if (exists("ref_A")) ref_A else NULL
 if (!is.null(ref) && is.finite(ref) && ref > 0) {
   for (a in c("D", "D_rot", "D_dense")) {
     if (!is.null(means[[a]]))
