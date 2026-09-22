@@ -196,10 +196,11 @@ cat <<'EOT'
      Rscript -e 'devtools::test("~/Documents/R/jmjax")'
 
    float64 is now the DEFAULT - you no longer set JAX_ENABLE_X64 by hand.
-   It measured 4.24x FASTER at n = 8,000, not slower, because float32
-   gradient noise drove the sampler into four times as many leapfrog
-   steps. To opt out (and accept approximate standard errors from the
-   maximum-likelihood methods):
+   Measured, not assumed: MCMC is faster in float64 at every size tested
+   (1.2x at n=200, 1.3-1.4x at n=1,000, 4.24x at n=8,000), and on the
+   maximum-likelihood path float32 reported converged=TRUE with a
+   gradient max of 0.78 against float64's 0.0005 on the same data. To opt
+   out (and accept a fit that may stop short and not say so):
      Rscript -e 'jmjax::jmjax_setup(enable_x64 = FALSE)'   # before any fit
    or JMJAX_ENABLE_X64=0 in the environment.
 

@@ -32,17 +32,31 @@ the first time its backend actually initializes.}
   Defaults to \code{TRUE}, which is NOT JAX's own default - JAX defaults
   to float32 and silently downcasts any float64 array passed to it.
 
-  \code{TRUE} is the right default here for three measured reasons. The
-  maximum-likelihood path computes its gradient and Hessian in JAX and
-  then hands them to \code{scipy}'s optimizer, whose default tolerances
-  assume roughly 1e-15 relative accuracy; under float32 it receives
-  about 1e-7, and the Hessian is inverted for the standard errors, which
-  is where single precision does most damage. For the MCMC path, float64
-  measured \strong{4.24x faster} end-to-end at \code{n = 8,000} - not
-  slower - because float32 gradient noise drove NUTS into roughly four
-  times as many leapfrog steps, with ESS for \code{alpha} rising from 4
-  to 1188. And \code{exp()} overflows float32 at about 88 against
-  float64's 709, which matters because the hazard is
+  \code{TRUE} is the right default here for three measured reasons.
+
+  The \strong{maximum-likelihood path} is the worst affected and the
+  least visible. It computes its gradient and Hessian in JAX and hands
+  them to \code{scipy}'s optimizer, whose default tolerances assume
+  roughly 1e-15 relative accuracy; under float32 it receives about
+  1e-7. Measured on the same data from the same starting values at
+  \code{n = 400}, float32 reported \code{converged = TRUE} with a
+  maximum gradient component of \strong{0.78} against float64's
+  \strong{0.0005}, stopping after 80 iterations rather than 127. At a
+  stationary point that gradient is near zero, so the float32 fit had
+  not converged and said it had. The Hessian is inverted for the
+  standard errors, which compounds it.
+
+  For \strong{MCMC}, float64 was faster at every size measured, not
+  only large ones: \strong{1.20-1.26x} at \code{n = 200},
+  \strong{1.29-1.40x} at \code{n = 1,000} and \strong{4.24x} at
+  \code{n = 8,000}, with higher ESS per second throughout. The
+  mechanism differs by size - at \code{n = 8,000} float32 noise
+  inflated the leapfrog step count roughly fourfold, while at the
+  smaller sizes step counts matched and float32 was simply slower for
+  less effective sample.
+
+  And \code{exp()} overflows float32 at about 88 against float64's
+  709, which matters because the hazard is
   \code{exp(linear predictor)} and NUTS explores wild regions in warmup.
 
   R has no single-precision numeric type, so \code{TRUE} is also what a

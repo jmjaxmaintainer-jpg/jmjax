@@ -35,10 +35,31 @@ _num_devices = int(os.environ.get("JMJAX_NUM_DEVICES", os.cpu_count() or 4))
 #      precision hurts most - so the reported standard errors are a
 #      float64-shaped container holding float32-quality numbers.
 #
-#   2. NUTS pays for gradient noise in leapfrog steps. At n = 8,000,
-#      float64 was 4.24x FASTER end-to-end despite doing more work per
-#      operation, because float32 noise drove the sampler into roughly four
-#      times as many steps. ESS for alpha went from 4 to 1188.
+#      MEASURED, same data and same starting values, n = 400:
+#
+#                          float64      float32
+#        log-likelihood  -2593.641   -2594.688
+#        grad_max            0.0005      0.7822   <- at the reported optimum
+#        iterations            127          80
+#        converged            TRUE        TRUE   <- both claim success
+#
+#      At a stationary point the gradient is ~0. float32 stops three
+#      orders of magnitude short, after 80 iterations instead of 127, and
+#      reports convergence. Nothing in the output flags it.
+#
+#   2. NUTS is faster in float64 at EVERY size measured, not just large n.
+#      Wall time and ESS/second, 3 seeds each:
+#
+#        n =   200   1.20-1.26x faster;  ESS_alpha/s 254-353 vs 168-213
+#        n = 1,000   1.29-1.40x faster;  ESS_alpha/s  46-92  vs  27-45
+#        n = 8,000   4.24x faster;       ESS_alpha   1188    vs    4
+#
+#      The MECHANISM differs by size, which is worth knowing. At n = 8,000
+#      float32 noise drove the sampler into roughly four times as many
+#      leapfrog steps. At 200 and 1,000 the step counts are essentially
+#      identical (63.0 vs 63.0), and float32 is simply slower in wall
+#      time while producing less effective sample. The only divergence
+#      recorded across the whole sweep was float32's.
 #
 #   3. exp() overflows float32 at ~88 and float64 at ~709. The hazard is
 #      exp(linear predictor), and NUTS explores wild regions during warmup,

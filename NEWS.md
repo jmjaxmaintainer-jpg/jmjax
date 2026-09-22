@@ -90,9 +90,39 @@
     was receiving about 1e-7. The Hessian is then inverted for the
     covariance matrix, so the reported standard errors were float64-shaped
     containers holding float32-quality numbers.
-  - **MCMC was 4.24x faster in float64** at `n = 8,000`, not slower,
-    because float32 gradient noise drove NUTS into roughly four times as
-    many leapfrog steps. ESS for `alpha` rose from 4 to 1188.
+    Measured on the same data from the same starting values, `n = 400`:
+
+    | | float64 | float32 |
+    |---|---|---|
+    | log-likelihood | -2593.641 | -2594.688 |
+    | grad_max at the reported optimum | **0.0005** | **0.7822** |
+    | iterations | 127 | 80 |
+    | `converged` | TRUE | TRUE |
+
+    At a stationary point the gradient is near zero. float32 stopped
+    three orders of magnitude short, after 80 iterations instead of 127,
+    and reported success. This is the pathology `common.py`'s own
+    docstring already described - *"stopped after 5 iterations with
+    converged = TRUE ... Nothing in the output flagged it"* - which had
+    been attributed to parameter scaling. `parscale` helped, but it was
+    not the whole story.
+  - **MCMC is faster in float64 at every size measured**, not only large
+    ones - 3 seeds each:
+
+    | n | wall-time speedup | ESS_alpha/sec float64 | float32 |
+    |---|---|---|---|
+    | 200 | 1.20-1.26x | 254-353 | 168-213 |
+    | 1,000 | 1.29-1.40x | 46-92 | 27-45 |
+    | 8,000 | 4.24x | 1188 (ESS) | 4 (ESS) |
+
+    The mechanism differs by size, which is worth recording: at
+    `n = 8,000` float32 noise drove NUTS into roughly four times as many
+    leapfrog steps, but at 200 and 1,000 the step counts are essentially
+    identical (63.0 against 63.0) and float32 is simply slower in wall
+    time for less effective sample. The only divergence in the whole
+    sweep was float32's. An earlier version of this entry cited only the
+    `n = 8,000` figure and flagged small-`n` as an open question where
+    float64 might lose; it does not.
   - `exp()` overflows float32 at about 88 against float64's 709, and the
     hazard is `exp(linear predictor)`.
 
