@@ -932,9 +932,10 @@ def build_model(p, q, n_splines, max_obs, alpha_prior_sd=2.0,
                         # By Lemma 1 the flat subspace lies in the [k, q]
                         # block b_gen_U for every rho, which is what the
                         # intercept-only rotation below cannot guarantee.
-                        assert int(gen_reflectors.shape[0]) == int(N_sub), (
-                            "gen_reflectors has %d rows for %d subjects"
-                            % (int(gen_reflectors.shape[0]), int(N_sub)))
+                        if int(gen_reflectors.shape[0]) != int(N_sub):
+                            raise ValueError(
+                                "gen_reflectors has %d rows for %d subjects"
+                                % (int(gen_reflectors.shape[0]), int(N_sub)))
                         _Vh = jnp.asarray(gen_reflectors)
                         _kg = int(gen_reflectors.shape[1])
                         b_gen_U = numpyro.sample(
@@ -1438,6 +1439,24 @@ def fit_nuts(X_long, y_long, n_obs, X_time_surv, X_time_quad,
             "orthogonalize_b0 or orthogonalize_b to also be TRUE - it only "
             "changes how the swept degeneracy is sampled, not whether it is "
             "swept at all.")
+    # SEPARATE, OPT-IN TRACK (control$rotate_absorbable): the same
+    # all-column Householder rotation WITHOUT any sweep. The absorbable
+    # bases are still computed (they define Q_cup), but b is not projected
+    # and no beta_corrected is produced - the reported beta is the ordinary
+    # one. On its own this leaves the beta <-> generator ridge in place (it
+    # is only moved into the explicit [k, q] block b_gen_U), so it is meant
+    # to be paired with control$dense_mass_generator_beta, a dense block
+    # over (beta, b_gen_U). In the closed-form check with the variance
+    # components fixed (dev/theory_rotation_toy.py) that pairing matched or
+    # beat sweep + rotation; whether it survives SAMPLED variance components
+    # - the ridge's orientation moves with sigma_b, which the sweep removes
+    # exactly and a fixed metric can only average over - is the question
+    # dev/pilot_rotate_grid.R's A_rotdense arm exists to answer.
+    _rot_nosweep = bool(control.get("rotate_absorbable", False))
+    if _rot_nosweep and (_orth_all or _orth_int or _rot_all or _orth_int_rotate):
+        raise ValueError(
+            "control$rotate_absorbable = TRUE is the no-sweep alternative; "
+            "do not combine it with orthogonalize_b0/_b or their rotations.")
     if _rot_all and _orth_int_rotate:
         raise ValueError(
             "control$orthogonalize_rotate_all and "
@@ -1649,6 +1668,34 @@ def fit_nuts(X_long, y_long, n_obs, X_time_surv, X_time_quad,
                 "k": 0 if _b0_gen_perp is None else int(N_sub - _b0_gen_perp.shape[1]),
             }
 
+    if _rot_nosweep:
+        if not (q >= 2 and random_effects_corr
+                and random_effects_method == "nuts"):
+            raise ValueError(
+                "control$rotate_absorbable = TRUE currently requires q >= 2, "
+                "random_effects_corr = TRUE and random_effects_method = "
+                "'nuts', the same scope as orthogonalize_b/_b0.")
+        _nb = [_absorbable_basis_exact(X_long, Z_long, n_obs, _qq)[0]
+               for _qq in range(q)]
+        _Qu = _union_basis(_nb)
+        if _Qu is not None:
+            _gen_reflectors = _householder_reflectors(_Qu)
+        if _gen_reflectors is None:
+            warnings.warn(
+                "control$rotate_absorbable = TRUE had no effect: no "
+                "absorbable direction was found (or the construction did not "
+                "verify).", RuntimeWarning, stacklevel=2)
+        orthogonalize_report = {
+            "requested": "none",
+            "columns": [],
+            "any_applied": False,
+            "rotation": {
+                "mode": "all_columns_no_sweep",
+                "applied": _gen_reflectors is not None,
+                "k": 0 if _gen_reflectors is None else int(_gen_reflectors.shape[1]),
+            },
+        }
+
     model = build_model(p, q, n_splines, max_obs, alpha_prior_sd=alpha_prior_sd,
                          baseline_hazard=baseline_hazard,
                          spline_prior=spline_prior,
@@ -1836,9 +1883,22 @@ def fit_nuts(X_long, y_long, n_obs, X_time_surv, X_time_quad,
         if _gen_reflectors is None:
             raise ValueError(
                 "control$dense_mass_generator = TRUE requires "
-                "control$orthogonalize_rotate_all = TRUE to have actually "
-                "created the b_gen_U site (it did not for this fit).")
+                "control$orthogonalize_rotate_all or rotate_absorbable to "
+                "have created the b_gen_U site (it did not for this fit).")
         _blocks.append(("b_gen_U",))
+    if control.get("dense_mass_generator_beta", False):
+        if _gen_reflectors is None:
+            raise ValueError(
+                "control$dense_mass_generator_beta = TRUE requires "
+                "orthogonalize_rotate_all or rotate_absorbable to have "
+                "created the b_gen_U site (it did not for this fit).")
+        if control.get("dense_mass_generator", False) or (
+                control.get("dense_mass_beta", False) and p >= 2):
+            raise ValueError(
+                "control$dense_mass_generator_beta already covers beta and "
+                "b_gen_U; do not combine it with dense_mass_generator or "
+                "dense_mass_beta (a site may appear in only one block).")
+        _blocks.append(("beta", "b_gen_U"))
 
     if _blocks:
         dense_mass_arg = _blocks

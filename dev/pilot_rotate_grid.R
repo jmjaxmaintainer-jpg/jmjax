@@ -16,6 +16,13 @@
 #   E         orthogonalize_b
 #   E_rot0    E + orthogonalize_b0_rotate
 #   E_rotall  E + orthogonalize_rotate_all
+#   E_rotall_dense  E_rotall + dense_mass_generator (dense block on b_gen_U)
+#   A_rotdense  NO sweep: rotate_absorbable + dense_mass_generator_beta
+#             (dense block on beta and b_gen_U). Reports the ordinary beta,
+#             like A. In the closed-form check it matched or beat
+#             sweep + rotation; this arm tests whether that survives sampled
+#             variance components, which is what decides whether the sweep
+#             (and beta_corrected) is needed at all.
 #
 # GRID. Cells vary what Section 4.10 says the gain depends on:
 #   visits   - sim_joint's visit_gap: "base" = 1.0 (up to 11 visits, the
@@ -42,8 +49,9 @@
 #   Rscript dev/pilot_rotate_grid.R                          # core grid, 2 seeds
 #   ROT_SEEDS=4 ROT_GRID=full caffeinate -i Rscript dev/pilot_rotate_grid.R
 #   ROT_ARMS=D,D_rot,D_rotall Rscript dev/pilot_rotate_grid.R
-# Rough cost at n = 300: ~15-25 s per fit; core grid, 7 arms, 2 seeds is
-# 140 fits, about 45-60 min. Dense-visit and n = 600 cells cost more.
+# Rough cost at n = 300: ~15-25 s per fit; core grid, 9 arms, 2 seeds is
+# 180 fits, roughly 1-1.5 h. Dense-visit and n = 600 cells cost more.
+# A quick first look: ROT_ARMS=A,D,D_rotall,E,E_rotall,A_rotdense ROT_SEEDS=1
 # ==============================================================================
 
 suppressPackageStartupMessages(library(jmjax))
@@ -69,9 +77,11 @@ WARMUP  <- .envi("ROT_WARMUP", 500L)
 SAMPLES <- .envi("ROT_SAMPLES", 1000L)
 CHAINS  <- .envi("ROT_CHAINS", 2L)
 K_EXTRA <- .envi("ROT_K_EXTRA", 2L)
+stopifnot(K_EXTRA <= 3L)   # COVS below names only age/sex/trt
 GRID    <- Sys.getenv("ROT_GRID", "core")
 OUT     <- Sys.getenv("ROT_OUT", "dev/pilot_rotate_grid.csv")
-ARMS    <- .envc("ROT_ARMS", c("A", "D", "D_rot", "D_rotall", "E", "E_rot0", "E_rotall"))
+ARMS    <- .envc("ROT_ARMS", c("A", "D", "D_rot", "D_rotall", "E", "E_rot0",
+                                "E_rotall", "E_rotall_dense", "A_rotdense"))
 
 VISIT_GAP <- c(sparse = 2.0, base = 1.0, dense = 0.5)
 
@@ -115,7 +125,11 @@ arm_control <- function(arm, seed) {
   if (startsWith(arm, "D")) ctl$orthogonalize_b0 <- TRUE
   if (startsWith(arm, "E")) ctl$orthogonalize_b  <- TRUE
   if (arm %in% c("D_rot", "E_rot0"))     ctl$orthogonalize_b0_rotate  <- TRUE
-  if (arm %in% c("D_rotall", "E_rotall")) ctl$orthogonalize_rotate_all <- TRUE
+  if (arm %in% c("D_rotall", "E_rotall", "E_rotall_dense"))
+    ctl$orthogonalize_rotate_all <- TRUE
+  if (arm == "E_rotall_dense") ctl$dense_mass_generator <- TRUE
+  if (arm == "A_rotdense") { ctl$rotate_absorbable <- TRUE
+                             ctl$dense_mass_generator_beta <- TRUE }
   ctl
 }
 
@@ -152,8 +166,9 @@ fit_one <- function(cl, arm, seed) {
   Xd <- stats::model.matrix(LFORM, sim$data_long)
   i0 <- match("(Intercept)", colnames(Xd)); it <- match("time", colnames(Xd))
   ps <- f$posterior_samples
-  # A reports beta itself; every other arm reports beta_corrected.
-  M <- if (arm == "A") as_draws(ps[["beta"]]) else as_draws(ps[["beta_corrected"]])
+  # A and A_rotdense (no sweep) report beta itself; every other arm
+  # reports beta_corrected.
+  M <- if (startsWith(arm, "A")) as_draws(ps[["beta"]]) else as_draws(ps[["beta_corrected"]])
   if (is.null(M)) stop("arm ", arm, " returned no reportable beta", call. = FALSE)
   d <- site_diag(M[, c(i0, it), drop = FALSE], CHAINS)
   AL <- as_draws(ps[["alpha"]])
@@ -203,12 +218,24 @@ for (r in seq_len(nrow(jobs))) {
 }
 
 # ---- summary ----------------------------------------------------------------
+if (!file.exists(OUT)) stop("no results in ", OUT, " - every fit failed?", call. = FALSE)
 R <- utils::read.csv(OUT, stringsAsFactors = FALSE)
 R <- R[R$arm %in% ARMS & R$cell %in% cells$cell, , drop = FALSE]
-bad <- is.na(R$max_rhat_all) | R$max_rhat_all > 1.05
-if (any(bad)) cat(sprintf("\nR-hat gate (max over population sites <= 1.05): dropping %d of %d rows\n",
-                          sum(bad), nrow(R)))
-R <- R[!bad, , drop = FALSE]
+# PAIRED gate: a fit fails if its population R-hat OR the reported
+# estimand's own R-hat exceeds 1.05; a failing fit removes that
+# (cell, seed) for EVERY arm, so each ratio compares the same seeds.
+# Dropping rows per arm would keep only A's well-mixed seeds and bias
+# every "X/A" ratio.
+R$fail <- is.na(R$max_rhat_all) | R$max_rhat_all > 1.05 | is.na(R$rhat) | R$rhat > 1.05
+bad_fit <- unique(R[R$fail, c("cell", "seed", "arm")])
+if (nrow(bad_fit)) {
+  cat("\nR-hat gate (<= 1.05): failing fits per arm\n")
+  print(table(bad_fit$arm))
+  key <- paste(R$cell, R$seed)
+  R <- R[!key %in% paste(bad_fit$cell, bad_fit$seed), , drop = FALSE]
+  cat(sprintf("dropped %d (cell, seed) pairs from all arms\n",
+              length(unique(paste(bad_fit$cell, bad_fit$seed)))))
+}
 
 agg <- stats::aggregate(cbind(ess_per_sec, sec, mean_num_steps) ~ cell + arm + quantity,
                         data = R, FUN = function(x) mean(x, na.rm = TRUE),
@@ -216,7 +243,7 @@ agg <- stats::aggregate(cbind(ess_per_sec, sec, mean_num_steps) ~ cell + arm + q
 ratio <- function(cell, q, num, den) {
   x <- agg$ess_per_sec[agg$cell == cell & agg$quantity == q & agg$arm == num]
   y <- agg$ess_per_sec[agg$cell == cell & agg$quantity == q & agg$arm == den]
-  if (length(x) && length(y) && y > 0) x / y else NA_real_
+  if (length(x) && length(y) && isTRUE(y > 0)) x / y else NA_real_
 }
 show <- function(title, q, pairs) {
   cat("\n", title, "\n", sep = "")
@@ -227,12 +254,15 @@ show <- function(title, q, pairs) {
         "\n", sep = "")
   }
 }
-show("beta_corrected[intercept], ESS/sec ratios (P1, P3, P4)", "intercept",
+show("reported intercept (beta_corrected; beta for A and A_rotdense), ESS/sec ratios (P1, P3, P4)", "intercept",
      list("D/A" = c("D", "A"), "D_rot/D" = c("D_rot", "D"),
-          "D_rotall/D" = c("D_rotall", "D"), "E_rotall/E" = c("E_rotall", "E")))
-show("beta_corrected[time], ESS/sec ratios (P2)", "time",
+          "D_rotall/D" = c("D_rotall", "D"), "E_rotall/E" = c("E_rotall", "E"),
+          "E_rall_d/E" = c("E_rotall_dense", "E"), "A_rotd/A" = c("A_rotdense", "A"),
+          "A_rotd/E_ra" = c("A_rotdense", "E_rotall")))
+show("reported time coefficient (beta_corrected; beta for A and A_rotdense), ESS/sec ratios (P2)", "time",
      list("E/A" = c("E", "A"), "E_rot0/E" = c("E_rot0", "E"),
-          "E_rotall/E" = c("E_rotall", "E")))
+          "E_rotall/E" = c("E_rotall", "E"), "E_rall_d/E" = c("E_rotall_dense", "E"),
+          "A_rotd/A" = c("A_rotdense", "A"), "A_rotd/E_ra" = c("A_rotdense", "E_rotall")))
 show("alpha (negative control: should stay near 1x)", "alpha",
      list("D_rotall/D" = c("D_rotall", "D"), "E_rotall/E" = c("E_rotall", "E")))
 
@@ -242,7 +272,8 @@ cost <- cost[order(cost$cell, match(cost$arm, ARMS)), ]
 print(cost, row.names = FALSE, digits = 3)
 
 cat("\nCorrectness: |mean(rotated) - mean(unrotated)| / sd, same cell and seed (should be small)\n")
-for (pr in list(c("D_rot", "D"), c("D_rotall", "D"), c("E_rotall", "E"))) {
+for (pr in list(c("D_rot", "D"), c("D_rotall", "D"), c("E_rot0", "E"), c("E_rotall", "E"),
+                c("E_rotall_dense", "E"), c("A_rotdense", "A"))) {
   x <- merge(R[R$arm == pr[1], c("cell", "seed", "quantity", "est", "sd")],
              R[R$arm == pr[2], c("cell", "seed", "quantity", "est", "sd")],
              by = c("cell", "seed", "quantity"))
