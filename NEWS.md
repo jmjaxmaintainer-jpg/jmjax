@@ -300,6 +300,18 @@
   Vignettes (all chunks `eval = FALSE`) and examples (all `\dontrun{}`)
   were already check-safe and are unchanged.
 
+## Development tooling
+
+* **New: `dev/check_undefined_names.py`** - a static check for names a
+  Python function reads but never binds. `python -m py_compile` cannot
+  catch these: the file compiles, and the `NameError` only appears when
+  that line runs. One such bug shipped in this package and broke every
+  `spline-PH-mcmc` fit until it was caught by running one. The check is an
+  AST pass, deliberately biased toward silence (closure variables,
+  comprehension targets and star-imports are all treated as bound), so a
+  clean run is weak evidence while a dirty run is strong evidence. It runs
+  in well under a second and is stage 1 of `dev/check_orth_repair.sh`.
+
 # jmjax (development)
 
 ## New
