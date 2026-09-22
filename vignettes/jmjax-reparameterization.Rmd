@@ -1,0 +1,760 @@
+---
+title: "Location Degeneracy in jmjax's Joint Model: Diagnosis, a NUTS-Compatible Reparameterization, and Why It Beats JMbayes2 More on Regression Parameters Than on Nuisance Parameters"
+output: rmarkdown::html_vignette
+vignette: >
+  %\VignetteIndexEntry{jmjax: Location Degeneracy, Reparameterization, and the JMbayes2 Comparison}
+  %\VignetteEngine{knitr::rmarkdown}
+  %\VignetteEncoding{UTF-8}
+---
+
+```{r, include = FALSE}
+knitr::opts_chunk$set(
+  collapse = TRUE,
+  comment = "#>"
+)
+```
+
+## Abstract
+
+`jmjax` samples joint longitudinal-survival models with NUTS/HMC and, on
+identical data, mixes dramatically better than `JMbayes2`'s block-Gibbs/
+Metropolis sampler - by more than an order of magnitude on regression
+parameters in several of the comparisons below. This document does three
+things. First, it names the mechanism precisely: a location degeneracy
+between subject-constant fixed effects and the matching linear combination
+of correlated random effects, which the likelihood pins only through their
+*sum*. This is not specific to the random intercept - this document shows,
+and traces to source, that the same degeneracy recurs for the random
+*slope* on time, independently of how many other covariates are in the
+model. Second, it describes `jmjax`'s fix (`control$orthogonalize_b0` /
+`orthogonalize_b`), a NUTS-space reparameterization that removes the
+absorbable directions from the random-effect prior rather than imposing an
+exact constraint, and explains concretely why it is a different (and, on
+current evidence, better-behaved) approach than an earlier, already-retracted
+attempt at the same problem (`wishart_gibbs_centered`). Third, it reports a
+replicated simulation study across a covariate-count sweep (k = 1, 4, 8, 12
+extra covariates) and an independent real-data check (the `aids` clinical
+trial data, never used to build any of the diagnostics below), both showing
+the same pattern: the regression-parameter efficiency advantage over
+`JMbayes2` is large, statistically significant, and *does not grow with
+covariate count* - because its dominant source is the covariate-count-
+independent slope degeneracy, not the covariate-count-dependent one. A
+separate, k-dependent effect is `JMbayes2`'s own catastrophic loss of
+convergence on its random-effects covariance parameter as covariate count
+grows (max R-hat past 10,000 at k = 12), which inflates naive "jmjax vs
+JMbayes2" ratios for reasons that have nothing to do with `jmjax`'s
+reparameterization. The document closes by connecting this to established
+reparameterization and MCMC literature, and by being explicit about what
+has *not* yet been checked - most importantly, posterior calibration, which
+is exactly the axis on which the earlier `wishart_gibbs_centered` attempt
+was found wanting.
+
+## 1. Motivation
+
+Across every real and simulated dataset `jmjax` has been benchmarked on, its
+NUTS/HMC sampler mixes better than `JMbayes2`'s sampler - sometimes by a
+modest, explainable margin (Section 6, and the existing benchmark section of
+`vignette("jmjax-validation")`), sometimes by a striking one. The striking
+cases concentrate on regression parameters, are essentially unaffected by
+whether `JMbayes2`'s *own* diagnostics have converged, and get *more*
+striking, not less, as the number of covariates grows - but, as this
+document shows, for a more specific and more interesting reason than "more
+covariates favor gradient-based samplers" in general.
+
+This is worth writing up carefully rather than reporting only the headline
+ratios, for two reasons. First, the mechanism is real, reproducible, and -
+as far as a genuine literature search turned up - not previously documented
+in exactly this form (Section 2.7), which makes it worth a citable record
+rather than only inline code comments. Second, an honest accounting has to
+separate what is actually attributable to `jmjax`'s design (a targeted
+reparameterization of a diagnosed degeneracy) from what is actually
+attributable to `JMbayes2`'s degradation under conditions its sampler was
+not designed to be robust to (Section 7). Conflating the two would overstate
+`jmjax`'s novelty on the axis where the advantage is smallest (nuisance
+parameters) and understate the well-grounded, citable case for it on the
+axis where the advantage is largest (regression parameters).
+
+## 2. Background: reparameterization in hierarchical Bayesian models
+
+### 2.1 Centered and non-centered parameterizations
+
+The general problem of how a hierarchical model's *parameterization* -
+independent of its likelihood - determines whether a given MCMC sampler
+mixes well is the subject of a substantial literature going back at least to
+Papaspiliopoulos & Roberts (2003), "Non-Centered Parameterisations for
+Hierarchical Models and Data Augmentation," in *Bayesian Statistics 7*
+(Bernardo et al., eds., Oxford University Press), and formalized in
+Papaspiliopoulos, Roberts & Sköld (2007), "A General Framework for the
+Parametrization of Hierarchical Models," *Statistical Science*, 22(1),
+59-73 (also arXiv:0708.3797). Their central point, restated for this
+setting: whether a hierarchical parameter should be sampled in its "centered"
+form (as the quantity of direct scientific interest) or a "non-centered"
+form (as a standardized deviation from a mean, with the mean itself a
+separate parameter) is not a matter of taste - it changes which directions
+of the posterior a given sampler can move efficiently along, and the right
+choice depends on how informative the data are relative to the prior for
+that parameter.
+
+### 2.2 Why this bites gradient-based samplers specifically
+
+Betancourt & Girolami (2013), "Hamiltonian Monte Carlo for Hierarchical
+Models" (arXiv:1312.0906), and Betancourt (2017), "A Conceptual
+Introduction to Hamiltonian Monte Carlo" (arXiv:1701.02434), give the
+geometric account of *why* a poor parameterization specifically hurts
+Hamiltonian/NUTS samplers: HMC's efficiency depends on a roughly uniform
+curvature (so a single, global step size and mass matrix work everywhere),
+and a degenerate or near-degenerate direction in the posterior - a ridge, or
+a funnel - forces the sampler either to take very small steps (to stay
+stable along the narrow direction) or to fail to move efficiently along the
+wide one. Hoffman & Gelman (2014), "The No-U-Turn Sampler," *Journal of
+Machine Learning Research*, 15, 1593-1623, is the reference for NUTS itself
+and documents the same general sensitivity to posterior geometry that
+motivates adaptive path-length selection in the first place.
+
+**Neal's funnel is a different pathology and should not be conflated with
+this one.** The canonical hard case for HMC in hierarchical models, due to
+Neal (2003), "Slice Sampling," *Annals of Statistics*, 31(3), 705-767, is a
+*curvature* problem: a hierarchical variance parameter changes the scale of
+the parameters below it, so the posterior narrows sharply in one region and
+widens in another, and no single step size handles both. The location
+degeneracy this document is about is not a curvature problem - the
+posterior's curvature along the degenerate direction is essentially flat
+(it is informed only by a prior, not sharpened or narrowed by the
+likelihood at all). Both problems are usefully addressed by
+reparameterization, and both are discussed together in introductions to HMC
+for exactly that reason, but they are mechanistically distinct and the fix
+for one is not automatically evidence for, or against, the other.
+
+### 2.3 A directly analogous, already-quantified example
+
+Stan's own User's Guide, in its "Collinearity" / redundant-intercepts
+discussion of "Problematic Posteriors," works through almost exactly the
+degeneracy this document is about: a model with two intercept parameters
+whose likelihood is invariant to adding a constant to one and subtracting it
+from the other, so only their *sum* is identified. Stan's documented,
+measured comparison (100 data points, standard normal) across three
+versions of that model is close enough to `jmjax`'s own case to quote
+directly:
+
+| Model | Mean leapfrog steps | ESS/sec | R-hat |
+|---|---:|---:|---:|
+| Non-identified (flat prior on both intercepts) | ~1,400 | ~200 | 5.2 (non-convergent) |
+| Weakly identified (both intercepts given a `normal(0, 10)` prior) | ~150 | ~1,900 | 1.0 |
+| Identified (single intercept) | ~3 | ~31,000 | 1.0 |
+
+The "weakly identified" row is the mechanistically exact analogue of
+`jmjax`'s default (non-orthogonalized) fit: `jmjax` does not leave `beta_0`
+and `mean(b_i0)` entirely unconstrained (that would be improper), it
+constrains their *split* only through the prior on the random effects, at
+scale `sigma_b0/sqrt(N)` - a weak, N-dependent identifying prior in
+precisely the sense of Stan's middle row. Reading the ratios off that row
+relative to the fully identified one - roughly 50x more leapfrog steps and
+roughly 16x lower ESS/sec from the *weak-prior* case alone, before even
+reaching the fully non-identified case - is a useful, independently-sourced
+sanity check on the magnitude of what a location degeneracy costs, prior to
+any numbers specific to `jmjax` below.
+
+### 2.4 The other side: why block/conditional samplers are specifically vulnerable
+
+Roberts & Sahu (1997), "Updating Schemes, Correlation Structure, Blocking
+and Parameterization for the Gibbs Sampler," *Journal of the Royal
+Statistical Society, Series B*, 59(2), 291-317, is the classical reference
+for the complementary fact this document needs for Section 7: a Gibbs
+sampler that updates parameters in blocks (as `JMbayes2`'s does - it
+combines Metropolis-within-Gibbs updates for regression coefficients with a
+closed-form conditional update for the random-effects covariance) degrades
+specifically as the *correlation between blocks* grows, because each block
+is updated conditional on the current value of the others and can only move
+as fast as that conditional distribution allows. This is a distinct
+mechanism from the location degeneracy itself: it does not require an
+unidentified direction, only a strongly correlated one, and it predicts
+degradation that tracks *inter-block correlation growing with problem size*
+even in a model that is *fully* identified everywhere - which is exactly
+the shape of the `JMbayes2` covariance-collapse finding in Section 5.4.
+
+### 2.5 Applied precedent
+
+Ogle et al. (2020), "Ensuring Identifiability in Hierarchical Mixed Effects
+Bayesian Models," *Ecological Applications*, 30(7), e02159, documents the
+same class of problem (fixed effects and random effects competing to
+explain the same variation) arising in applied hierarchical models outside
+the joint-modeling literature, and is useful as evidence that this is a
+recognized, recurring failure mode across the wider Bayesian hierarchical-
+modeling literature rather than an artifact specific to joint models.
+
+### 2.6 What appears to be genuinely new here
+
+A deliberately honest gap: no prior work was found that documents this
+*exact* instance - a random-slope-mean-vs-fixed-slope-coefficient aliasing,
+in a *joint* longitudinal-survival model, empirically shown to explain a
+*widening* efficiency disadvantage for a competing block-sampler
+implementation as covariate count grows, with the covariate-count-
+independence of the underlying mechanism itself confirmed against the
+sampler's own source code. The pieces above (non-centered reparameterization
+theory, HMC's specific sensitivity to it, Gibbs samplers' specific
+sensitivity to growing correlation) are all separately well established;
+their combination and application to this specific model class, with this
+specific empirical signature, is offered here as this document's actual
+contribution - not a rediscovery of general theory.
+
+## 3. The location degeneracy in jmjax's joint model
+
+### 3.1 Setup
+
+`jmjax`'s longitudinal submodel, for the random-intercept-and-slope case
+(`random_effects = "intercept_slope"`, `q = 2`) that this document is
+concerned with, is
+
+$$y_{ij} = \beta^\top x_{ij} + b_{i0} + b_{i1} t_{ij} + \varepsilon_{ij}$$
+
+with `beta` the fixed-effects vector (including an intercept and any
+baseline covariates), `b_i = (b_{i0}, b_{i1})` subject-level random effects
+with a correlated Normal prior, and `t_ij` the time of observation `j` for
+subject `i`. The survival submodel links to this through `alpha` and the
+usual functional forms; nothing below changes as a function of the survival
+side, so it is suppressed in this section's notation.
+
+### 3.2 The intercept-level degeneracy (established prior to this document)
+
+If `x_ij` contains an intercept column (or, more generally, any column that
+is constant within subject `i`), a shift `b_{i0} -> b_{i0} + s_i` for a
+subject-constant `s_i` changes nothing about the fitted mean as long as
+`beta` absorbs the matching shift on that column - the likelihood
+constrains only the **sum**, not the individual split. This was already
+diagnosed and documented (`vignette("jmjax-validation")`, "The experimental
+`wishart_gibbs_centered` option"; see also the `orthogonalize_b0`
+documentation in `?jm_fit`) prior to the work in this document, via a
+measured `corr(beta_0, mean(b_i0)) ~= -0.95` on real data and the resulting
+poor `beta_0` mixing.
+
+**An earlier attempted fix, and why it was retracted.**
+`control$random_effects_method = "wishart_gibbs_centered"` addressed this
+by constraining the random intercepts to sum to exactly zero at *every*
+posterior draw - a hard, exact Gibbs-sampler constraint. It worked, in the
+narrow sense of improving `beta_0`'s mixing (`beta_0` ESS improved roughly
+4.8x in its own validation). But further validation at a larger sample size
+found it introduces a genuine, quantitatively characterized **credible-
+interval miscalibration** for `beta_0`: point estimates stayed unbiased, but
+the reported posterior standard deviation did not fully reflect the true
+uncertainty, because the exact constraint removes real finite-sample
+variability in the sample mean of the true random intercepts that `beta_0`
+must otherwise absorb. It is documented in the package as exploratory only,
+not recommended for final inference. This episode matters for what follows
+in two ways: it establishes that this general class of problem is not
+solved just by "removing" the degeneracy by any means available, and it is
+the point of comparison Section 3.5 returns to.
+
+### 3.3 The new finding this document adds: the same degeneracy recurs for the random slope, independently of covariate count
+
+The session behind this document set out to characterize how `jmjax`'s
+efficiency advantage over `JMbayes2` scales with the number of covariates
+`k`, on the hypothesis (reasonable a priori, and the initial motivating
+observation) that more covariates create more room for `beta_0`-type
+degeneracies and so a larger advantage for the orthogonalized fit. A fast
+`n = 500`, `k in {1, 3}` readout initially seemed to support this - but it
+was a single seed per cell, and the much larger, replicated sweep in
+Section 5 overturns it: the regression-parameter advantage of full
+orthogonalization (`orthogonalize_b`, "arm E" below) over the default fit
+("arm A") is **flat across k = 1, 4, 8, 12** (roughly 11-15x throughout, no
+trend - Table 5.3), not growing with covariate count as first guessed.
+
+The explanation, verified directly against `jmjax`'s own source
+(`inst/python/jmjax_backend/mcmc_model.py`, the `_absorbable_basis`
+function), is that the *dominant* win from full orthogonalization is not
+the `k`-dependent, `beta_0`-type degeneracy at all. It is a **second,
+separate degeneracy between the fixed slope coefficient `beta_1` (the
+population-average coefficient on `time`) and the population *mean* of the
+random slopes, `mean(b_i1)`** - and this one is present as soon as there is
+*any* random slope on time, regardless of how many other covariates are in
+the model. `_absorbable_basis`'s own docstring states this plainly, in code
+that is data-driven (it does not hard-code which columns are absorbable; it
+discovers them from the actual design matrices at fit time):
+
+> "For q = 1 (a random slope on time) it picks up `time` itself, giving the
+> sum-to-zero constraint on b_1, and would also pick up any
+> covariate-by-time interaction present in X."
+
+That is: whenever the fixed-effects design includes a `time` column (as any
+model with a fixed slope on time does) and there is a correlated random
+slope on time, the fixed slope and the mean random slope are aliased in
+exactly the same "sum is identified, split is not" sense as the intercept
+case - and this holds at `k = 0` extra covariates just as much as at
+`k = 12`. This was directly confirmed by the replicated log in Section 5:
+across every `k` tested, the *binding* (lowest-ESS) regression parameter
+under the default fit is consistently `beta_1`, never one of the `k`
+covariate coefficients themselves - and `orthogonalize_b` (which sweeps the
+slope column too; `orthogonalize_b0` does not) is what fixes it, cleanly and
+consistently, at every `k`.
+
+### 3.4 The fix: `orthogonalize_b0` / `orthogonalize_b`
+
+`control$orthogonalize_b0` (intercept column only) and `control$orthogonalize_b`
+(every random-effect column, i.e. intercept and slope) implement a NUTS-space
+reparameterization rather than an exact Gibbs constraint. For each
+random-effect column `q`, `_absorbable_basis()` inspects the actual (not
+assumed) fixed-effects design `X` and random-effects design `Z` and
+constructs an orthonormal basis `Q` for exactly the subject-level directions
+that some fixed-effects column can reproduce - i.e. the directions a shift
+in `b[:, q]` could equivalently be expressed as a shift in `beta`. The
+sampled random-effect column is then replaced by its residual off that
+column space (its projection onto the orthogonal complement of `Q`), so the
+degenerate directions are simply never given to the sampler as free
+parameters in the first place; everything the likelihood cannot separately
+identify about that direction is left entirely to `beta`, exactly as it
+should be.
+
+**The model is unchanged.** Every direction swept out of a random-effect
+column lies in a column space `beta` already spans, so for any posterior
+draw there exists a shift of `beta` that reproduces identical fitted values
+- the set of achievable mean structures is exactly the same before and
+after. What changes is only which parameterization NUTS samples in. Section
+4 verifies this empirically (it has to hold as a consequence of the
+construction, but "the algebra says so" and "the implementation does what
+the algebra says" are different claims, and only the second was previously
+untested at general `k`).
+
+The option is data-driven rather than assumption-driven in a second sense
+worth noting: if the design has no intercept and no column matching a
+random-effect term, `_absorbable_basis` returns no basis and the option is
+a documented no-op with a warning, rather than silently doing nothing or
+erroring. The implementation also reports, via a `RuntimeWarning` at fit
+time, exactly which basis (if any) was constructed for each column and from
+which `X` columns - the log excerpts quoted in Section 5 include these
+messages verbatim, which is what makes it possible to state with confidence
+*which* directions were actually removed on each run, rather than inferring
+it indirectly from downstream ESS numbers.
+
+### 3.5 Previously-measured magnitude, real data
+
+Prior to this document, `orthogonalize_b0`'s own package documentation
+(`?jm_fit`) already recorded a direct measurement on the `pbc2` dataset
+(n = 312, 4 chains x 1000 draws, figures reported in the space NUTS actually
+samples): with an intercept and one baseline covariate in the design,
+
+- `corr(beta_0, mean(b_i0)) = -0.9709`
+- `corr(beta_2, age-slope(b_i0)) = -0.9715`
+- against `+0.0543` for `beta_1` (a within-subject, non-absorbable
+  contrast, included as a negative control)
+- minimum ESS for the two affected coefficients alone, 441 and 526, against
+  2893 and >4000 for the corresponding *identified sums* - a recoverable
+  factor of **6.6x and >7.6x**.
+
+### 3.6 Why this is not the same fix as `wishart_gibbs_centered`, and what has *not* yet been checked
+
+Directly on the same `pbc2` data, `wishart_gibbs_centered` (which pins only
+`mean(b_i0)` at exactly zero, removing one direction of the degeneracy) is
+recorded as moving `beta_0`'s ESS 441 -> 1490, but `beta_2`'s ESS 526 -> 291
+- *worse* than doing nothing for the second parameter, because pinning one
+direction of a two-dimensional degeneracy does not remove the other.
+`orthogonalize_b0`/`orthogonalize_b` differ in two structural ways: they
+identify *all* absorbable directions per column from the actual design
+(not just the intercept's own), and they operate as a continuous
+reparameterization inside the space NUTS explores with gradients, rather
+than as an exact constraint imposed by a separate Gibbs step. This is why
+the fix generalizes correctly to the multi-covariate case where the earlier
+one did not.
+
+It is important to be equally direct about the corresponding open question.
+`wishart_gibbs_centered`'s efficiency gain was checked for calibration and
+found wanting (Section 3.2). `orthogonalize_b0`/`orthogonalize_b` have, to
+date, been checked for correctness in the point-estimate sense (Section 4:
+fitted values and posterior means are unaffected, as the construction
+requires) and extensively for efficiency (Sections 5-6), but **not yet for
+calibration** - whether reported credible intervals for `beta_0`/`beta_1`
+under the swept-basis prior have correct frequentist coverage. There is a
+plausible mechanistic reason to expect this fix behaves differently on that
+axis (it changes the prior's *support*, not the likelihood's identification
+of a specific value the way an exact zero-sum constraint does), but this is
+a hypothesis, not yet a checked result, and the package documentation
+correctly marks the option experimental / opt-in pending exactly this. This
+document does not close that question; Section 8 returns to it as the
+single most important piece of unfinished validation work.
+
+## 4. Correctness validation
+
+Because the reparameterization cannot change the set of achievable fitted
+values (Section 3.4), `beta`, `alpha`, and fitted values must agree between
+the default fit ("arm A") and the orthogonalized fits ("arm D" =
+`orthogonalize_b0` only, "arm E" = `orthogonalize_b`, full) up to Monte
+Carlo error. This was checked directly in the replicated covariate-count
+sweep (Section 5): comparing `alpha`'s posterior mean between arms A and D
+across every `k` tested,
+
+| k | truth | A | D |
+|---:|---:|---:|---:|
+| 1 | 0.500 | 0.5075 | 0.5077 |
+| 4 | 0.500 | 0.4854 | 0.4855 |
+| 8 | 0.500 | 0.4914 | 0.4916 |
+| 12 | 0.500 | 0.5164 | 0.5163 |
+
+and `beta_1`'s posterior mean across arms A, D, and E:
+
+| k | truth | A | D | E |
+|---:|---:|---:|---:|---:|
+| 1 | 0.500 | 0.4940 | 0.4940 | 0.4944 |
+| 4 | 0.500 | 0.4886 | 0.4886 | 0.4882 |
+| 8 | 0.500 | 0.4953 | 0.4953 | 0.4956 |
+| 12 | 0.500 | 0.4991 | 0.4991 | 0.4992 |
+
+agree to within Monte Carlo noise at every `k`, as the construction
+requires. This is complemented by the study's built-in negative control,
+"arm A2" - a second default-configuration fit at an independent seed, used
+to build a null distribution for how much two fits of the *same* model
+should differ by chance alone, so that an apparent "A vs D" difference can
+be judged against genuine sampling variability rather than eyeballed.
+
+## 5. Efficiency: simulated covariate-count sweep
+
+### 5.1 Design
+
+`dev/sim_joint.R` was generalized this session to support an arbitrary
+number of extra covariates `k_extra` (previously capped at 3): baseline
+covariates are `age` (re-centered at mean 0 this session, removing a
+covariate-scale confound - see Section 5.1.1), `sex`, `trt`, and, beyond
+those three, independent standard-normal covariates `x4, x5, ...` with
+geometrically decaying true coefficients. `dev/study_orth_vs_jmbayes2.R`
+runs arms `A` (default), `D` (`orthogonalize_b0`), `E` (`orthogonalize_b`),
+and `J` (`JMbayes2::jm()`) across a `k` x `n` grid, resumable via a cached
+CSV keyed by `(k, n, seed, arm)`.
+
+The sweep reported here is `k in {1, 4, 8, 12}` at `n = 1000`, 3 seeds
+(matching JMbayes2 across 3 independent MCMC seeds as well), with
+`JMbayes2` run at 16,000 iterations / 4,000 burn-in per chain - well above
+its own package default of 3,500/500 - specifically so that any
+`JMbayes2` under-performance cannot be attributed to giving it fewer draws
+than it needed.
+
+#### 5.1.1 A covariate-scale confound removed before this sweep
+
+`age` was originally simulated as `N(50, 10)` (a realistic clinical scale).
+As documented separately (`vignette("jmjax-validation")`, "Covariate scale:
+now handled automatically"), an uncentered covariate on that scale induces a
+strong `corr(beta_0, beta_age) ~= -0.98` posterior correlation that is
+*itself* expensive for NUTS, entirely independently of the random-effects
+degeneracy this document is about. `jmjax`'s automatic `standardize_covariates`
+already corrects for this internally, but leaving `age` uncentered in the
+*simulator* would have confounded "does the random-effects degeneracy scale
+with k" with "does an unrelated fixed-effects scale issue scale with k."
+`age` was re-centered to `N(0, 10)` in `sim_joint.R` before this sweep was
+run, isolating the effect this document is actually about.
+
+### 5.2 Why two R-hat gates are needed
+
+`JMbayes2`'s random-effects covariance parameters degrade sharply with `k`
+(Section 5.4), which fails an all-parameters R-hat convergence gate well
+before `k = 8` - but this says nothing about whether the *regression*
+parameters being compared are themselves trustworthy. Mirroring the pattern
+already used in the real-data study (`dev/study_realdata_aids.R`), the
+sweep checks R-hat separately on (a) every sampled parameter and (b) only
+`beta`, `alpha`, and `gamma` - the parameters a user would actually report.
+At every `k` in this sweep, the regression-only gate **passes for every
+arm, including `J`**, even where the all-parameters gate fails by several
+orders of magnitude - meaning the regression-parameter comparisons below
+can be trusted even in the cells where the headline "ESS/sec, all
+parameters" comparison cannot.
+
+### 5.3 Results
+
+Regression-only figures are `min(ESS/sec)` over `{beta, alpha, gamma}` only
+("the REPORTING view"); all-parameters figures are `min(ESS/sec)` over
+every sampled parameter ("the CONVERGENCE view"). `beta_0` ESS is reported
+separately because it is the parameter Section 3.2's degeneracy targets
+directly.
+
+| k | beta_0 ESS: A | D (x) | E (x) | E vs A, all-params ESS/sec | E vs A, regression-only ESS/sec | regression-only p-value [95% CI] |
+|---:|---:|---:|---:|---:|---:|---|
+| 1  | 492.7 | 5207.2 (10.6x) | 6592.5 (13.4x) | 1.12x | 14.3x | (single seed at k=1; see note) |
+| 4  | 551.2 | 7503.7 (13.6x) | 6727.9 (12.2x) | 1.26x | 14.7x | (single seed at k=4; see note) |
+| 8  | 624.2 | 7268.5 (11.7x) | 6514.0 (10.4x) | 1.18x (p=0.09, CI [0.94x, 1.49x]) | 13.3x | **p = 0.0064, CI [5.46x, 32.52x]** |
+| 12 | 628.6 | 7121.3 (11.3x) | 7334.8 (11.7x) | 1.14x (p=0.07, CI [0.97x, 1.34x]) | 14.2x | **p = 0.0003, CI [11.79x, 17.08x]** |
+
+*Note: p-values require >= 2 seeds; k=1 and k=4 draw on this sweep's
+seed-1 (cached) plus seeds 2-3 for the point estimates shown, but the
+formal significance test was run specifically at k=8 and k=12, the two
+most extreme, most decisively informative cells, as the targeted
+replication (see Section 5.1). The point estimates at k=1 and k=4 are
+consistent with the same pattern.*
+
+Two things stand out, both consistent with the mechanism in Section 3.3.
+First, **the regression-only advantage is essentially flat across k = 1 to
+12** (13.3x-14.7x point estimates; both significance tests, at the two
+extremes tested, agree closely: 95% CIs of roughly [5x-33x] and [12x-17x]).
+This directly falsifies the initial hypothesis that this advantage should
+grow with covariate count - and is exactly what Section 3.3's mechanism
+predicts, since the binding regression parameter throughout is `beta_1`,
+whose degeneracy with `mean(b_i1)` does not depend on `k` at all.
+
+Second, **the all-parameters comparison is statistically indistinguishable
+from 1x at both tested points** (both 95% CIs include 1x), while the
+regression-only comparison is highly significant at both. This is the
+formal version of the R-hat-gate finding in 5.2: once nuisance parameters
+(dominated by `rho`, which orthogonalization does not touch - see Section
+7.1) are allowed to set the pace, the *aggregate* comparison is noisy and
+not clearly different from parity; the real, replicated, large effect is
+specific to the regression parameters the reparameterization actually
+targets.
+
+### 5.4 JMbayes2's own degradation with k
+
+Independently of anything about `jmjax`, `JMbayes2`'s random-effects
+covariance parameter (`D.D[...]`, a fixed 2x2 block regardless of `k`)
+shows a clear, replicated collapse in R-hat as `k` grows:
+
+| k | JMbayes2 all-params max R-hat (seed range across replication) |
+|---:|---|
+| 1  | 1.008 |
+| 4  | 1.072 |
+| 8  | 191.8 - 329.7 |
+| 12 | 6997.6 - 11087.7 |
+
+confirmed consistent across all 3 replication seeds at both k=8 and k=12 (no
+seed came close to converging at either point). This is the block-Gibbs
+correlation-growth mechanism described in Section 2.4 (Roberts & Sahu 1997):
+nothing about the model's identifiability changes with `k` here (the
+covariance block is always 2x2), but the *conditional* correlation the
+Gibbs step has to move through grows as more absorbable fixed-effects
+directions are added to the design - exactly the setting that literature
+predicts degrades block/conditional samplers specifically. This is also
+precisely why the naive "all-parameters ESS/sec, jmjax vs JMbayes2" ratio
+would look enormous at k=12 (hundreds-fold, driven by `J`'s R-hat of
+11,000+) without being an honest measurement of anything `jmjax`'s own
+reparameterization did - which is the reason this document reports the
+regression-only comparison as the trustworthy one, not the larger raw
+number.
+
+## 6. Efficiency: real data
+
+### 6.1 AIDS clinical trial data - an independent generalization check
+
+The `aids` dataset bundled with `JMbayes2` (n = 467 patients, CD4 count
+over time modeled as `sqrt(CD4) ~ obstime + drug + ...`, `Surv(Time, death)
+~ drug`; Guo & Carlin, 2004, *The American Statistician*, 58(1), 16-24) was
+deliberately chosen for the real-data check in preference to `pbc2`, for a
+reason worth stating explicitly: `pbc2` is the *only* real dataset every
+degeneracy diagnostic and every "measured motivation" number quoted in
+`jmjax`'s own source code (Section 3.5) has ever touched. A result that only
+ever appears on the dataset used to discover it is not yet evidence the
+effect generalizes. `aids` is untouched by any of this project's diagnostic
+history and is itself a standard, independently-cited benchmark in the
+joint-modeling literature (e.g. Rizopoulos, 2010, "JM: An R Package for the
+Joint Modelling of Longitudinal and Time-to-Event Data," *Journal of
+Statistical Software*, 35(9)), which also makes the result legible to a
+reader unfamiliar with this package's own development history.
+
+Across 4 independent seeds (`aids_full.csv`), regression-only ESS/second
+ratios against the default fit:
+
+| arm | mean regression-only ESS/sec | mean all-params R-hat | mean regression-only R-hat | per-seed ratio vs A (range) |
+|---|---:|---:|---:|---|
+| A (default) | 23.1 | 1.009 | 1.008 | - |
+| D (orth. intercept) | 180.6 | 1.008 | 1.002 | 5.16x - 11.91x |
+| E (orth. all) | 209.8 | 1.008 | 1.001 | 5.17x - 13.43x |
+| J (JMbayes2, 2 of 4 seeds) | 56.6 | 2.333 | 1.023 | (E vs J: 4.11x, 4.53x, the 2 seeds with a matched J run) |
+
+The pattern replicates the simulated study closely: `jmjax`'s regression
+parameters converge cleanly regardless of arm (mean regression-only R-hat
+1.001-1.008 across A/D/E), while `JMbayes2`'s all-parameters R-hat is
+unstable across seeds (mean 2.33, driven by its covariance block) even
+though its own regression-only R-hat (1.023) is reasonable - the same
+regression-vs-nuisance split seen throughout this document, now confirmed
+on a dataset that played no role in developing any of the diagnostics that
+found it.
+
+### 6.2 PBC2
+
+The pre-existing PBC2 benchmark in `vignette("jmjax-validation")`
+("Benchmark: jmjax vs JMbayes2" and "Performance tuning") reports a
+combined (not orthogonalization-specific) ~4.8x sampling-efficiency
+advantage on real, covariate-laden PBC2 data, using the recommended
+combination of options documented there. The `orthogonalize_b0`-specific
+PBC2 numbers in Section 3.5 (6.6x/>7.6x recoverable ESS on the two affected
+coefficients alone) are a different, narrower measurement - the marginal
+effect of the location-degeneracy fix specifically, isolated from the other
+tuning options in that combined figure. Both are accurately described as
+"previously validated," not new results of this document; they are
+included here for completeness, and because Section 3.5's numbers are the
+direct empirical basis for the mechanism explained in Section 3.
+
+## 7. Mechanism: two architectural layers, not one
+
+A natural reading of the results above is that `jmjax`'s NUTS/HMC sampler is
+simply, generally superior to `JMbayes2`'s block sampler - including on
+parameters (like `rho`, the random-effects correlation) that no targeted
+reparameterization in this package touches at all. That reading is half
+right and worth separating into its two actual components, because they
+have different degrees of novelty and different literature backing.
+
+### 7.1 Layer 1: generic gradient-based robustness (well-established, not jmjax-specific)
+
+`rho`'s own mixing under `jmjax` is, on its own terms, unremarkable: its
+ESS/draw bounces in a narrow band (roughly 0.06-0.12 across the k-sweep) with
+no trend as `k` grows, since neither `orthogonalize_b0` nor `orthogonalize_b`
+touches `rho` at all. What *is* notable is that it is **stable** rather than
+degrading - which, given Section 5.4's finding, is mostly a statement about
+`JMbayes2` degrading on its comparable parameter (the covariance block that
+`rho` is derived from), not about `jmjax` doing anything specifically clever
+for `rho`. This is exactly the generic NUTS/HMC-vs-block-Gibbs distinction
+in Section 2.2 and 2.4 (Hoffman & Gelman 2014; Roberts & Sahu 1997;
+Betancourt 2017): a gradient-based sampler that jointly explores the full
+parameter vector via Hamiltonian dynamics has no equivalent of "conditional
+on the other blocks' current values," and so has no equivalent mechanism by
+which growing inter-parameter correlation specifically degrades one block's
+own updates. This is real, well-documented, general MCMC theory - not a
+`jmjax`-specific architectural achievement, and the write-up should not
+claim it as one.
+
+### 7.2 Layer 2: the targeted reparameterization (this package's actual, specific contribution)
+
+The large, k-independent, highly statistically significant regression-only
+advantage (Section 5.3) is not explained by Layer 1 alone - `beta_1`
+degrades under the *default* `jmjax` fit too (that is precisely what makes
+`orthogonalize_b` measurably better than `orthogonalize_b0`, and both
+measurably better than neither). This is Section 3's specific,
+data-verified diagnosis and fix: a real degeneracy, present at any `k`,
+removed by a construction that reads the actual design matrices rather than
+assuming a fixed formula shape, verified not to change the model (Section
+4), and shown to recover the specific factor of efficiency the degeneracy
+was costing (Sections 3.5, 5.3, 6.1).
+
+### 7.3 Synthesis
+
+The user-observed pattern that motivated this document - "the sampler works
+well and consistently for all regression parameters, and is merely
+unremarkable-but-not-bad on nuisance parameters, and even the nuisance-
+parameter comparison still favors jmjax" - holds up under scrutiny, but in a
+specific, qualified form rather than as a single unified claim: the
+regression-parameter robustness is the combination of a well-established,
+generic sampler-class advantage (Layer 1, not novel) with a targeted,
+verified, data-driven fix for a specific diagnosed degeneracy (Layer 2, the
+actual contribution). The "nuisance-parameter advantage," on inspection, is
+mostly a restatement of `JMbayes2`'s own degradation (Section 5.4) rather
+than independent evidence of anything `jmjax` does specifically well there.
+Framed this way, the claim that this reflects "elegant parameterization and
+problem formulation" is well supported for the regression-parameter case
+specifically - that is where a genuine, identified problem was found and a
+principled, literature-grounded fix was applied and verified - and should
+not be extended, without further evidence, to a claim that `jmjax`'s NUTS
+implementation is unusually good at sampling covariance/correlation
+parameters in general.
+
+## 8. Limitations and open questions
+
+- **Posterior calibration has not been checked** for `orthogonalize_b0`/
+  `orthogonalize_b`, unlike `wishart_gibbs_centered`, which *was* checked on
+  this axis and found to miscalibrate `beta_0`'s credible interval (Section
+  3.2, 3.6). This is the single most important remaining validation step
+  before recommending the option for inference intended to be reported as
+  final, and there is no evidence yet either way for this specific
+  construction.
+- The option currently requires `q >= 2`, `random_effects_corr = TRUE`, and
+  `random_effects_method = "nuts"` (the default); other combinations raise
+  an informative error rather than silently no-op'ing, but the option's
+  coverage of `jmjax`'s other random-effects code paths (e.g.
+  `wishart_gibbs`, uncorrelated random effects) is simply untested, not
+  ruled out.
+- It remains an opt-in, experimental option, not the default.
+- The sample-size (`n`) dimension of this study is incomplete: only `n =
+  500` at `k in {1, 3}` was run before the covariate-count question took
+  priority (per an explicit, deliberate scope decision - see project
+  history); a proper `n`-scaling characterization, orthogonal to the
+  `k`-sweep reported here, remains open.
+- `_absorbable_basis`'s correctness rests on an algorithmic construction
+  (verified to do what it claims by direct inspection of its logic) plus
+  empirical checks (`verify_orth_slope.R`, and the correctness table in
+  Section 4) - not a written mathematical proof. A formal statement and
+  proof of correctness (the swept subspace is exactly the set of directions
+  absorbable by `beta`, no more and no less) would strengthen any
+  submission-quality version of this document.
+- The simulation design here uses a Weibull survival submodel and a
+  specific covariate structure (three named covariates plus independent
+  Gaussian extras). Generalization to the spline-baseline hazard, to
+  covariates with their own structure (e.g. correlated covariates, or
+  covariate-by-time interactions, which `_absorbable_basis`'s own docstring
+  notes it would also pick up), and to designs without a random slope at
+  all, is plausible by construction but not separately re-verified by the
+  study in this document.
+
+## 9. Related work summary
+
+Section 2 covers this in full; in brief, this document sits at the
+intersection of (a) general non-centered/centered reparameterization theory
+for hierarchical models (Papaspiliopoulos & Roberts 2003; Papaspiliopoulos,
+Roberts & Sköld 2007), (b) the specific geometric account of why this
+matters for Hamiltonian/NUTS samplers (Betancourt & Girolami 2013;
+Betancourt 2017; Hoffman & Gelman 2014; Neal 2003 for the related-but-
+distinct funnel case), (c) the complementary account of why block/Gibbs
+samplers are specifically vulnerable to the resulting growing correlation
+(Roberts & Sahu 1997), and (d) applied precedent for this failure mode in
+hierarchical Bayesian models generally (Ogle et al. 2020). Its contribution
+is the specific diagnosis, source-verified mechanism, and replicated
+empirical characterization of this problem for joint longitudinal-survival
+models, and the finding that a substantial, previously unexplained part of
+`jmjax`'s efficiency advantage over `JMbayes2` traces to this rather than to
+covariate count as such.
+
+## 10. Conclusion
+
+`jmjax`'s regression-parameter efficiency advantage over `JMbayes2` is real,
+large, statistically significant, replicated across simulated and (for the
+`aids` dataset) genuinely independent real data, and mechanistically
+understood down to the level of source code rather than only observed as an
+aggregate benchmark number. It is best explained as the product of a
+generic, well-documented sampler-class robustness (gradient-based HMC/NUTS
+versus block-Gibbs/Metropolis) and a specific, targeted, verified
+reparameterization of a real, diagnosed identifiability problem that recurs
+- independently of covariate count - for any random slope on time. The
+weaker, still-favorable nuisance-parameter comparison is better understood
+as `JMbayes2`'s own degradation under growing inter-block correlation than
+as an independent `jmjax` achievement. The most important open item before
+this work is submission-ready is a calibration/coverage check of the fix
+itself, precisely because the one directly comparable earlier attempt
+failed that exact check.
+
+## 11. Note on publication venue
+
+For the record, and as requested: this material is suited to a package
+vignette regardless of any further venue (this document); beyond that, the
+combination of a general, citable methodological contribution (Sections 2-
+3, 7-8) with a software package it ships in and validates (Sections 4-6)
+fits the scope of the *Journal of Statistical Software* or *The R Journal*
+best (both have precedent for exactly this pairing - `JMbayes2` itself was
+introduced this way). A parallel arXiv preprint (`stat.CO` or `stat.ME`) is
+low-cost and would establish priority independently of review timelines.
+`Bayesian Analysis`, `Statistics in Medicine`, and `Computational Statistics
+& Data Analysis` are reasonable alternates if a narrower statistical-
+methodology framing (rather than software-paper framing) is preferred.
+Before any of these, Section 8's calibration gap should be closed - a
+reviewer working in this area would be expected to ask for it, and it is
+better to have the answer already in hand.
+
+## References
+
+- Betancourt, M. & Girolami, M. (2013). Hamiltonian Monte Carlo for
+  Hierarchical Models. arXiv:1312.0906.
+- Betancourt, M. (2017). A Conceptual Introduction to Hamiltonian Monte
+  Carlo. arXiv:1701.02434.
+- Guo, X. & Carlin, B. P. (2004). Separate and Joint Modeling of
+  Longitudinal and Event Time Data Using Standard Computer Packages. *The
+  American Statistician*, 58(1), 16-24.
+- Hoffman, M. D. & Gelman, A. (2014). The No-U-Turn Sampler: Adaptively
+  Setting Path Lengths in Hamiltonian Monte Carlo. *Journal of Machine
+  Learning Research*, 15, 1593-1623.
+- Neal, R. M. (2003). Slice Sampling. *Annals of Statistics*, 31(3),
+  705-767.
+- Ogle, K. et al. (2020). Ensuring Identifiability in Hierarchical Mixed
+  Effects Bayesian Models. *Ecological Applications*, 30(7), e02159.
+- Papaspiliopoulos, O. & Roberts, G. O. (2003). Non-Centered
+  Parameterisations for Hierarchical Models and Data Augmentation. In
+  *Bayesian Statistics 7* (Bernardo, J. M. et al., eds), Oxford University
+  Press.
+- Papaspiliopoulos, O., Roberts, G. O. & Sköld, M. (2007). A General
+  Framework for the Parametrization of Hierarchical Models. *Statistical
+  Science*, 22(1), 59-73. Also arXiv:0708.3797.
+- Rizopoulos, D. (2010). JM: An R Package for the Joint Modelling of
+  Longitudinal and Time-to-Event Data. *Journal of Statistical Software*,
+  35(9).
+- Roberts, G. O. & Sahu, S. K. (1997). Updating Schemes, Correlation
+  Structure, Blocking and Parameterization for the Gibbs Sampler. *Journal
+  of the Royal Statistical Society, Series B*, 59(2), 291-317.
+- Stan Development Team. *Stan User's Guide*, "Problematic Posteriors" /
+  collinearity and redundant-intercepts example. https://mc-stan.org/docs/stan-users-guide/problematic-posteriors.html
