@@ -243,9 +243,10 @@ today's further optimizations are introduced.
 
 A subsequent, thorough performance investigation - triggered by a
 troubling apparent efficiency regression on real, covariate-laden data,
-and documented in full in a separate technical report
-(`jmjax_mcmc_performance_investigation_report`, available alongside this
-package's development materials) - found and fixed six genuine
+and documented in full in a technical report that ships with this
+package as `inst/doc-notes/mcmc-performance-investigation.md` (find it
+with `system.file("doc-notes", "mcmc-performance-investigation.md",
+package = "jmjax")`) - found and fixed six genuine
 inefficiencies and one important methodological confound. The headline,
 validated finding: **on real PBC2 clinical data (`q=2`, real covariates,
 penalized spline baseline), jmjax with the options below achieves
