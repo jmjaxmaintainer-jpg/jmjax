@@ -2902,6 +2902,17 @@ jm_fit <- function(long_formula,
       n_subjects = length(long_arr$subj_ids),
       n_obs_long = sum(long_arr$n_obs),
       n_events = sum(surv_arr$event),
+      # NULL for MLE methods (num_warmup/num_samples/num_chains are only
+      # meaningful for the two MCMC methods). Recorded here, at the same
+      # single assembly point as convergence$precision above, rather than
+      # read back out of `control` after the fact by print()/summary() -
+      # `control` itself is not stored on the fit object, and reaching into
+      # the call's environment from a print method would be fragile.
+      mcmc_settings = if (!is.null(py_result$diagnostics)) {
+        list(num_warmup = control$num_warmup, num_samples = control$num_samples,
+             num_chains = as.integer(control$num_chains %||% 1L),
+             rw2_implementation = control$rw2_implementation %||% "vectorized")
+      } else NULL,
       posterior_samples = py_result$posterior_samples  # NULL unless MCMC
     ),
     class = "jmjax"

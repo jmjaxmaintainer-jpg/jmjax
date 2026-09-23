@@ -15,5 +15,10 @@
 \code{x}, invisibly.
 }
 \description{
-Print a jmjax fit
+Leads with the association parameter (\code{alpha}, the effect of the
+longitudinal marker on the hazard) as the headline result, since it is
+usually the reason a joint model was fit at all, then the full set of
+estimates grouped by submodel, a one-line convergence summary, and
+(for the MCMC methods) the sampler settings and whether the
+\code{control$rotate_absorbable} reparameterization was applied.
 }

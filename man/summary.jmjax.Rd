@@ -13,10 +13,18 @@
 }
 \value{
 A data frame with one row per parameter: \code{Estimate},
-  \code{Std.Err}, \code{z.value}, and \code{p.value} (Wald test against
-  zero). For MCMC fits, \code{Estimate}/\code{Std.Err} are the posterior
-  mean/SD and the Wald framing is an approximation - inspect the full
-  posterior (\code{object$posterior_samples}) for skewed parameters.
+  \code{Std.Err}, \code{z.value}, \code{p.value} (Wald test against
+  zero), and \code{Group} (which submodel the parameter belongs to -
+  Association, Longitudinal, Survival (baseline hazard), Survival
+  (baseline covariates), or Variance components). For MCMC fits,
+  \code{Estimate}/\code{Std.Err} are the posterior mean/SD and the Wald
+  framing is an approximation - inspect the full posterior
+  (\code{object$posterior_samples}) for skewed parameters, or the alpha
+  credible interval \code{print()} reports up front. Carries class
+  \code{c("summary.jmjax", "data.frame")}; the extra class only changes
+  how it prints (grouped, via \code{print.summary.jmjax}) - every
+  existing \code{data.frame} access (\code{summary(fit)$Estimate},
+  subsetting, etc.) still works exactly as before.
 }
 \description{
 Summarize a jmjax fit
