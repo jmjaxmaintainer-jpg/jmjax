@@ -43,16 +43,20 @@ block (`control$dense_mass_generator_beta`). The rotation changes no
 prior, no likelihood and no reported quantity: it only changes which
 coordinates NUTS adapts to.
 
-In simulation (Section 6), the rotation raises the effective sample size
-per second of the regression coefficients a user reports to roughly 8x-25x
-(intercept) and 8x-60x (time slope) a default fit's, across ten designs, at the same wall time,
-with coverage in a 100-replicate calibration study agreeing with the
-default fit's within Monte Carlo error. On two real datasets (Section 7),
-the same coefficients gain 12x-34x (the intercept and subject-constant
-covariates) and 2x-5x (the time slope). Section 8 compares with `JMbayes2`. With the
-rotation, `jmjax` matches it on the coefficients `JMbayes2` hierarchically
-centres - where the default fit trailed by a factor of 18-30 - and leads
-on the rest.
+In simulation (Section 6), across ten designs, the rotation raises the
+effective sample size per second (ESS/sec) of the regression coefficients
+a user reports by 8x-25x for the intercept and 8x-60x for the time slope
+(geometric means 14x and 21x), at the same wall time. Coverage in a
+100-replicate calibration study agrees with the unrotated fit's within
+Monte Carlo error. On two real datasets (Section 7), the intercept and
+subject-constant covariates gain 17x-28x and the time slope 2.3x-4.4x.
+For random-intercept-only models the gains on the intercept and
+subject-constant covariates are 19x-53x on the same data, and in
+simulation the unrotated fit often failed to converge at the standard run
+length where the rotated one did (Section 5.3). Section 8 compares with
+`JMbayes2`. With the rotation, `jmjax` matches it on the coefficients
+`JMbayes2` hierarchically centres, where the unrotated fit trailed by a
+factor of 17-33, and leads on the rest.
 
 The second finding concerns the association parameter `alpha`, which
 measures how the longitudinal marker relates to the hazard. Studying that
@@ -85,9 +89,9 @@ samplers that move all parameters together.
 A stress grid of the designs the theory predicts are hardest for the
 rotation keeps the gains at 5x-30x (Section 6.4). On the strength of these
 checks, the rotation is `jmjax`'s default wherever it applies,
-including random-intercept-only models. Throughout
-this document, "the default fit" means the unrotated parameterization it
-replaced, now requested with `rotate_absorbable = FALSE`.
+including random-intercept-only models. Throughout this document, "the
+unrotated fit" is the parameterization it replaced, still available as
+`rotate_absorbable = FALSE`.
 
 An earlier approach, which swept the absorbable directions out of the
 random effects instead of rotating them, is retired. It is documented in
@@ -105,7 +109,7 @@ gradient-based sampler that moves all parameters jointly is not slowed by
 inter-block correlation the way a block-Gibbs sampler is (Sections 2.4,
 8). The other is specific to this model class: a location degeneracy
 between fixed and random effects that slows *any* sampler on the
-regression coefficients, including `jmjax`'s own default fit, and that a
+regression coefficients, including `jmjax`'s own unrotated fit, and that a
 targeted reparameterization can remove (Sections 3-6).
 
 One parameter deserves to be singled out from the start. A joint model
@@ -193,7 +197,7 @@ directly:
 | Identified (single intercept) | ~3 | ~31,000 | 1.0 |
 
 The "weakly identified" row is the mechanistically exact analogue of
-`jmjax`'s default fit: `jmjax` does not leave `beta_0`
+`jmjax`'s unrotated fit: `jmjax` does not leave `beta_0`
 and `mean(b_i0)` entirely unconstrained (that would be improper), it
 constrains their *split* only through the prior on the random effects, at
 scale `sigma_b0/sqrt(N)` - a weak, N-dependent identifying prior in
@@ -331,8 +335,8 @@ the intercept case. This holds with no extra covariates just as much as
 with twelve. It shows up directly in the measurements. In a replicated
 covariate-count sweep (k = 1, 4, 8, 12; recorded in the development record,
 Section 6), the binding - lowest-ESS - regression parameter under the
-default fit was `beta_1` at every `k`, never one of the covariate
-coefficients. In Section 6's grid, the default fit's time slope mixes
+unrotated fit was `beta_1` at every `k`, never one of the covariate
+coefficients. In Section 6's grid, the unrotated fit's time slope mixes
 slowest of the three monitored parameters in 7 of the 10 cells.
 
 ### 3.4 Addressing it: rotate, don't constrain
@@ -765,7 +769,7 @@ sampled coordinates are $U = Q_{\cup}^{\top} b_{\mathrm{std}}$ (the
 `[N - k, q]` site `b_gen_V`). `b_std` is recovered deterministically, and
 everything downstream of it is untouched. Because the rotation acts on the
 standardized draws, Proposition 6 makes the calibration of every estimand
-identical to the default fit's; Section 6.3 confirms this empirically.
+identical to the unrotated fit's; Section 6.3 confirms this empirically.
 
 *Remark (what is rotated, and on which side).* Two choices in
 Proposition 6 are what make it safe, and both are easy to get wrong.
@@ -937,7 +941,7 @@ evidence is as follows.
 In short, the construction is within noise of the swept one in the
 ordinary regime. It loses ground to the swept one as the information per
 subject rises relative to $N$, as predicted, and is about half as
-efficient in the most extreme stress cells. Against the default fit it
+efficient in the most extreme stress cells. Against the unrotated fit it
 is still 5x-30x ahead there (Section 6.4). A metric that follows the
 sampled $\sigma_0$ is the obvious way to recover the difference, and has
 not been tried.
@@ -1034,7 +1038,7 @@ intercept and slope, with `y ~ time + age + sex`, `Surv(time, event) ~ trt`,
 crosses visits per subject (about 9 against about 17), the generating
 intercept-slope correlation $\rho \in \{0, 0.3, 0.6, 0.9\}$ and, at
 $\rho = 0.3$, $n \in \{150, 300, 600\}$: 10 cells, 3 seeds each, 500
-warmup and 1000 draws on each of 2 chains. It compares a default fit (`A`)
+warmup and 1000 draws on each of 2 chains. It compares an unrotated fit (`A`)
 with the rotation plus its dense block (`A_rotdense`) on the same
 simulated data. Both report the ordinary `beta`.
 
@@ -1044,7 +1048,7 @@ ESS/sec, averaged over seeds, for the two regression coefficients the
 degeneracy affects most. The ratio is the geometric mean of the three
 paired per-seed ratios.
 
-| visits/subject | $\rho$ | $n$ | intercept: default | rotated | ratio | time slope: default | rotated | ratio | `alpha` ratio |
+| visits/subject | $\rho$ | $n$ | intercept: unrotated | rotated | ratio | time slope: unrotated | rotated | ratio | `alpha` ratio |
 |---|---:|---:|---:|---:|---:|---:|---:|---:|---:|
 | ~9 | 0.0 | 300 | 25.9 | 354.4 | 14.2x | 9.1 | 304.9 | 36.4x | 0.85x |
 | ~17 | 0.0 | 300 | 12.1 | 229.4 | 19.3x | 4.0 | 234.9 | 59.2x | 1.32x |
@@ -1063,7 +1067,7 @@ intercept (per-seed range 4.5x-31.6x) and 21.1x for the time slope
 the gain is almost entirely ESS per draw. The median ESS over 2000 draws is
 about 3,450 for both coefficients under the rotation - more than the
 number of draws, the anti-correlated sampling NUTS achieves on a
-well-conditioned target - against 180-235 for the default fit. The
+well-conditioned target - against 180-235 for the unrotated fit. The
 association parameter `alpha`, which the degeneracy does not involve, is
 not unchanged: its ratio splits by design. It is 0.72x-1.00x in all six
 cells with about 9 visits per subject and 1.32x-1.59x in all four with
@@ -1071,7 +1075,7 @@ about 17 (geometric mean 1.04x overall). Why the rotation helps `alpha`
 with dense follow-up and costs it a little otherwise is not yet
 understood. There
 were no divergences, and the worst R-hat on a reported coefficient was
-1.002 under the rotation, against 1.044 for the default fit.
+1.002 under the rotation, against 1.044 for the unrotated fit.
 
 The pattern follows the mechanism. The gain is largest where each subject
 carries the most information about its own random effects (the
@@ -1089,7 +1093,7 @@ the implementation. `dev/study_calibration.R`, `linear` design,
 $n = 300$, $R = 100$ replicates, gated on regression-parameter
 R-hat $\le 1.05$ (all 100 kept):
 
-| estimand | default: cov95 | sd_ratio | bias/se | rotated: cov95 | sd_ratio | bias/se |
+| estimand | unrotated: cov95 | sd_ratio | bias/se | rotated: cov95 | sd_ratio | bias/se |
 |---|---:|---:|---:|---:|---:|---:|
 | `beta_0` | 0.99 | 1.164 | 1.68 | 0.99 | 1.150 | 1.55 |
 | `beta_slope` | 0.97 | 1.027 | -0.30 | 0.96 | 1.038 | -0.32 |
@@ -1123,15 +1127,15 @@ runs six cells:
 - $\rho = 0.95$ at about 9 visits ($N = 100$);
 - $\rho = 0.95$ at about 17 visits ($N = 300$).
 
-Each cell has 3 seeds, and each fit is compared with the default fit and
+Each cell has 3 seeds, and each fit is compared with the unrotated fit and
 with the retired sweep-and-rotation (diagonal metric) on the same data.
 
 The criterion fixed before the run was that the rotation must not fall
-below the default fit's ESS/sec on the reported coefficients in any
+below the unrotated fit's ESS/sec on the reported coefficients in any
 cell. It did not. The lowest cell was 5.5x and the lowest single seed
 3.2x.
 
-| visits | $N$ | $\rho$ | intercept vs default | slope vs default | `alpha` vs default | intercept vs sweep | slope vs sweep |
+| visits | $N$ | $\rho$ | intercept vs unrotated | slope vs unrotated | `alpha` vs unrotated | intercept vs sweep | slope vs sweep |
 |---:|---:|---:|---:|---:|---:|---:|---:|
 | 35 | 50 | 0.30 | 5.5x | 10.3x | 1.60x | 0.55x | 0.51x |
 | 35 | 50 | 0.95 | 21.1x | 21.6x | 2.42x | 0.62x | 0.56x |
@@ -1142,24 +1146,24 @@ cell. It did not. The lowest cell was 5.5x and the lowest single seed
 
 (ESS/sec ratios, geometric means over 3 seeds.)
 
-The rotated fit's posterior means agreed with the default fit's to a
+The rotated fit's posterior means agreed with the unrotated fit's to a
 median of 0.029 posterior SDs (maximum 0.166, 90 pairs). There were no
 divergences, and the worst R-hat over all monitored parameters was 1.046
-(1.043 for the default fit). Wall time was 0.86x-1.06x the default
+(1.043 for the unrotated fit). Wall time was 0.86x-1.06x the unrotated
 fit's.
 
 The table bears out three points.
 
 - **The weak spot is weak only against the retired sweep.** The
   predicted weakness shows up as a loss relative to the sweep, not
-  relative to the default fit. The cell with the fewest subjects and
-  lowest $\rho$ gains least over the default fit (5.5x), and it is also
+  relative to the unrotated fit. The cell with the fewest subjects and
+  lowest $\rho$ gains least over the unrotated fit (5.5x), and it is also
   where the sweep leads by most (about 2x). This is Section 5.2's
   $1 + O\big(\sqrt{\bar n\,\sigma_0^{2}/(\sigma_e^{2}N)}\big)$ residual in
   action.
 - **Strong correlation between the random effects did not hurt.** At
-  $\rho = 0.95$ the gains over the default fit are as large as, or larger
-  than, at $\rho = 0.3$, because the default fit degrades faster.
+  $\rho = 0.95$ the gains over the unrotated fit are as large as, or larger
+  than, at $\rho = 0.3$, because the unrotated fit degrades faster.
 - **`alpha` repeats Section 6.2's split by visits.** It fell to 0.74x
   with about 9 visits. It rose to 1.09x with about 17 and to 1.58x-2.42x
   with about 35.
@@ -1168,7 +1172,7 @@ The table bears out three points.
 
 `dev/study_realdata_rotate.R` fits two standard joint-model datasets
 (bundled with `JMbayes2`) twice from the same `lme()`/`coxph()` pre-fit
-and the same sampler seed. One fit is the default; the other uses
+and the same sampler seed. One fit is unrotated; the other uses
 `rotate_absorbable` with `dense_mass_generator_beta`. Each has 4 chains of
 1000 warmup and 1000 draws, and there are 3 seeds per dataset.
 
@@ -1183,7 +1187,7 @@ and the same sampler seed. One fit is the default; the other uses
   are two absorbable intercept directions (constant, `age`) and one slope
   direction.
 
-ESS/sec ratios are means over seeds, rotated over default; the per-seed
+ESS/sec ratios are means over seeds, rotated over unrotated; the per-seed
 range is in brackets:
 
 | parameter | `aids` | `pbc2` |
@@ -1199,13 +1203,13 @@ range is in brackets:
 
 The pattern is the one the theory predicts. The coefficients on the
 absorbable directions - the intercept and the subject-constant covariates -
-gain 12x-34x, the time slope 2x-5x. As for the exactness check: every
+gain 17x-28x (12x-34x across seeds), the time slope 2.3x-4.4x. As for the exactness check: every
 posterior mean agrees between the two fits within Monte Carlo error
 (largest paired difference 1.65 Monte Carlo SEs over the 19
 parameter-dataset pairs; the rotation cannot change the posterior,
 Proposition 6).
 
-The two datasets differ in one instructive way. On `aids`, the default
+The two datasets differ in one instructive way. On `aids`, the unrotated
 fit's trajectories were three times longer (92-111 leapfrog steps against
 31): the degeneracy was what set NUTS's trajectory length. Removing it cut
 the cost of every iteration, so *every* parameter gained, `alpha` included
@@ -1231,12 +1235,12 @@ joint model (Section 1). The association between the marker and the
 hazard is what the model is built to study; the other parameters are
 largely there so that `alpha` is estimated correctly. The degeneracy of Section 3 does not
 involve it; the rotation's effect on it is mixed (Section 6.2: 0.72x-1.59x by design, 1.04x overall). Measured
-directly against `JMbayes2`, `jmjax`'s *default* fit mixes `alpha` much
+directly against `JMbayes2`, `jmjax`'s *unrotated* fit mixes `alpha` much
 faster. In a replicated covariate-count sweep (`dev/study_orth_vs_jmbayes2.R`:
 $n = 1000$, 3 seeds, `JMbayes2` at 16,000 iterations with 4,000 burn-in per
 chain, well above its own defaults):
 
-| k | default `jmjax` vs `JMbayes2`, `alpha` ESS/sec |
+| k | unrotated `jmjax` vs `JMbayes2`, `alpha` ESS/sec |
 |---:|---:|
 | 1 | 5.72x |
 | 4 | 8.07x |
@@ -1244,7 +1248,7 @@ chain, well above its own defaults):
 | 12 | 6.25x |
 
 On real data (`dev/study_realdata_rotate.R`, the designs of Section 7,
-3 seeds, `JMbayes2` at the same 16,000/4,000 iterations), the default fit's
+3 seeds, `JMbayes2` at the same 16,000/4,000 iterations), the unrotated fit's
 `alpha` ESS/sec was 3.2x `JMbayes2`'s on `aids` and 7.6x on `pbc2`. This is the generic NUTS/HMC-versus-block-Gibbs distinction of
 Sections 2.2 and 2.4 (Hoffman & Gelman 2014; Roberts & Sahu 1997; Betancourt
 2017). A gradient-based sampler moves the whole parameter vector jointly.
@@ -1318,7 +1322,7 @@ $\kappa = (1+\sqrt{R^2})/(1-\sqrt{R^2})$, so $\sqrt{\kappa}$ grows like
 $1/\sqrt{1-R^2}$, against $1/(1-R^2)$ for the blocked sampler. There is also
 a second, larger effect. In a joint model the step size is usually set
 already by some other narrow direction (the spline coefficients, the
-variance components, or the Section 3 ridge in a default fit). While
+variance components, or the Section 3 ridge in an unrotated fit). While
 `alpha`'s correlation is not the narrowest direction, it adds nothing
 to the step count at all. A blocked sampler pays $(1+R^2)/(1-R^2)$
 regardless.
@@ -1428,7 +1432,7 @@ number.
 
 ### 8.3 The regression coefficients: the rotation closes the one gap
 
-On the regression coefficients, the default fit was *behind* `JMbayes2`.
+On the regression coefficients, the unrotated fit was *behind* `JMbayes2`.
 The location degeneracy of Section 3 is exactly the problem that
 hierarchical centering - the centered parameterization of Section 2.1
 (Gelfand, Sahu & Carlin 1995) - solves. `JMbayes2` hierarchically centres
@@ -1439,7 +1443,7 @@ variances (Section 2.2), and until now paid for it on these coefficients.
 The rotation removes that payment. Same fits as Section 7, ESS/sec,
 `JMbayes2`'s time being its whole `jm()` call:
 
-| parameter | `aids`: default / `JMbayes2` | rotated / `JMbayes2` | `pbc2`: default / `JMbayes2` | rotated / `JMbayes2` |
+| parameter | `aids`: unrotated / `JMbayes2` | rotated / `JMbayes2` | `pbc2`: unrotated / `JMbayes2` | rotated / `JMbayes2` |
 |---|---:|---:|---:|---:|
 | intercept | 0.04x | 0.97x | 0.05x | 0.89x |
 | subject-constant covariates | 0.03x-0.04x | 0.89x-0.95x | 0.06x | 0.92x |
@@ -1451,15 +1455,15 @@ With the rotation, `jmjax` is at parity with `JMbayes2` (0.89x-0.97x) on
 exactly the coefficients hierarchical centering is designed for. It is
 ahead on everything else: the time slope (1.8x-6.5x), the survival
 coefficient (1.8x-2.7x), and the association parameter (6.5x-7.3x). Before
-the rotation, the default fit trailed by a factor of 18-30 on the first
-group.
+the rotation, the unrotated fit trailed by a factor of 17-33 on the first
+group (0.03x-0.06x).
 
 ### 8.4 Synthesis
 
 Two effects should be reported separately. The comparison with `JMbayes2`
 on `alpha` (Section 8.1) is large and generic, and needs no
 reparameterization. The rotation (Sections 5-7) is specific to this model
-class. It removes a cost that `jmjax`'s non-centred default pays on the
+class. It removes a cost that the non-centred parameterization pays on the
 regression coefficients, which brings those coefficients from far behind
 `JMbayes2` to parity with it (Section 8.3), without changing any reported
 quantity.
@@ -1490,13 +1494,13 @@ quantity.
   than tuned away. Neither stops a fit or biases it, and both were
   measured in simulation, not in real data.
   - With about 9 visits per subject, the rotation gives `alpha` 0.72x-1.00x
-    of the default fit's ESS/sec (Sections 6.2 and 6.4). It gains with
+    of the unrotated fit's ESS/sec (Sections 6.2 and 6.4). It gains with
     denser follow-up, and on real data it was 2.0x (`aids`) and 0.95x
     (`pbc2`). The mechanism is not established, and `alpha` remains far
     ahead of `JMbayes2` either way (Section 8).
   - In the most information-dense stress designs, the retired sweep is up
     to about 2x more efficient than the rotation, as Section 5.2 predicts.
-    Both are 5x-30x ahead of the default fit there.
+    Both are 5x-30x ahead of the unrotated fit there.
 
   A metric that follows the sampled $\sigma_0$ could recover the second.
   Both will be revisited if users meet them in real data.
@@ -1530,18 +1534,21 @@ it restricts nothing.
 
 `jmjax`'s joint model has a location degeneracy between fixed effects and
 random effects. It recurs for the random slope whatever the covariate
-count, and it slows a default fit on exactly the coefficients a user
+count, and it slows an unrotated fit on exactly the coefficients a user
 reports.
 
 `jmjax` addresses it, by default, with a rotation and a small dense mass block. The
 random effects are rotated so the absorbable directions become a small
 explicit block, and that block and `beta` share one dense mass block. The
 model, the prior and every reported quantity are unchanged (Proposition 6),
-and calibration matches the default fit (Section 6.3). The cost of the
+and calibration matches the unrotated fit (Section 6.3). The cost of the
 degeneracy is removed: in simulation the intercept and time slope gain
-roughly 14x and 21x in ESS/sec, and on real data 17x-27x and 2x-4x, at
-similar or lower wall time. A stress grid aimed at the theory's weak spots
-kept the gains at 5x-30x.
+14x and 21x in ESS/sec (geometric means), and on real data the intercept
+and subject-constant covariates gain 17x-28x and the time slope
+2.3x-4.4x, at similar or lower wall time. A stress grid aimed at the
+theory's weak spots kept the gains at 5x-30x. For random-intercept-only
+models the rotation turns fits that often had not converged at the
+standard run length into ones that had (Section 5.3).
 
 The theory (Section 5.2) says where the approach is weakest: few subjects
 each carrying a lot of information, and strongly correlated random
@@ -1549,8 +1556,8 @@ effects. It also says why - a fixed mass matrix can only average over the
 ridge's dependence on the sampled variance components.
 
 With the rotation, `jmjax` matches `JMbayes2` on the coefficients
-`JMbayes2` hierarchically centres, where the default fit trailed by a
-factor of 20-30. It is 1.8x-7x ahead on the rest (Section 8.3). That includes the
+`JMbayes2` hierarchically centres, where the unrotated fit trailed by a
+factor of 17-33. It is 1.8x-7.3x ahead on the rest (Section 8.3). That includes the
 association parameter `alpha`, the quantity a joint model exists to
 estimate, where the lead is 6.5x-7.3x. That advantage is generic to NUTS
 and needs none of this. Proposition 8 accounts for it: a sampler that
