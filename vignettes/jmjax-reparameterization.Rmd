@@ -1203,7 +1203,13 @@ is the hazard's own location. Changing the level of $m_i(t)$ across all
 subjects changes $\alpha\,m_i(t)$ by a constant that the log baseline
 hazard absorbs. So `alpha` is correlated with the baseline-hazard level
 unless the marker is centred. `dev/alpha_missing_information.R` estimates
-$R^2$ from a long rotated fit and splits it between these two sources.
+$R^2$ from a long rotated fit (4 chains of 5,000 draws) and splits it
+between these two sources. The second dominates. On `aids`, the survival
+block alone (`gamma` and the baseline-hazard coefficients) explains 0.86
+of `alpha`'s posterior variance, and the random effects alone explain
+0.30. On `pbc2` the figures are 0.82 and 0.20. The errors-in-variables
+part is real, but most of what a blocked sampler conditions away is the
+trade-off between `alpha` and the level of the log hazard.
 
 HMC is not a blocked sampler. It moves `alpha` and $R$ together along the
 gradient, so a correlation between them is simply part of the posterior's
@@ -1251,12 +1257,34 @@ $R^2 \approx 0.93$-$0.95$ for an ideal two-block sampler. `jmjax`'s ESS
 per draw on `alpha` is at or above 1 on both datasets, as the HMC argument
 predicts.
 
-What is not yet shown is that `alpha`'s $R^2$ on these data actually is
-that large. If it is, Proposition 8 accounts for the whole of
-`JMbayes2`'s `alpha` deficit. If it is well below 0.93, `JMbayes2`'s
-Metropolis steps and finer blocking are costing it more than the ideal
-benchmark would. The check is `Rscript dev/alpha_missing_information.R`,
-which is pending.
+The same script measures that $R^2$ directly, with 960 regressors on
+`aids` and 649 on `pbc2`, adjusted for their number:
+
+| | `aids` | `pbc2` |
+|---|---:|---:|
+| $R^2$(`alpha` given everything else) | 0.873 | 0.853 |
+| ideal two-block sampler, predicted ESS per draw | 0.068 | 0.080 |
+| `JMbayes2`, measured ESS per draw | 0.035 | 0.028 |
+| `jmjax` NUTS, measured ESS per draw (same long fit) | 1.05 | 1.72 |
+
+So `alpha` shares 85%-87% of its posterior variance with the other
+parameters. Even an ideal blocked sampler, drawing exactly from each full
+conditional, would keep only one effective draw in 12-15.
+`JMbayes2` does 2-3 times worse than that ideal. That is the direction
+expected from its random-walk Metropolis steps and finer blocking.
+
+The linear $R^2$ is also a lower bound on the fraction in Proposition 8:
+the best linear predictor of `alpha` explains no more of its variance than
+$E[\alpha \mid R, y]$ does. So the true ideal benchmark can only be worse than
+the table's, and the 2-3x remainder is an upper bound on what
+`JMbayes2`'s implementation adds.
+
+On a log scale, the ideal benchmark accounts for 80% of the measured
+ESS-per-draw gap between `jmjax` and `JMbayes2` on `aids` (15.5x of
+30x) and 74% on `pbc2` (21.5x of 62x). Structure, not implementation,
+explains most of `alpha`'s gap. Any sampler that updates `alpha`
+conditional on the survival parameters inherits it. A gradient sampler
+that moves them together does not.
 
 Proposition 8 also explains one result in Section 7. On `aids`, the
 rotation raised `alpha`'s ESS/sec 2x without touching `alpha`'s
