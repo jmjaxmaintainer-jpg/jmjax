@@ -41,7 +41,9 @@ In simulation (Section 6), the rotation raises the effective sample size
 per second of the regression coefficients a user reports to roughly 8x-25x
 (intercept) and 8x-60x (time slope) a default fit's, across ten designs, at the same wall time,
 with coverage in a 100-replicate calibration study agreeing with the
-default fit's within Monte Carlo error. Section 8 separates this from the larger comparison with
+default fit's within Monte Carlo error. On two real datasets (Section 7),
+the same coefficients gain 12x-34x (the intercept and subject-constant
+covariates) and 2x-5x (the time slope). Section 8 separates this from the larger comparison with
 `JMbayes2`. There, `jmjax`'s default fit already mixes the association
 parameter `alpha` 2.4x-8x faster, a generic NUTS-versus-block-Gibbs effect
 that needs no reparameterization.
@@ -51,7 +53,6 @@ random effects instead of rotating them, is retired. It is documented in
 the package repository's development record
 (`dev/notes/sweep-reparameterization.md`).
 
-> **Draft note.** Section 7 (real data) is pending.
 
 ## 1. Motivation
 
@@ -881,8 +882,8 @@ predicted. Everything finer is untested.
 TRUE)`. It requires `q >= 2`, `random_effects_corr = TRUE` and the default
 `random_effects_method = "nuts"`. What was rotated is reported in
 `fit$convergence$orthogonalize$rotation` (`mode`, `applied`, `k`). The
-option is experimental and off by default until the real-data checks of
-Section 7 are complete.
+option is off by default; Section 9 lists what remains before making it
+the default.
 
 ## 6. Simulation results
 
@@ -970,9 +971,61 @@ numbers are in the development record's Epilogue.
 
 ## 7. Real data
 
-> **Draft note.** Pending: the `aids` (Guo & Carlin 2004) and PBC2 comparisons of
-a default fit against `rotate_absorbable` + `dense_mass_generator_beta`,
-as in `dev/study_realdata_aids.R`.
+`dev/study_realdata_rotate.R` fits two standard joint-model datasets
+(bundled with `JMbayes2`) twice from the same `lme()`/`coxph()` pre-fit
+and the same sampler seed. One fit is the default; the other uses
+`rotate_absorbable` with `dense_mass_generator_beta`. Each has 4 chains of
+1000 warmup and 1000 draws, and there are 3 seeds per dataset.
+
+- **`aids`** (Guo & Carlin 2004; 467 patients): `sqrt(CD4) ~ obstime +
+  drug + gender`, random intercept and slope on `obstime`,
+  `Surv(Time, death) ~ drug`. It played no part in finding the
+  degeneracy. There are three absorbable intercept directions (constant,
+  `drug`, `gender`) and one slope direction.
+- **`pbc2`** (312 patients): `log(serBilir) ~ year + age`, random
+  intercept and slope on `year`, `Surv(years, death) ~ drug`. This is the
+  dataset on which the degeneracy was first measured (Section 3.5). There
+  are two absorbable intercept directions (constant, `age`) and one slope
+  direction.
+
+ESS/sec ratios are means over seeds, rotated over default; the per-seed
+range is in brackets:
+
+| parameter | `aids` | `pbc2` |
+|---|---:|---:|
+| intercept | 26.9x [21-34] | 17.2x [12-25] |
+| time slope | 2.3x [2.0-2.7] | 4.4x [4.0-4.6] |
+| subject-constant covariates | 24.8x, 28.5x (`drug`, `gender`) [21-33] | 16.6x (`age`) [12-23] |
+| `alpha` | 2.0x [1.8-2.4] | 0.95x [0.88-1.01] |
+| `sigma_e`, `sigma_b`, `rho`, `gamma` | 1.4x-2.4x | 0.82x-1.28x |
+| NUTS sampling time | 10.8 s against 17.6 s | 12.4 s against 11.7 s |
+| mean leapfrog steps per iteration | 31 against 92-111 | 60-63 against 63 |
+| max R-hat, all parameters | 1.010 against 1.010 | 1.007 against 1.018 |
+
+The pattern is the one the theory predicts. The coefficients on the
+absorbable directions - the intercept and the subject-constant covariates -
+gain 12x-34x, the time slope 2x-5x. As for the exactness check: every
+posterior mean agrees between the two fits within Monte Carlo error
+(largest paired difference 1.65 Monte Carlo SEs over the 19
+parameter-dataset pairs; the rotation cannot change the posterior,
+Proposition 6).
+
+The two datasets differ in one instructive way. On `aids`, the default
+fit's trajectories were three times longer (92-111 leapfrog steps against
+31): the degeneracy was what set NUTS's trajectory length. Removing it cut
+the cost of every iteration, so *every* parameter gained, `alpha` included
+(2.0x), and total sampling time fell by 40%. On `pbc2` the trajectory
+length was set by something else (63 steps in both fits). There the
+parameters the degeneracy does not involve are unchanged or slightly slower
+(`sigma_e` 0.82x, `gamma_0` 0.85x, `alpha` 0.95x), for 6% more time. The
+same dependence on what sets the trajectory length is a plausible
+reading of Section 6.2's `alpha` split, though it was not measured there.
+
+For comparison: the retired sweep's reportable, corrected coefficients
+gained roughly 1.3x in simulation (development record, Section 9.1.1),
+and on `aids` the sweep moved `alpha` by 1.5x (Section 7.1 there). The
+rotation gives an order of magnitude on the former and a little more on
+the latter, with no correction step.
 
 ## 8. The comparison with JMbayes2
 
@@ -1072,13 +1125,12 @@ remaining work (Section 9).
   tolerance judgement when absorbable and identified directions are nearly
   collinear (Section 4.8).
 - **Next steps, in order.**
-  1. Real data (Section 7).
-  2. The rotated fit against `JMbayes2` on the regression coefficients.
-    3. Designs with few, densely observed subjects, where the argument after
+    1. The rotated fit against `JMbayes2` on the regression coefficients.
+      2. Designs with few, densely observed subjects, where the argument after
      Proposition 7 predicts the no-sweep construction is weakest, and
      strongly correlated random effects ($\lvert\rho\rvert$ near 1), which
      that argument does not cover.
-  4. The broader design checks that would justify making the rotation the
+    3. The broader design checks that would justify making the rotation the
      default: more covariates, a non-linear time trend (Section 4.5's
      Example 1) and the `mixing` design.
 
@@ -1110,14 +1162,24 @@ it restricts nothing.
 `jmjax`'s joint model has a location degeneracy between fixed effects and
 random effects. It recurs for the random slope whatever the covariate
 count, and it slows a default fit on exactly the coefficients a user
-reports. Rotating the random effects so the absorbable directions become a
-small explicit block, and giving that block and `beta` one dense mass
-block, removes most of that cost - roughly 14x and 21x on the intercept
-and time slope in simulation - without changing the model, the prior or
-any reported quantity. `jmjax`'s separate, larger advantage over `JMbayes2`
-on the association parameter is generic to NUTS and needs none of this.
+reports.
 
-> **Draft note.** To be revised once Section 7 is complete.
+`jmjax` addresses it with a rotation and a small dense mass block. The
+random effects are rotated so the absorbable directions become a small
+explicit block, and that block and `beta` share one dense mass block. The
+model, the prior and every reported quantity are unchanged (Proposition 6),
+and calibration matches the default fit (Section 6.3). The cost of the
+degeneracy is removed: in simulation the intercept and time slope gain
+roughly 14x and 21x in ESS/sec, and on real data 17x-27x and 2x-4x, at
+similar or lower wall time.
+
+The theory (Section 5.2) says where the approach is weakest: few subjects
+each carrying a lot of information, and strongly correlated random
+effects. It also says why - a fixed mass matrix can only average over the
+ridge's dependence on the sampled variance components.
+
+`jmjax`'s separate, larger advantage over `JMbayes2` on the association
+parameter is generic to NUTS and needs none of this.
 
 ## References
 
