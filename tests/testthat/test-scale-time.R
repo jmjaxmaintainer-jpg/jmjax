@@ -50,6 +50,41 @@ fit_it <- function(d, ctl = list(), long_f = y ~ time + x, rand_f = ~ time) {
                            progress_bar = FALSE, seed = 11L), ctl))
 }
 
+# Monte Carlo standard error of a reported posterior mean, and an
+# agreement check between two fits of the same posterior at 4 combined
+# MCSEs (see the first test for why the bar is Monte Carlo error, not a
+# fixed percentage). `rel_fallback` is used only when ESS is missing.
+#
+# The fixed-percentage checks this replaced in the later tests used to
+# pass because an unrotated fit with and without scale_time followed
+# nearly the same trajectory from the same seed - the diagonal metric
+# absorbs a diagonal rescaling almost exactly. Since the random effects
+# are rotated by default (control$rotate_absorbable), the two fits no
+# longer shadow each other, and the comparison is between two
+# independent estimates of the same posterior, which is what these tests
+# claim to check anyway.
+.mcse <- function(f, nm) {
+  s <- suppressWarnings(as.numeric(f$se[[nm]]))
+  e <- suppressWarnings(as.numeric(unlist(f$diagnostics$ess)[[nm]]))
+  if (!length(s) || !length(e) || !is.finite(s) || !is.finite(e) || e <= 0) {
+    return(NA_real_)
+  }
+  s / sqrt(e)
+}
+expect_same_posterior_mean <- function(fa, fb, names, rel_fallback = 0.02) {
+  for (nm in names) {
+    ma <- .mcse(fa, nm); mb <- .mcse(fb, nm)
+    d  <- abs(fa$estimates[[nm]] - fb$estimates[[nm]])
+    tol <- if (is.na(ma) || is.na(mb)) {
+      rel_fallback * max(abs(fb$estimates[[nm]]), 1e-8)
+    } else {
+      4 * sqrt(ma^2 + mb^2)
+    }
+    expect_lt(d, tol, label = sprintf("%s: %.6f vs %.6f (|diff| %.5f, tol %.5f)",
+                                      nm, fa$estimates[[nm]], fb$estimates[[nm]], d, tol))
+  }
+}
+
 test_that("scale_time leaves every reported parameter unchanged", {
   skip_if_no_backend()
   d <- make_data()
@@ -122,10 +157,7 @@ test_that("scale_time leaves the survival submodel alone", {
   # only reason it was noticed.
   .wn <- grep("^W[0-9]+$|^tau_w$", names(f0$estimates), value = TRUE)
   expect_gt(length(.wn), 0)          # fail loudly if the names change again
-  for (nm in .wn) {
-    expect_equal(f1$estimates[[nm]], f0$estimates[[nm]], tolerance = 0.15,
-                 label = nm)
-  }
+  expect_same_posterior_mean(f1, f0, .wn, rel_fallback = 0.15)
 })
 
 test_that("scale_time composes with standardize_covariates", {
@@ -206,11 +238,8 @@ test_that('scale_time = "auto" applies where the geometry allows it', {
   expect_true(grepl("^applied", f_auto$scale_time_status))
 
   # and the estimates still match the unscaled fit
-  f_off <- fit_it(d)
-  for (nm in c("beta_1", "sigma_b1", "alpha")) {
-    expect_equal(f_auto$estimates[[nm]], f_off$estimates[[nm]],
-                 tolerance = 0.02, label = nm)
-  }
+  f_off <- fit_it(d, list(scale_time = FALSE))
+  expect_same_posterior_mean(f_auto, f_off, c("beta_1", "sigma_b1", "alpha"))
 })
 
 test_that("scale_time_status is always present", {
@@ -238,11 +267,9 @@ test_that("the default is auto and can be turned off", {
   # change a single reported number. This is the assertion that makes the
   # default defensible - if it fails, the default is wrong regardless of
   # what it does for convergence.
-  for (nm in c("beta_0", "beta_1", "beta_2", "sigma_e",
-               "sigma_b0", "sigma_b1", "alpha")) {
-    expect_equal(f_default$estimates[[nm]], f_off$estimates[[nm]],
-                 tolerance = 0.02, label = nm)
-  }
+  expect_same_posterior_mean(f_default, f_off,
+                             c("beta_0", "beta_1", "beta_2", "sigma_e",
+                               "sigma_b0", "sigma_b1", "alpha"))
 })
 
 test_that("scale_time treats random_formula = NULL like the explicit form", {
