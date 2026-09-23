@@ -366,3 +366,75 @@ test_that("scale_time is ignored for the MLE methods", {
   }
   expect_identical(f_on$scale_time_status, "off")
 })
+
+test_that("scale_time rescales sigma_b1's own posterior draws and ranef()'s random slope", {
+  skip_if_no_backend()
+  d <- make_data()
+  f_on  <- fit_it(d, list(scale_time = 5))
+  f_off <- fit_it(d, list(scale_time = FALSE))
+
+  s_on  <- summary(f_on)
+  s_off <- summary(f_off)
+
+  # sigma_b1's own credible interval must bracket its own point estimate
+  # in BOTH fits. Before the R/jm_fit.R fix, posterior_samples$sigma_b's
+  # raw draws for q >= 2 were never rescaled - the correction loop only
+  # looked for "sigma_b0"/"sigma_b1" keys, which don't exist in
+  # posterior_samples (only the bare site name "sigma_b" does; see
+  # .jmjax_param_draws()'s doc comment in R/summary.jmjax.R for the same
+  # site-vs-per-element mismatch). So a default (scale_time = "auto",
+  # effectively 5 here) random-slope fit's sigma_b1 credible interval came
+  # out in scaled-time units while the point estimate was correctly
+  # rescaled - the interval would NOT bracket the estimate.
+  for (s in list(on = s_on, off = s_off)) {
+    row <- s[rownames(s) == "sigma_b1", , drop = FALSE]
+    expect_equal(nrow(row), 1)
+    expect_lt(row$CrI.lower, row$Estimate)
+    expect_gt(row$CrI.upper, row$Estimate)
+  }
+
+  # And the two fits - a reparameterization of the same model - must agree
+  # with each other on sigma_b1's interval, not just bracket their own
+  # point estimate. Tolerance is Monte Carlo error (see the file header
+  # and expect_same_posterior_mean() above), inflated relative to the
+  # mean's tolerance because a 2.5%/97.5% quantile has a larger sampling
+  # SE than a posterior mean (roughly 2.7x for a near-normal posterior);
+  # the multiplier below (12, vs. 4 for a mean) keeps the bar wide but
+  # finite. A factor-of-5 (or 25) scale_time bug misses it by orders of
+  # magnitude.
+  mcse_sb1_on  <- .mcse(f_on,  "sigma_b1")
+  mcse_sb1_off <- .mcse(f_off, "sigma_b1")
+  row_on  <- s_on[rownames(s_on) == "sigma_b1", , drop = FALSE]
+  row_off <- s_off[rownames(s_off) == "sigma_b1", , drop = FALSE]
+  tol <- if (is.na(mcse_sb1_on) || is.na(mcse_sb1_off)) {
+    0.3 * max(abs(row_off$Estimate), 1e-8)
+  } else {
+    12 * sqrt(mcse_sb1_on^2 + mcse_sb1_off^2)
+  }
+  expect_lt(abs(row_on$CrI.lower - row_off$CrI.lower), tol,
+            label = sprintf("CrI.lower: on %.5f vs off %.5f (tol %.5f)",
+                             row_on$CrI.lower, row_off$CrI.lower, tol))
+  expect_lt(abs(row_on$CrI.upper - row_off$CrI.upper), tol,
+            label = sprintf("CrI.upper: on %.5f vs off %.5f (tol %.5f)",
+                             row_on$CrI.upper, row_off$CrI.upper, tol))
+
+  # ranef()'s random SLOPES (dimension 2 at q = 2, column "b1_mean")
+  # must also agree between the two fits. Before the fix, random_effects'
+  # b1_mean/b1_sd and posterior_samples$b were never rescaled at all, so a
+  # default random-slope fit's ranef() output (and predict(), which is
+  # planned around these same posterior random-effect draws) came back off
+  # by exactly the scale_time divisor (c = 5 here) - a fixed
+  # multiplicative error far outside any Monte Carlo tolerance.
+  re_on  <- ranef(f_on)
+  re_off <- ranef(f_off)
+  expect_true("b1_mean" %in% names(re_on))
+  expect_true("b1_mean" %in% names(re_off))
+
+  # A scale error multiplies every subject's slope by c, so compare the
+  # SPREAD across subjects, not the mean (which is ~0 either way and
+  # would pass even with the bug). Unfixed, this ratio is 5.
+  r <- stats::sd(re_on$b1_mean) / stats::sd(re_off$b1_mean)
+  expect_gt(r, 0.8); expect_lt(r, 1.25)
+  # And subject by subject, the two fits must agree.
+  expect_gt(stats::cor(re_on$b1_mean, re_off$b1_mean), 0.9)
+})

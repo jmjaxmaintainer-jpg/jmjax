@@ -2807,6 +2807,86 @@ jm_fit <- function(long_formula,
         }
       }
     }
+
+    # ---- sigma_b's OWN posterior draws, q >= 2 -------------------------
+    # The loop above corrects posterior_samples[["sigma_b0"]]/["sigma_b1"]
+    # if present under those PER-ELEMENT names - but for q >= 2 the raw
+    # draws live under the single site key "sigma_b" (one [q]-vector per
+    # draw), never under "sigma_b0"/"sigma_b1": posterior_samples is keyed
+    # by the backend's raw NumPyro site name, not the expanded per-element
+    # names _site_names() uses for estimates/se (the same site-vs-
+    # per-element mismatch documented in R/summary.jmjax.R's
+    # .jmjax_param_draws(), which this mirrors). So .psb[[nm]] above was
+    # always NULL for q >= 2 and this correction silently never ran -
+    # meaning a default random-slope MCMC fit's sigma_b1 credible interval
+    # (built from these draws in summary.jmjax()) would come out in
+    # scaled-time units, mismatched against its own (correctly rescaled)
+    # point estimate. Column k of every draw gets the same .dz[k]
+    # multiplier as the summarized sigma_b0/sigma_b1 above; q = 1's bare
+    # "sigma_b" is already handled by the loop above (nm %in% c(...,
+    # "sigma_b") when length(.dz) == 1L), so this only needs to run for
+    # q >= 2, and doing so avoids double-correcting that q = 1 case.
+    if (length(.dz) > 1L && !is.null(.psb) && !is.null(.psb$sigma_b)) {
+      py_result$posterior_samples$sigma_b <- lapply(.psb$sigma_b, function(z) {
+        v <- as.numeric(unlist(z))
+        v * .dz[seq_along(v)]
+      })
+    }
+
+    # ---- per-subject random effects: reported summary + raw draws ------
+    # random_effects (what ranef() returns: b_mean/b_sd at q = 1,
+    # b0_mean/b0_sd/b1_mean/b1_sd/... at q >= 2 - see mcmc_model.py's
+    # _package_result()) and posterior_samples$b are BOTH still on the
+    # scaled-time internal scale here - nothing above touches either, so
+    # a default random-slope MCMC fit's ranef() output and posterior
+    # random-effect draws come back off by exactly the scale_time divisor
+    # (predict(), planned around these draws, would inherit the same
+    # error). Corrected here in the same per-dimension order as
+    # sigma_b/.dz. Dimension 1 (the intercept, always the sole dimension
+    # at q = 1) is unaffected - Z's intercept column doesn't change under
+    # time-scaling, so .dz[1] is exactly 1 - so this only ever actually
+    # rescales a random SLOPE, and random-intercept-only fits see a no-op.
+    # b_std and b_gen_U are deliberately left untouched: both are on the
+    # standardized N(0, I) sampling scale by construction, never the
+    # subject-level (b_o) scale these corrections target, and rescaling
+    # them would corrupt the very round-trip (b = b_std %*% t(L)) that
+    # makes them useful.
+    .re <- py_result$random_effects
+    for (k2 in seq_along(.dz)) {
+      for (.suffix in c("mean", "sd")) {
+        .re_nm <- if (length(.dz) == 1L) paste0("b_", .suffix) else paste0("b", k2 - 1L, "_", .suffix)
+        if (!is.null(.re) && !is.null(.re[[.re_nm]])) {
+          py_result$random_effects[[.re_nm]] <- as.numeric(unlist(.re[[.re_nm]])) * .dz[k2]
+        }
+      }
+    }
+    if (!is.null(.psb) && !is.null(.psb$b)) {
+      if (length(.dz) == 1L) {
+        # q = 1: each draw's "b" is one flat numeric vector, one scalar
+        # per subject - no per-dimension structure to index into.
+        py_result$posterior_samples$b <-
+          lapply(.psb$b, function(v) as.numeric(unlist(v)) * .dz[1])
+      } else {
+        # q >= 2: each draw's "b" holds one [N_sub x q] block. reticulate
+        # can hand this back either as an actual matrix or (more typical
+        # here, since mcmc_model.py builds it via a plain .tolist(), not
+        # a wrapped numpy array - see .jmjax_param_draws()'s doc comment
+        # in R/summary.jmjax.R for the identical ambiguity on the
+        # sampling-site side) as a list of per-subject numeric vectors -
+        # handle both rather than assume one.
+        py_result$posterior_samples$b <- lapply(.psb$b, function(draw) {
+          if (is.list(draw)) {
+            lapply(draw, function(subj) {
+              v <- as.numeric(unlist(subj))
+              v * .dz[seq_along(v)]
+            })
+          } else {
+            M <- as.matrix(draw)
+            sweep(M, 2, .dz[seq_len(ncol(M))], `*`)
+          }
+        })
+      }
+    }
   }
   }
 
