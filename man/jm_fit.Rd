@@ -98,20 +98,33 @@ prior \code{method = "weibull-PH-aGH"} fit's \code{$estimates}, used to
 warm-start a spline or MCMC fit.}
 
 \item{control}{List of backend-specific control arguments (n_interior_knots,
-n_gh_nodes, maxiter, num_warmup, num_samples, num_chains, seed, ...).
-For spline methods, also \code{knot_placement}: \code{"quantile"}
-(default) matches \code{JM}'s scheme (knots at quantiles of observed
-times); \code{"equal"} matches \code{JMbayes2}'s scheme (equally
-spaced knots across a padded time range) - see
-\code{build_spline_knots()} for the exact confirmed formulas.
-For \code{method = "spline-PH-mcmc"}, also: \code{spline_prior}
-(\code{"independent"} [default] or \code{"penalized"} - a P-spline/RW2
-prior on the baseline hazard spline coefficients, matching JMbayes2's
-approach); \code{empirical_bayes_prior} (default \code{TRUE} - centers
-the priors for \code{beta} and the random-effects SDs on an internally
-fit \code{nlme::lme()} model's MLEs, matching JMbayes2's confirmed
-default behavior; set \code{FALSE} for jmjax's original uninformative
-priors instead).}
+  n_gh_nodes, maxiter, num_warmup, num_samples, num_chains, seed, ...).
+  For spline methods, also \code{knot_placement}: \code{"quantile"}
+  (default) matches \code{JM}'s scheme (knots at quantiles of observed
+  times); \code{"equal"} matches \code{JMbayes2}'s scheme (equally
+  spaced knots across a padded time range) - see
+  \code{build_spline_knots()} for the exact confirmed formulas.
+  For \code{method = "spline-PH-mcmc"}, also: \code{spline_prior}
+  (\code{"independent"} [default] or \code{"penalized"} - a P-spline/RW2
+  prior on the baseline hazard spline coefficients, matching JMbayes2's
+  approach); \code{empirical_bayes_prior} (default \code{TRUE} - centers
+  the priors for \code{beta} and the random-effects SDs on an internally
+  fit \code{nlme::lme()} model's MLEs, matching JMbayes2's confirmed
+  default behavior; set \code{FALSE} for jmjax's original uninformative
+  priors instead).
+
+  \code{verbose} controls informational messages (never warnings).
+  Default \code{NULL}: only the one-off notice that JAX is compiling a
+  large model (once per session per data size, so a long first fit does
+  not look hung). \code{TRUE}: also the routine per-fit notes - which
+  covariates were standardized, and which warm-start seed the MCMC
+  methods used (both are recorded on the fit either way, in
+  \code{fit$convergence$warm_start} for the latter). \code{FALSE}: no
+  informational messages. With \code{verbose = TRUE} the MCMC methods
+  also announce the run (chains and iterations) before sampling starts,
+  since the progress bar is off by default.
+  \code{options(jmjax.quiet = TRUE)} silences
+  them for the whole session.}
 }
 \value{
 An object of class \code{"jmjax"} with components including
@@ -139,12 +152,12 @@ NUTS) - see \code{method} below.
   model being fit (truth-recovery validated for each); they change
   only how efficiently NUTS explores it.
   \describe{
-    \item{\code{progress_bar}}{Default \code{TRUE} (NumPyro's own
-      default). \strong{Recommend setting \code{FALSE}} for any
-      performance-sensitive fit: the console progress bar was found to
-      add roughly 30x overhead under R/reticulate relative to native
-      Python execution. This affects every fit regardless of the other
-      options below and is usually the single largest lever available.}
+    \item{\code{progress_bar}}{Default \code{FALSE}. \code{TRUE} shows
+      NumPyro's console progress bar. It is off by default because of
+      the volume of output, not speed: an earlier ~30x overhead claim
+      did not replicate (measured 1.00x-1.16x, see
+      \code{vignette("jmjax-validation")}). For one line of feedback
+      without the bar, use \code{verbose = TRUE}.}
     \item{\code{random_effects_method}}{One of \code{"nuts"} (default -
       the random-effects correlation is explored jointly with everything
       else via an LKJCholesky-parameterized Cholesky factor and full

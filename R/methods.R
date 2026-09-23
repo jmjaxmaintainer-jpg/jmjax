@@ -21,6 +21,23 @@
   V
 }
 
+# Internal: a routine informational note, shown only when the user asked
+# for them (control$verbose = TRUE) and the session is not quieted.
+.jmjax_inform <- function(control, ...) {
+  if (isTRUE(control$verbose) && !isTRUE(getOption("jmjax.quiet"))) {
+    message(...)
+  }
+  invisible(NULL)
+}
+
+# Internal: the MCMC run lengths actually used - control's value, else the
+# backend's own default (mcmc_model.fit_nuts: 500 warmup, 1000 draws, 1
+# chain). fit$mcmc_settings used to store control$num_warmup as given, which
+# is NULL whenever the user relied on the default.
+.mcmc_n_warmup  <- function(control) as.integer(control$num_warmup %||% 500L)
+.mcmc_n_samples <- function(control) as.integer(control$num_samples %||% 1000L)
+.mcmc_n_chains  <- function(control) as.integer(control$num_chains %||% 1L)
+
 .jmjax_is_mcmc <- function(object) {
   !is.null(object$posterior_samples) && length(object$posterior_samples) > 0
 }

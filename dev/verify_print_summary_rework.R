@@ -67,8 +67,8 @@ print(summary(fit_mcmc))
 cat("\n--- fit_mcmc$mcmc_settings (new field) ---\n")
 str(fit_mcmc$mcmc_settings)
 stopifnot(!is.null(fit_mcmc$mcmc_settings))
-stopifnot(identical(fit_mcmc$mcmc_settings$num_warmup, 300))
-stopifnot(identical(fit_mcmc$mcmc_settings$num_samples, 500))
+stopifnot(isTRUE(fit_mcmc$mcmc_settings$num_warmup == 300))  # stored as integer since 0.3.0
+stopifnot(isTRUE(fit_mcmc$mcmc_settings$num_samples == 500))
 cat("OK: mcmc_settings populated as expected.\n")
 
 cat("\n--- fit_mle$mcmc_settings should be NULL (MLE method) ---\n")

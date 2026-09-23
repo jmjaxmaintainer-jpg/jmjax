@@ -93,6 +93,19 @@
 #'   default behavior; set \code{FALSE} for jmjax's original uninformative
 #'   priors instead).
 #'
+#'   \code{verbose} controls informational messages (never warnings).
+#'   Default \code{NULL}: only the one-off notice that JAX is compiling a
+#'   large model (once per session per data size, so a long first fit does
+#'   not look hung). \code{TRUE}: also the routine per-fit notes - which
+#'   covariates were standardized, and which warm-start seed the MCMC
+#'   methods used (both are recorded on the fit either way, in
+#'   \code{fit$convergence$warm_start} for the latter). \code{FALSE}: no
+#'   informational messages. With \code{verbose = TRUE} the MCMC methods
+#'   also announce the run (chains and iterations) before sampling starts,
+#'   since the progress bar is off by default.
+#'   \code{options(jmjax.quiet = TRUE)} silences
+#'   them for the whole session.
+#'
 #' @section Performance-tuning options:
 #'   For \code{method = "spline-PH-mcmc"}/\code{"weibull-PH-mcmc"} at
 #'   \code{q = 2} only. A set of options added following a thorough
@@ -102,12 +115,12 @@
 #'   model being fit (truth-recovery validated for each); they change
 #'   only how efficiently NUTS explores it.
 #'   \describe{
-#'     \item{\code{progress_bar}}{Default \code{TRUE} (NumPyro's own
-#'       default). \strong{Recommend setting \code{FALSE}} for any
-#'       performance-sensitive fit: the console progress bar was found to
-#'       add roughly 30x overhead under R/reticulate relative to native
-#'       Python execution. This affects every fit regardless of the other
-#'       options below and is usually the single largest lever available.}
+#'     \item{\code{progress_bar}}{Default \code{FALSE}. \code{TRUE} shows
+#'       NumPyro's console progress bar. It is off by default because of
+#'       the volume of output, not speed: an earlier ~30x overhead claim
+#'       did not replicate (measured 1.00x-1.16x, see
+#'       \code{vignette("jmjax-validation")}). For one line of feedback
+#'       without the bar, use \code{verbose = TRUE}.}
 #'     \item{\code{random_effects_method}}{One of \code{"nuts"} (default -
 #'       the random-effects correlation is explored jointly with everything
 #'       else via an LKJCholesky-parameterized Cholesky factor and full
@@ -2447,7 +2460,12 @@ jm_fit <- function(long_formula,
   # fit rejected by a later validation check (e.g. an unsupported
   # method/covariate combination) does not first tell the user their
   # covariates were standardized and then error out.
-  if (!is.null(.std_info) && !is.null(.std_info$message)) message(.std_info$message)
+  #
+  # Routine (it fires on every fit whose covariates are far from centred),
+  # so shown only with control$verbose = TRUE - see .jmjax_inform().
+  if (!is.null(.std_info) && !is.null(.std_info$message)) {
+    .jmjax_inform(control, .std_info$message)
+  }
 
   # An lme object cannot cross into Python; remove it now that the
   # starting values have been taken from it.
@@ -2461,7 +2479,9 @@ jm_fit <- function(long_formula,
   # Once per session per shape, not once per fit. An earlier version fired
   # on every call, which in a benchmark loop is noise rather than
   # information - and the message is about a cost that is NOT paid again.
-  if (isTRUE(control$verbose %||% TRUE) && !isTRUE(getOption("jmjax.quiet"))) {
+  # Shown by default (verbose = NULL), unlike the routine notes: it is
+  # once per session per shape, and silence here reads as a hang.
+  if (!isFALSE(control$verbose) && !isTRUE(getOption("jmjax.quiet"))) {
     .nsub <- tryCatch(length(unique(data_surv[[id_var]])), error = function(e) NA)
     .key <- paste(method, .nsub, sep = "/")
     .seen <- getOption("jmjax.compiled_shapes", character(0))
@@ -2470,6 +2490,15 @@ jm_fit <- function(long_formula,
       message("compiling the ", method, " model for this data shape ",
               "(", .nsub, " subjects) - paid once per size, not on refits.")
     }
+  }
+
+  # One line of feedback before a possibly long, otherwise silent run: the
+  # progress bar is off by default (see its entry in ?jm_fit).
+  if (method %in% c("spline-PH-mcmc", "weibull-PH-mcmc")) {
+    .jmjax_inform(control, sprintf(
+      "jmjax: sampling %d chain(s) x %d iterations (%d warmup + %d draws)...",
+      .mcmc_n_chains(control), .mcmc_n_warmup(control) + .mcmc_n_samples(control),
+      .mcmc_n_warmup(control), .mcmc_n_samples(control)))
   }
 
   py_result <- switch(method,
@@ -2484,6 +2513,21 @@ jm_fit <- function(long_formula,
   # summary.jmjax's estimates/se) works, while preserving names.
   estimates <- unlist(py_result$estimates)
   se <- if (!is.null(py_result$se)) unlist(py_result$se) else NULL
+
+  # Which warm-start seed the MCMC backend used. Routine - the conservative
+  # seed is the common outcome - so it is a verbose-only note here, while
+  # the full record stays in fit$convergence$warm_start. (The backend used
+  # to print() this itself, which no R user could silence.) Rejections and
+  # unusable seeds are real problems and remain Python warnings.
+  .ws <- py_result$convergence$warm_start
+  if (is.list(.ws) && identical(.ws$tier, "conservative")) {
+    .jmjax_inform(control, sprintf(paste0(
+      "jmjax: warm start used the CONSERVATIVE seed (full seed scored %.1f ",
+      "vs %.1f): alpha starts at zero with a flat baseline hazard, as in ",
+      "JMbayes2; the longitudinal block and survival covariates still come ",
+      "from the pre-fits."),
+      as.numeric(.ws$potential_warm), as.numeric(.ws$potential_conservative)))
+  }
   # vcov arrives from the MLE backends as a nested list already on the
   # REPORTED scale (common.natural_scale_vcov(): sigmas, shape and rho
   # converted from the optimizer's log/atanh scale), in the same order as
@@ -3000,8 +3044,9 @@ jm_fit <- function(long_formula,
       # `control` itself is not stored on the fit object, and reaching into
       # the call's environment from a print method would be fragile.
       mcmc_settings = if (!is.null(py_result$diagnostics)) {
-        list(num_warmup = control$num_warmup, num_samples = control$num_samples,
-             num_chains = as.integer(control$num_chains %||% 1L),
+        list(num_warmup = .mcmc_n_warmup(control),
+             num_samples = .mcmc_n_samples(control),
+             num_chains = .mcmc_n_chains(control),
              rw2_implementation = control$rw2_implementation %||% "vectorized")
       } else NULL,
       posterior_samples = py_result$posterior_samples  # NULL unless MCMC

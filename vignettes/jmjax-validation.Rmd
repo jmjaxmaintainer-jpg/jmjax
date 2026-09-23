@@ -320,8 +320,10 @@ looked acceptable on means alone.
 - **`progress_bar`** - the previously reported ~30x overhead was measured
   properly and is not real. Across five configurations varying iterations
   and chains, ON/OFF ratios were 1.02, 1.16, 1.06, 1.06 and 1.00, with
-  three of five effects smaller than their own replicate spread. Leave it
-  on; progress feedback during a multi-minute run is worth a few percent.
+  three of five effects smaller than their own replicate spread. It is
+  nevertheless off by default from jmjax 0.3.0, because of the volume of
+  console output in examples and loops; turning it on costs a few percent
+  at most.
 
 - **`jmjax_setup(num_devices = 4)`** - still recommended. By default JAX
   exposes one device to NumPyro regardless of physical core count,

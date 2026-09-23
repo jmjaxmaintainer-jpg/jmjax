@@ -1631,14 +1631,10 @@ def fit_nuts(X_long, y_long, n_obs, X_time_surv, X_time_quad,
                 # starting point (a common, expected outcome - see the
                 # comment above "the decision"). Using warnings.warn() here
                 # made a routine event read like something had gone wrong.
-                print(
-                    "jmjax: warm start using the CONSERVATIVE seed "
-                    f"(full seed scored {_pe_warm:.1f} vs {_pe_safe:.1f}). "
-                    "The association parameter starts at zero with a flat "
-                    "baseline hazard (the combination JMbayes2 uses), while "
-                    "the longitudinal block and survival covariates are still "
-                    "taken from the pre-fits - this is not a fallback to a "
-                    "cold start, those values are kept.")
+                # The note itself is emitted on the R side (jm_fit(), only
+                # with control$verbose = TRUE) from warm_start_check below:
+                # a Python print() here reached every R console and could
+                # not be silenced by suppressMessages() or verbose = FALSE.
                 warm_start_check = {
                     "used": True, "tier": "conservative",
                     "potential_warm": _pe_warm,
@@ -1811,7 +1807,11 @@ def fit_nuts(X_long, y_long, n_obs, X_time_surv, X_time_quad,
         num_warmup=int(control.get("num_warmup", 500)),
         num_samples=int(control.get("num_samples", 1000)),
         num_chains=int(control.get("num_chains", 1)),
-        progress_bar=control.get("progress_bar", True),
+        # Off by default (jmjax >= 0.3.0): its output swamps examples and
+        # loops. The overhead once blamed on it did not replicate
+        # (1.00-1.16x; see vignette("jmjax-validation")), so turning it on
+        # with control$progress_bar = TRUE is cheap.
+        progress_bar=control.get("progress_bar", False),
     )
 
     seed = int(control.get("seed", 2026))

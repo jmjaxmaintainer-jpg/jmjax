@@ -183,7 +183,7 @@ before the results were seen) changed that picture:
 | `dense_mass_spline` | recommended | **default `TRUE`** - passed replication at ~2.1x faster, ~2.3x ESS/second, consistent on every run |
 | `rw2_implementation` | recommended `"vectorized"` | **stays `"scan"`** - the original ~1.4x came from a single run and reversed under replication (ESS/second ratio 0.92x at n=1000) |
 | `random_effects_method` | recommended `"wishart_gibbs"` | **stays `"nuts"`** - mixed direction across seeds, and worse truth recovery, consistent with a documented inverse-Wishart small-variance bias |
-| `progress_bar` | recommended `FALSE` | **leave at `TRUE`** - the reported ~30x overhead was measured properly and is 1.00x-1.16x |
+| `progress_bar` | recommended `FALSE` | **default `FALSE`**, for the volume of console output rather than speed - the reported ~30x overhead did not replicate (1.00x-1.16x), so `progress_bar = TRUE` is cheap when you want it; `verbose = TRUE` gives a one-line notice instead |
 | covariate standardization | manual, user-side | **automatic** - see below |
 
 **Covariate standardization is now automatic.** jmjax centres and scales
