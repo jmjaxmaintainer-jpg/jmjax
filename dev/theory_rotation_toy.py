@@ -289,7 +289,7 @@ if __name__ == "__main__":
         print(f"    visits {nmin:2d}-{nmax:2d} se={se}: per-subject information {info:6.1f}   "
               f"diagonal {e_d.max() / e_d.min():8.0f}   dense (beta, U) {e_b.max() / e_b.min():6.0f}")
 
-    print("  (c) Proposition 7(iv): a dense (beta, U) metric fitted at sigma_b0 = 0.8, used at 0.8 (1 +- delta),")
+    print("  (c) the sigma_b-mismatch argument after Proposition 7: a dense (beta, U) metric fitted at sigma_b0 = 0.8, used at 0.8 (1 +- delta),")
     print("      delta = 1/sqrt(2N) (roughly the posterior CV of sigma_b0): worst condition number of the block")
     for (nmin, nmax), Nn in itertools.product([(2, 11), (8, 20)], [150, 300, 600]):
         d = design(N=Nn, nmin=nmin, nmax=nmax); idx = _blk(Nn)

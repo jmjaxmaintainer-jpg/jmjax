@@ -40,8 +40,8 @@ coordinates NUTS adapts to.
 In simulation (Section 6), the rotation raises the effective sample size
 per second of the regression coefficients a user reports to roughly 8x-25x
 (intercept) and 8x-60x (time slope) a default fit's, across ten designs, at the same wall time,
-with coverage in a 100-replicate calibration study identical to the
-default fit's. Section 8 separates this from the larger comparison with
+with coverage in a 100-replicate calibration study agreeing with the
+default fit's within Monte Carlo error. Section 8 separates this from the larger comparison with
 `JMbayes2`. There, `jmjax`'s default fit already mixes the association
 parameter `alpha` 2.4x-8x faster, a generic NUTS-versus-block-Gibbs effect
 that needs no reparameterization.
@@ -461,8 +461,8 @@ f_j(t; c_i) = s^{(j)}_i g(t; c_i)$ for all $t$, so taking $d = -e_j$
 satisfies (T) for the direction $s^{(j)}$; linearity extends this to the
 span. $\square$
 
-(S) is not automatic, but it holds in every case the option currently
-targets: a subject-constant column has $f_j \equiv c$ and $g \equiv 1$,
+(S) is not automatic, but it holds for every column type that arises in
+practice: a subject-constant column has $f_j \equiv c$ and $g \equiv 1$,
 a `time` column has $f_j(t) = t = 1 \cdot g(t)$, and a covariate-by-time
 interaction has $f_j(t) = c_i t = c_i\, g(t)$ - all identities in $t$,
 not coincidences on a grid. In general, if $f_j - s_i g$ lies in a linear
@@ -476,7 +476,7 @@ relation may hold at the observed points by coincidence.
 `X_time_quad` and `Z_time_quad` are already constructed and passed to the
 backend, so running the same ratio test on the quadrature grid and
 confirming the same $s^{(j)}$ would verify (S) directly instead of
-resting on the argument above. This is recommended in Section 4.8.
+resting on the argument above. Section 4.8 describes the check as implemented.
 
 ### 4.5 Completeness, and a design where it fails
 
@@ -695,7 +695,7 @@ $V \in \mathbb{R}^{(N-k) \times \lvert\mathcal{C}\rvert}$.
 Then (i) the map $(U, V) \mapsto b_{\mathrm{std}}$ is linear with
 $\lvert\det\rvert = 1$; (ii) the prior it induces on $b_{\mathrm{std}}$ is
 exactly the original one; (iii) consequently the posterior of every model
-quantity - $\beta$, $b$ and $\theta$ - is identical to the unrotated parameterization's, and so is every
+quantity - $b$ and $\theta$ - is identical to the unrotated parameterization's, and so is every
 calibration property of every estimand, up to Monte Carlo error; and (iv)
 $U[\,\cdot\,, j] = Q_{\cup}^{\top} b_{\mathrm{std}}[\,\cdot\,, j]$.
 
@@ -757,9 +757,11 @@ $$\beta \mapsto \beta + c\,d, \qquad
 U \mapsto U + c\,(Q_{\cup}^{\top} v)\, e_j^{\top} (L^{\top})^{-1}, \qquad
 V \mapsto V,$$
 
-for every value of $\sigma_b$ and $L_{\mathrm{corr}}$. So every direction
-along which the likelihood is flat lies in the coordinate block
-$(\beta, U)$, of dimension $p + kq$. Without the rotation, the same
+for every value of $\sigma_b$ and $L_{\mathrm{corr}}$. So every invariant
+direction of Corollary 1's form lies in the coordinate block
+$(\beta, U)$, of dimension $p + kq$ (given Condition (S), which makes the
+directions of $\operatorname{span}(Q_j)$ absorbable for the joint model,
+by Proposition 3). Without the rotation, the same
 directions have a component on every one of the $N$ subjects' coordinates.
 
 *Proof.* $b = b_{\mathrm{std}} L^{\top}$, so adding $c\,v$ to column $j$ of
@@ -784,7 +786,11 @@ small dense mass block can then absorb.
 
 **Proposition 7 (the ridge, and what the dense block does).** Consider one
 invariant direction, in the reduced model that holds every other coordinate
-fixed. Let $\tilde\beta$ be the coordinate of `beta` along the witness $d$,
+fixed. The statement is exact as written for the random intercept's mean
+direction, whose witness is a single `beta` coordinate; for the other
+generators the witness mixes several `beta` coordinates, and (ii) then
+describes the whole $(\beta, U)$ block rather than one plane, with the
+same conclusion about the dense block. Let $\tilde\beta$ be the coordinate of `beta` along the witness $d$,
 with a diffuse prior, and $u$ the matching coordinate of $U$, with prior
 $\mathcal{N}(0,1)$. Suppose the likelihood informs only the combination
 $s = \tilde\beta + \kappa u$, with precision $\tau$. Then:
@@ -826,8 +832,11 @@ conditioning any fit has, such as the within-subject correlation between
 intercept and slope. Part 5(a) checks (i) to six decimals.
 
 **What a fixed dense block cannot do.** The ridge's orientation depends on
-$\kappa \propto \sigma_0$, a *sampled* parameter, while NUTS adapts one
-fixed metric. Let $\delta$ be the posterior coefficient of variation of
+the *sampled* $L$ (Lemma 1): on $\sigma_0$ through $\kappa \propto \sigma_0$,
+and, for directions shared between the intercept and slope columns, on
+$\rho$ through $\rho/\sqrt{1-\rho^{2}}$. NUTS adapts one fixed metric. The
+$\sigma_0$ part is analysed here; the $\rho$ part is not, and it grows as
+$\lvert\rho\rvert \to 1$. Let $\delta$ be the posterior coefficient of variation of
 $\sigma_0$, roughly $1/\sqrt{2N}$. A metric that exactly whitens the plane
 at one value of $\sigma_0$ leaves a residual condition number of
 $1 + O\big(\delta\sqrt{\tau\kappa^{2}}\big)$ elsewhere in the posterior. In
@@ -842,16 +851,29 @@ computes it directly:
 | 8-20 | 2.71 | 2.05 | 1.64 |
 
 The retired sweep has no such term. It removes the invariant directions
-from the likelihood's coordinates exactly, for every value of $\sigma_0$,
-at the price of a correction step (development record, Sections 4.9-4.10).
-The prediction, then, is that the no-sweep construction should lose ground
-to the swept-and-rotated one at small $N$ and with dense follow-up, and
-match it otherwise. Section 6's grid, which also ran the swept arms,
-agrees, noisily. The no-sweep construction's ESS/sec relative to the swept one was
-0.73x / 0.78x (intercept / slope) at $N = 150$, 1.05x / 1.02x at $N = 300$
-and 0.93x / 1.14x at $N = 600$ in the same cells. Across all $\rho$ at
-$N = 300$ it averaged about 0.88x with dense visits against about 1.0x
-with ordinary ones.
+from the likelihood's coordinates exactly, for every value of $L$, at the
+price of a correction step (development record, Sections 4.9-4.10). So the
+no-sweep construction should lose some ground to the swept-and-rotated one
+where the per-subject information is high or $N$ is small, and match it
+otherwise. Section 6's grid ran both. Measured against two swept
+comparators - with a diagonal metric, and with its own dense block - the
+evidence is as follows.
+
+- *Visits per subject: supported.* At $N = 300$, the no-sweep
+  construction's ESS/sec relative to the swept one averaged 0.88x
+  (diagonal comparator) and 0.90x (dense comparator) with about 17 visits
+  per subject, against 0.99x and 1.18x with about 9.
+- *$N$: not established.* Against the diagonal comparator the ratios
+  rise from $N = 150$ to $N = 300$ (0.73x/0.78x to 1.05x/1.02x, intercept/
+  slope), but against the dense comparator they do not (0.94x/1.13x
+  at $N = 150$). $N = 600$ is not higher than $N = 300$ for the intercept
+  (0.93x against the diagonal comparator).
+- *Seed noise.* Per-seed ratios span 0.63x-1.85x, wider than any of these
+  effects, so three seeds cannot settle them.
+
+In short, the construction is within noise of the swept one in the
+ordinary regime. A small cost with dense follow-up is visible, as
+predicted. Everything finer is untested.
 
 ### 5.3 Using it
 
@@ -901,9 +923,13 @@ intercept (per-seed range 4.5x-31.6x) and 21.1x for the time slope
 the gain is almost entirely ESS per draw. The median ESS over 2000 draws is
 about 3,450 for both coefficients under the rotation - more than the
 number of draws, the anti-correlated sampling NUTS achieves on a
-well-conditioned target - against 180-230 for the default fit. The
+well-conditioned target - against 180-235 for the default fit. The
 association parameter `alpha`, which the degeneracy does not involve, is
-unchanged on balance (geometric mean 1.04x, range 0.51x-2.19x per seed). There
+not unchanged: its ratio splits by design. It is 0.72x-1.00x in all six
+cells with about 9 visits per subject and 1.32x-1.59x in all four with
+about 17 (geometric mean 1.04x overall). Why the rotation helps `alpha`
+with dense follow-up and costs it a little otherwise is not yet
+understood. There
 were no divergences, and the worst R-hat on a reported coefficient was
 1.002 under the rotation, against 1.044 for the default fit.
 
@@ -931,14 +957,15 @@ R-hat $\le 1.05$ (all 100 kept):
 | `sigma_b0` | 0.94 | 0.914 | 0.63 | 0.95 | 0.906 | 0.68 |
 
 Coverage agrees to within 0.01 everywhere (the Monte Carlo SE on 95%
-coverage is about 0.011), and so does the ratio of mean posterior SD to
-the SD of posterior means. The two effects visible in *both* columns -
+coverage is about 0.011), and the ratio of mean posterior SD to the SD of
+posterior means to within 0.015 - agreement within Monte Carlo error. The two effects visible in *both* columns -
 slightly wide intervals for `beta_0`, and an upward bias in `alpha` of
 about 3 Monte Carlo SEs - belong to the model and this design, not to the
 rotation; Section 9 records them.
 
-The retired sweep, with its correction, reached the same efficiency and the
-same calibration when combined with the same rotation. The side-by-side
+The retired sweep, with its correction and the same rotation, reached
+similar efficiency (the no-sweep construction averaged about 0.92x of it
+in the same grid; Section 5.2) and the same calibration. The side-by-side
 numbers are in the development record's Epilogue.
 
 ## 7. Real data
@@ -953,7 +980,7 @@ as in `dev/study_realdata_aids.R`.
 
 The quantity a joint-model analysis is usually run to estimate is the
 association parameter `alpha`. The degeneracy of Section 3 does not
-involve it, and neither does the rotation (Section 6.2: 1.04x). Measured
+involve it; the rotation's effect on it is mixed (Section 6.2: 0.72x-1.59x by design, 1.04x overall). Measured
 directly against `JMbayes2`, `jmjax`'s *default* fit mixes `alpha` much
 faster. In a replicated covariate-count sweep (`dev/study_orth_vs_jmbayes2.R`:
 $n = 1000$, 3 seeds, `JMbayes2` at 16,000 iterations with 4,000 burn-in per
@@ -1047,8 +1074,10 @@ remaining work (Section 9).
 - **Next steps, in order.**
   1. Real data (Section 7).
   2. The rotated fit against `JMbayes2` on the regression coefficients.
-  3. Designs with few, densely observed subjects, where Proposition 7(iv)
-     predicts the no-sweep construction is weakest.
+    3. Designs with few, densely observed subjects, where the argument after
+     Proposition 7 predicts the no-sweep construction is weakest, and
+     strongly correlated random effects ($\lvert\rho\rvert$ near 1), which
+     that argument does not cover.
   4. The broader design checks that would justify making the rotation the
      default: more covariates, a non-linear time trend (Section 4.5's
      Example 1) and the `mixing` design.
