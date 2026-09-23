@@ -39,7 +39,13 @@ benchmark_results/
 .DS_Store
 Thumbs.db
 
-# dev/ study outputs (results CSVs and run logs are regenerated, not sources)
-dev/*.csv
+# dev/ study outputs. Results CSVs are TRACKED: they are the evidence the
+# manuscript and vignettes cite, and regenerating them costs hours of
+# compute, so the private repo is their backup. (.Rbuildignore drops all of
+# dev/ from the package tarball, so tracking them costs users nothing.)
+# Timestamped .bak copies and run logs stay untracked, except the
+# calibration/pilot logs kept alongside the results they produced.
 dev/*.csv.bak-*
 *.log
+!/calib*.log
+!/ess_pilot.log

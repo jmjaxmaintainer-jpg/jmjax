@@ -1,0 +1,837 @@
+standardize_covariates: standardized 2 covariate(s) in long_formula (age: centre -0.5688, scale 9.371, implied intercept correlation -0.06; sex: centre 0.5134, scale 0.4999, implied intercept correlation -0.72). Coefficients are returned on the ORIGINAL scale. Set control$standardize_covariates = FALSE to disable.
+  [linear r001 A]  16.6s  rhat_reg 1.025  div 0  (1/300, 0.3 min, ETA 83 min)
+standardize_covariates: standardized 2 covariate(s) in long_formula (age: centre -0.5688, scale 9.371, implied intercept correlation -0.06; sex: centre 0.5134, scale 0.4999, implied intercept correlation -0.72). Coefficients are returned on the ORIGINAL scale. Set control$standardize_covariates = FALSE to disable.
+sys:1: RuntimeWarning: orthogonalize_b: b[:,0] <- 3 direction(s) from X columns [0, 2, 3]; b[:,1] <- no basis (unconstrained)
+  [linear r001 D]  13.5s  rhat_reg 1.020  div 0  (2/300, 0.5 min, ETA 75 min)
+standardize_covariates: standardized 2 covariate(s) in long_formula (age: centre -0.5688, scale 9.371, implied intercept correlation -0.06; sex: centre 0.5134, scale 0.4999, implied intercept correlation -0.72). Coefficients are returned on the ORIGINAL scale. Set control$standardize_covariates = FALSE to disable.
+sys:1: RuntimeWarning: orthogonalize_b: b[:,0] <- 3 direction(s) from X columns [0, 2, 3]; b[:,1] <- no basis (unconstrained)
+  [linear r001 D_rot]  19.3s  rhat_reg 1.021  div 0  (3/300, 0.8 min, ETA 82 min)
+standardize_covariates: standardized 2 covariate(s) in long_formula (age: centre 0.1636, scale 9.871, implied intercept correlation -0.02; sex: centre 0.5319, scale 0.4991, implied intercept correlation -0.73). Coefficients are returned on the ORIGINAL scale. Set control$standardize_covariates = FALSE to disable.
+  [linear r002 A]  13.2s  rhat_reg 1.010  div 0  (4/300, 1.0 min, ETA 78 min)
+standardize_covariates: standardized 2 covariate(s) in long_formula (age: centre 0.1636, scale 9.871, implied intercept correlation -0.02; sex: centre 0.5319, scale 0.4991, implied intercept correlation -0.73). Coefficients are returned on the ORIGINAL scale. Set control$standardize_covariates = FALSE to disable.
+sys:1: RuntimeWarning: orthogonalize_b: b[:,0] <- 3 direction(s) from X columns [0, 2, 3]; b[:,1] <- no basis (unconstrained)
+  [linear r002 D]  13.3s  rhat_reg 1.003  div 0  (5/300, 1.3 min, ETA 75 min)
+standardize_covariates: standardized 2 covariate(s) in long_formula (age: centre 0.1636, scale 9.871, implied intercept correlation -0.02; sex: centre 0.5319, scale 0.4991, implied intercept correlation -0.73). Coefficients are returned on the ORIGINAL scale. Set control$standardize_covariates = FALSE to disable.
+sys:1: RuntimeWarning: orthogonalize_b: b[:,0] <- 3 direction(s) from X columns [0, 2, 3]; b[:,1] <- no basis (unconstrained)
+  [linear r002 D_rot]  18.7s  rhat_reg 1.001  div 0  (6/300, 1.6 min, ETA 78 min)
+standardize_covariates: standardized 2 covariate(s) in long_formula (age: centre -0.3036, scale 9.821, implied intercept correlation -0.03; sex: centre 0.495, scale 0.5001, implied intercept correlation -0.70). Coefficients are returned on the ORIGINAL scale. Set control$standardize_covariates = FALSE to disable.
+  [linear r003 A]  13.3s  rhat_reg 1.007  div 0  (7/300, 1.8 min, ETA 76 min)
+standardize_covariates: standardized 2 covariate(s) in long_formula (age: centre -0.3036, scale 9.821, implied intercept correlation -0.03; sex: centre 0.495, scale 0.5001, implied intercept correlation -0.70). Coefficients are returned on the ORIGINAL scale. Set control$standardize_covariates = FALSE to disable.
+sys:1: RuntimeWarning: orthogonalize_b: b[:,0] <- 3 direction(s) from X columns [0, 2, 3]; b[:,1] <- no basis (unconstrained)
+  [linear r003 D]  13.7s  rhat_reg 1.005  div 0  (8/300, 2.0 min, ETA 74 min)
+standardize_covariates: standardized 2 covariate(s) in long_formula (age: centre -0.3036, scale 9.821, implied intercept correlation -0.03; sex: centre 0.495, scale 0.5001, implied intercept correlation -0.70). Coefficients are returned on the ORIGINAL scale. Set control$standardize_covariates = FALSE to disable.
+sys:1: RuntimeWarning: orthogonalize_b: b[:,0] <- 3 direction(s) from X columns [0, 2, 3]; b[:,1] <- no basis (unconstrained)
+  [linear r003 D_rot]  18.8s  rhat_reg 1.028  div 0  (9/300, 2.4 min, ETA 76 min)
+standardize_covariates: standardized 2 covariate(s) in long_formula (age: centre 0.1425, scale 10.62, implied intercept correlation -0.01; sex: centre 0.5114, scale 0.5, implied intercept correlation -0.72). Coefficients are returned on the ORIGINAL scale. Set control$standardize_covariates = FALSE to disable.
+  [linear r004 A]  13.7s  rhat_reg 1.009  div 0  (10/300, 2.6 min, ETA 75 min)
+standardize_covariates: standardized 2 covariate(s) in long_formula (age: centre 0.1425, scale 10.62, implied intercept correlation -0.01; sex: centre 0.5114, scale 0.5, implied intercept correlation -0.72). Coefficients are returned on the ORIGINAL scale. Set control$standardize_covariates = FALSE to disable.
+sys:1: RuntimeWarning: orthogonalize_b: b[:,0] <- 3 direction(s) from X columns [0, 2, 3]; b[:,1] <- no basis (unconstrained)
+  [linear r004 D]  13.8s  rhat_reg 1.004  div 0  (11/300, 2.8 min, ETA 74 min)
+standardize_covariates: standardized 2 covariate(s) in long_formula (age: centre 0.1425, scale 10.62, implied intercept correlation -0.01; sex: centre 0.5114, scale 0.5, implied intercept correlation -0.72). Coefficients are returned on the ORIGINAL scale. Set control$standardize_covariates = FALSE to disable.
+sys:1: RuntimeWarning: orthogonalize_b: b[:,0] <- 3 direction(s) from X columns [0, 2, 3]; b[:,1] <- no basis (unconstrained)
+  [linear r004 D_rot]  20.0s  rhat_reg 1.011  div 0  (12/300, 3.2 min, ETA 76 min)
+standardize_covariates: standardized 2 covariate(s) in long_formula (age: centre -0.06033, scale 9.966, implied intercept correlation -0.01; sex: centre 0.4871, scale 0.4999, implied intercept correlation -0.70). Coefficients are returned on the ORIGINAL scale. Set control$standardize_covariates = FALSE to disable.
+  [linear r005 A]  13.7s  rhat_reg 1.012  div 0  (13/300, 3.4 min, ETA 75 min)
+standardize_covariates: standardized 2 covariate(s) in long_formula (age: centre -0.06033, scale 9.966, implied intercept correlation -0.01; sex: centre 0.4871, scale 0.4999, implied intercept correlation -0.70). Coefficients are returned on the ORIGINAL scale. Set control$standardize_covariates = FALSE to disable.
+sys:1: RuntimeWarning: orthogonalize_b: b[:,0] <- 3 direction(s) from X columns [0, 2, 3]; b[:,1] <- no basis (unconstrained)
+  [linear r005 D]  14.2s  rhat_reg 1.003  div 0  (14/300, 3.6 min, ETA 74 min)
+standardize_covariates: standardized 2 covariate(s) in long_formula (age: centre -0.06033, scale 9.966, implied intercept correlation -0.01; sex: centre 0.4871, scale 0.4999, implied intercept correlation -0.70). Coefficients are returned on the ORIGINAL scale. Set control$standardize_covariates = FALSE to disable.
+sys:1: RuntimeWarning: orthogonalize_b: b[:,0] <- 3 direction(s) from X columns [0, 2, 3]; b[:,1] <- no basis (unconstrained)
+  [linear r005 D_rot]  19.5s  rhat_reg 1.012  div 0  (15/300, 3.9 min, ETA 75 min)
+standardize_covariates: standardized 2 covariate(s) in long_formula (age: centre 0.05899, scale 9.511, implied intercept correlation -0.01; sex: centre 0.4974, scale 0.5001, implied intercept correlation -0.71). Coefficients are returned on the ORIGINAL scale. Set control$standardize_covariates = FALSE to disable.
+  [linear r006 A]  14.1s  rhat_reg 1.018  div 0  (16/300, 4.2 min, ETA 74 min)
+standardize_covariates: standardized 2 covariate(s) in long_formula (age: centre 0.05899, scale 9.511, implied intercept correlation -0.01; sex: centre 0.4974, scale 0.5001, implied intercept correlation -0.71). Coefficients are returned on the ORIGINAL scale. Set control$standardize_covariates = FALSE to disable.
+sys:1: RuntimeWarning: orthogonalize_b: b[:,0] <- 3 direction(s) from X columns [0, 2, 3]; b[:,1] <- no basis (unconstrained)
+  [linear r006 D]  14.3s  rhat_reg 1.019  div 0  (17/300, 4.4 min, ETA 74 min)
+standardize_covariates: standardized 2 covariate(s) in long_formula (age: centre 0.05899, scale 9.511, implied intercept correlation -0.01; sex: centre 0.4974, scale 0.5001, implied intercept correlation -0.71). Coefficients are returned on the ORIGINAL scale. Set control$standardize_covariates = FALSE to disable.
+sys:1: RuntimeWarning: orthogonalize_b: b[:,0] <- 3 direction(s) from X columns [0, 2, 3]; b[:,1] <- no basis (unconstrained)
+  [linear r006 D_rot]  19.5s  rhat_reg 1.005  div 0  (18/300, 4.8 min, ETA 74 min)
+standardize_covariates: standardized 2 covariate(s) in long_formula (age: centre 0.3241, scale 10.33, implied intercept correlation -0.03; sex: centre 0.4949, scale 0.5001, implied intercept correlation -0.70). Coefficients are returned on the ORIGINAL scale. Set control$standardize_covariates = FALSE to disable.
+  [linear r007 A]  13.4s  rhat_reg 1.022  div 0  (19/300, 5.0 min, ETA 74 min)
+standardize_covariates: standardized 2 covariate(s) in long_formula (age: centre 0.3241, scale 10.33, implied intercept correlation -0.03; sex: centre 0.4949, scale 0.5001, implied intercept correlation -0.70). Coefficients are returned on the ORIGINAL scale. Set control$standardize_covariates = FALSE to disable.
+sys:1: RuntimeWarning: orthogonalize_b: b[:,0] <- 3 direction(s) from X columns [0, 2, 3]; b[:,1] <- no basis (unconstrained)
+  [linear r007 D]  14.6s  rhat_reg 1.020  div 0  (20/300, 5.2 min, ETA 73 min)
+standardize_covariates: standardized 2 covariate(s) in long_formula (age: centre 0.3241, scale 10.33, implied intercept correlation -0.03; sex: centre 0.4949, scale 0.5001, implied intercept correlation -0.70). Coefficients are returned on the ORIGINAL scale. Set control$standardize_covariates = FALSE to disable.
+sys:1: RuntimeWarning: orthogonalize_b: b[:,0] <- 3 direction(s) from X columns [0, 2, 3]; b[:,1] <- no basis (unconstrained)
+  [linear r007 D_rot]  19.2s  rhat_reg 1.006  div 0  (21/300, 5.5 min, ETA 74 min)
+standardize_covariates: standardized 2 covariate(s) in long_formula (age: centre -0.07109, scale 9.904, implied intercept correlation -0.01; sex: centre 0.497, scale 0.5001, implied intercept correlation -0.70). Coefficients are returned on the ORIGINAL scale. Set control$standardize_covariates = FALSE to disable.
+  [linear r008 A]  14.0s  rhat_reg 1.006  div 0  (22/300, 5.8 min, ETA 73 min)
+standardize_covariates: standardized 2 covariate(s) in long_formula (age: centre -0.07109, scale 9.904, implied intercept correlation -0.01; sex: centre 0.497, scale 0.5001, implied intercept correlation -0.70). Coefficients are returned on the ORIGINAL scale. Set control$standardize_covariates = FALSE to disable.
+sys:1: RuntimeWarning: orthogonalize_b: b[:,0] <- 3 direction(s) from X columns [0, 2, 3]; b[:,1] <- no basis (unconstrained)
+  [linear r008 D]  13.6s  rhat_reg 1.001  div 0  (23/300, 6.0 min, ETA 72 min)
+standardize_covariates: standardized 2 covariate(s) in long_formula (age: centre -0.07109, scale 9.904, implied intercept correlation -0.01; sex: centre 0.497, scale 0.5001, implied intercept correlation -0.70). Coefficients are returned on the ORIGINAL scale. Set control$standardize_covariates = FALSE to disable.
+sys:1: RuntimeWarning: orthogonalize_b: b[:,0] <- 3 direction(s) from X columns [0, 2, 3]; b[:,1] <- no basis (unconstrained)
+  [linear r008 D_rot]  19.6s  rhat_reg 1.003  div 0  (24/300, 6.3 min, ETA 73 min)
+standardize_covariates: standardized 2 covariate(s) in long_formula (age: centre 0.3303, scale 10.49, implied intercept correlation -0.03; sex: centre 0.5139, scale 0.4999, implied intercept correlation -0.72). Coefficients are returned on the ORIGINAL scale. Set control$standardize_covariates = FALSE to disable.
+  [linear r009 A]  13.9s  rhat_reg 1.004  div 0  (25/300, 6.6 min, ETA 72 min)
+standardize_covariates: standardized 2 covariate(s) in long_formula (age: centre 0.3303, scale 10.49, implied intercept correlation -0.03; sex: centre 0.5139, scale 0.4999, implied intercept correlation -0.72). Coefficients are returned on the ORIGINAL scale. Set control$standardize_covariates = FALSE to disable.
+sys:1: RuntimeWarning: orthogonalize_b: b[:,0] <- 3 direction(s) from X columns [0, 2, 3]; b[:,1] <- no basis (unconstrained)
+  [linear r009 D]  14.3s  rhat_reg 1.001  div 0  (26/300, 6.8 min, ETA 72 min)
+standardize_covariates: standardized 2 covariate(s) in long_formula (age: centre 0.3303, scale 10.49, implied intercept correlation -0.03; sex: centre 0.5139, scale 0.4999, implied intercept correlation -0.72). Coefficients are returned on the ORIGINAL scale. Set control$standardize_covariates = FALSE to disable.
+sys:1: RuntimeWarning: orthogonalize_b: b[:,0] <- 3 direction(s) from X columns [0, 2, 3]; b[:,1] <- no basis (unconstrained)
+  [linear r009 D_rot]  19.2s  rhat_reg 1.010  div 0  (27/300, 7.1 min, ETA 72 min)
+standardize_covariates: standardized 2 covariate(s) in long_formula (age: centre 0.4484, scale 10.37, implied intercept correlation -0.04; sex: centre 0.5241, scale 0.4995, implied intercept correlation -0.72). Coefficients are returned on the ORIGINAL scale. Set control$standardize_covariates = FALSE to disable.
+  [linear r010 A]  13.3s  rhat_reg 1.010  div 0  (28/300, 7.4 min, ETA 71 min)
+standardize_covariates: standardized 2 covariate(s) in long_formula (age: centre 0.4484, scale 10.37, implied intercept correlation -0.04; sex: centre 0.5241, scale 0.4995, implied intercept correlation -0.72). Coefficients are returned on the ORIGINAL scale. Set control$standardize_covariates = FALSE to disable.
+sys:1: RuntimeWarning: orthogonalize_b: b[:,0] <- 3 direction(s) from X columns [0, 2, 3]; b[:,1] <- no basis (unconstrained)
+  [linear r010 D]  14.0s  rhat_reg 1.012  div 0  (29/300, 7.6 min, ETA 71 min)
+standardize_covariates: standardized 2 covariate(s) in long_formula (age: centre 0.4484, scale 10.37, implied intercept correlation -0.04; sex: centre 0.5241, scale 0.4995, implied intercept correlation -0.72). Coefficients are returned on the ORIGINAL scale. Set control$standardize_covariates = FALSE to disable.
+sys:1: RuntimeWarning: orthogonalize_b: b[:,0] <- 3 direction(s) from X columns [0, 2, 3]; b[:,1] <- no basis (unconstrained)
+  [linear r010 D_rot]  19.4s  rhat_reg 1.001  div 0  (30/300, 7.9 min, ETA 71 min)
+standardize_covariates: standardized 2 covariate(s) in long_formula (age: centre -0.8388, scale 9.489, implied intercept correlation -0.09; sex: centre 0.5471, scale 0.4979, implied intercept correlation -0.74). Coefficients are returned on the ORIGINAL scale. Set control$standardize_covariates = FALSE to disable.
+  [linear r011 A]  13.9s  rhat_reg 1.011  div 0  (31/300, 8.1 min, ETA 71 min)
+standardize_covariates: standardized 2 covariate(s) in long_formula (age: centre -0.8388, scale 9.489, implied intercept correlation -0.09; sex: centre 0.5471, scale 0.4979, implied intercept correlation -0.74). Coefficients are returned on the ORIGINAL scale. Set control$standardize_covariates = FALSE to disable.
+sys:1: RuntimeWarning: orthogonalize_b: b[:,0] <- 3 direction(s) from X columns [0, 2, 3]; b[:,1] <- no basis (unconstrained)
+  [linear r011 D]  14.4s  rhat_reg 1.005  div 0  (32/300, 8.4 min, ETA 70 min)
+standardize_covariates: standardized 2 covariate(s) in long_formula (age: centre -0.8388, scale 9.489, implied intercept correlation -0.09; sex: centre 0.5471, scale 0.4979, implied intercept correlation -0.74). Coefficients are returned on the ORIGINAL scale. Set control$standardize_covariates = FALSE to disable.
+sys:1: RuntimeWarning: orthogonalize_b: b[:,0] <- 3 direction(s) from X columns [0, 2, 3]; b[:,1] <- no basis (unconstrained)
+  [linear r011 D_rot]  19.9s  rhat_reg 1.004  div 0  (33/300, 8.7 min, ETA 71 min)
+standardize_covariates: standardized 2 covariate(s) in long_formula (age: centre -1.059, scale 9.611, implied intercept correlation -0.11; sex: centre 0.5468, scale 0.4979, implied intercept correlation -0.74). Coefficients are returned on the ORIGINAL scale. Set control$standardize_covariates = FALSE to disable.
+  [linear r012 A]  13.7s  rhat_reg 1.008  div 0  (34/300, 9.0 min, ETA 70 min)
+standardize_covariates: standardized 2 covariate(s) in long_formula (age: centre -1.059, scale 9.611, implied intercept correlation -0.11; sex: centre 0.5468, scale 0.4979, implied intercept correlation -0.74). Coefficients are returned on the ORIGINAL scale. Set control$standardize_covariates = FALSE to disable.
+sys:1: RuntimeWarning: orthogonalize_b: b[:,0] <- 3 direction(s) from X columns [0, 2, 3]; b[:,1] <- no basis (unconstrained)
+  [linear r012 D]  14.0s  rhat_reg 1.009  div 0  (35/300, 9.2 min, ETA 70 min)
+standardize_covariates: standardized 2 covariate(s) in long_formula (age: centre -1.059, scale 9.611, implied intercept correlation -0.11; sex: centre 0.5468, scale 0.4979, implied intercept correlation -0.74). Coefficients are returned on the ORIGINAL scale. Set control$standardize_covariates = FALSE to disable.
+sys:1: RuntimeWarning: orthogonalize_b: b[:,0] <- 3 direction(s) from X columns [0, 2, 3]; b[:,1] <- no basis (unconstrained)
+  [linear r012 D_rot]  19.8s  rhat_reg 1.007  div 0  (36/300, 9.5 min, ETA 70 min)
+standardize_covariates: standardized 2 covariate(s) in long_formula (age: centre -0.254, scale 10.95, implied intercept correlation -0.02; sex: centre 0.5055, scale 0.5001, implied intercept correlation -0.71). Coefficients are returned on the ORIGINAL scale. Set control$standardize_covariates = FALSE to disable.
+  [linear r013 A]  14.0s  rhat_reg 1.007  div 0  (37/300, 9.8 min, ETA 69 min)
+standardize_covariates: standardized 2 covariate(s) in long_formula (age: centre -0.254, scale 10.95, implied intercept correlation -0.02; sex: centre 0.5055, scale 0.5001, implied intercept correlation -0.71). Coefficients are returned on the ORIGINAL scale. Set control$standardize_covariates = FALSE to disable.
+sys:1: RuntimeWarning: orthogonalize_b: b[:,0] <- 3 direction(s) from X columns [0, 2, 3]; b[:,1] <- no basis (unconstrained)
+  [linear r013 D]  13.7s  rhat_reg 1.007  div 0  (38/300, 10.0 min, ETA 69 min)
+standardize_covariates: standardized 2 covariate(s) in long_formula (age: centre -0.254, scale 10.95, implied intercept correlation -0.02; sex: centre 0.5055, scale 0.5001, implied intercept correlation -0.71). Coefficients are returned on the ORIGINAL scale. Set control$standardize_covariates = FALSE to disable.
+sys:1: RuntimeWarning: orthogonalize_b: b[:,0] <- 3 direction(s) from X columns [0, 2, 3]; b[:,1] <- no basis (unconstrained)
+  [linear r013 D_rot]  19.6s  rhat_reg 1.004  div 0  (39/300, 10.3 min, ETA 69 min)
+standardize_covariates: standardized 2 covariate(s) in long_formula (age: centre -0.1567, scale 9.895, implied intercept correlation -0.02; sex: centre 0.5484, scale 0.4977, implied intercept correlation -0.74). Coefficients are returned on the ORIGINAL scale. Set control$standardize_covariates = FALSE to disable.
+  [linear r014 A]  14.2s  rhat_reg 1.013  div 0  (40/300, 10.6 min, ETA 69 min)
+standardize_covariates: standardized 2 covariate(s) in long_formula (age: centre -0.1567, scale 9.895, implied intercept correlation -0.02; sex: centre 0.5484, scale 0.4977, implied intercept correlation -0.74). Coefficients are returned on the ORIGINAL scale. Set control$standardize_covariates = FALSE to disable.
+sys:1: RuntimeWarning: orthogonalize_b: b[:,0] <- 3 direction(s) from X columns [0, 2, 3]; b[:,1] <- no basis (unconstrained)
+  [linear r014 D]  14.0s  rhat_reg 1.013  div 0  (41/300, 10.8 min, ETA 68 min)
+standardize_covariates: standardized 2 covariate(s) in long_formula (age: centre -0.1567, scale 9.895, implied intercept correlation -0.02; sex: centre 0.5484, scale 0.4977, implied intercept correlation -0.74). Coefficients are returned on the ORIGINAL scale. Set control$standardize_covariates = FALSE to disable.
+sys:1: RuntimeWarning: orthogonalize_b: b[:,0] <- 3 direction(s) from X columns [0, 2, 3]; b[:,1] <- no basis (unconstrained)
+  [linear r014 D_rot]  19.8s  rhat_reg 1.006  div 0  (42/300, 11.1 min, ETA 68 min)
+standardize_covariates: standardized 2 covariate(s) in long_formula (age: centre -1.796, scale 9.647, implied intercept correlation -0.18; sex: centre 0.4861, scale 0.4999, implied intercept correlation -0.70). Coefficients are returned on the ORIGINAL scale. Set control$standardize_covariates = FALSE to disable.
+  [linear r015 A]  13.8s  rhat_reg 1.015  div 0  (43/300, 11.4 min, ETA 68 min)
+standardize_covariates: standardized 2 covariate(s) in long_formula (age: centre -1.796, scale 9.647, implied intercept correlation -0.18; sex: centre 0.4861, scale 0.4999, implied intercept correlation -0.70). Coefficients are returned on the ORIGINAL scale. Set control$standardize_covariates = FALSE to disable.
+sys:1: RuntimeWarning: orthogonalize_b: b[:,0] <- 3 direction(s) from X columns [0, 2, 3]; b[:,1] <- no basis (unconstrained)
+  [linear r015 D]  14.1s  rhat_reg 1.002  div 0  (44/300, 11.6 min, ETA 67 min)
+standardize_covariates: standardized 2 covariate(s) in long_formula (age: centre -1.796, scale 9.647, implied intercept correlation -0.18; sex: centre 0.4861, scale 0.4999, implied intercept correlation -0.70). Coefficients are returned on the ORIGINAL scale. Set control$standardize_covariates = FALSE to disable.
+sys:1: RuntimeWarning: orthogonalize_b: b[:,0] <- 3 direction(s) from X columns [0, 2, 3]; b[:,1] <- no basis (unconstrained)
+  [linear r015 D_rot]  20.6s  rhat_reg 1.005  div 0  (45/300, 11.9 min, ETA 68 min)
+standardize_covariates: standardized 2 covariate(s) in long_formula (age: centre 0.1572, scale 9.987, implied intercept correlation -0.02; sex: centre 0.4981, scale 0.5001, implied intercept correlation -0.71). Coefficients are returned on the ORIGINAL scale. Set control$standardize_covariates = FALSE to disable.
+  [linear r016 A]  14.5s  rhat_reg 1.012  div 0  (46/300, 12.2 min, ETA 67 min)
+standardize_covariates: standardized 2 covariate(s) in long_formula (age: centre 0.1572, scale 9.987, implied intercept correlation -0.02; sex: centre 0.4981, scale 0.5001, implied intercept correlation -0.71). Coefficients are returned on the ORIGINAL scale. Set control$standardize_covariates = FALSE to disable.
+sys:1: RuntimeWarning: orthogonalize_b: b[:,0] <- 3 direction(s) from X columns [0, 2, 3]; b[:,1] <- no basis (unconstrained)
+  [linear r016 D]  14.1s  rhat_reg 1.002  div 0  (47/300, 12.4 min, ETA 67 min)
+standardize_covariates: standardized 2 covariate(s) in long_formula (age: centre 0.1572, scale 9.987, implied intercept correlation -0.02; sex: centre 0.4981, scale 0.5001, implied intercept correlation -0.71). Coefficients are returned on the ORIGINAL scale. Set control$standardize_covariates = FALSE to disable.
+sys:1: RuntimeWarning: orthogonalize_b: b[:,0] <- 3 direction(s) from X columns [0, 2, 3]; b[:,1] <- no basis (unconstrained)
+  [linear r016 D_rot]  18.8s  rhat_reg 1.001  div 0  (48/300, 12.7 min, ETA 67 min)
+standardize_covariates: standardized 2 covariate(s) in long_formula (age: centre 0.3648, scale 9.614, implied intercept correlation -0.04; sex: centre 0.4944, scale 0.5001, implied intercept correlation -0.70). Coefficients are returned on the ORIGINAL scale. Set control$standardize_covariates = FALSE to disable.
+  [linear r017 A]  14.2s  rhat_reg 1.013  div 0  (49/300, 13.0 min, ETA 66 min)
+standardize_covariates: standardized 2 covariate(s) in long_formula (age: centre 0.3648, scale 9.614, implied intercept correlation -0.04; sex: centre 0.4944, scale 0.5001, implied intercept correlation -0.70). Coefficients are returned on the ORIGINAL scale. Set control$standardize_covariates = FALSE to disable.
+sys:1: RuntimeWarning: orthogonalize_b: b[:,0] <- 3 direction(s) from X columns [0, 2, 3]; b[:,1] <- no basis (unconstrained)
+  [linear r017 D]  13.9s  rhat_reg 1.009  div 0  (50/300, 13.2 min, ETA 66 min)
+standardize_covariates: standardized 2 covariate(s) in long_formula (age: centre 0.3648, scale 9.614, implied intercept correlation -0.04; sex: centre 0.4944, scale 0.5001, implied intercept correlation -0.70). Coefficients are returned on the ORIGINAL scale. Set control$standardize_covariates = FALSE to disable.
+sys:1: RuntimeWarning: orthogonalize_b: b[:,0] <- 3 direction(s) from X columns [0, 2, 3]; b[:,1] <- no basis (unconstrained)
+  [linear r017 D_rot]  19.3s  rhat_reg 1.000  div 0  (51/300, 13.5 min, ETA 66 min)
+standardize_covariates: standardized 2 covariate(s) in long_formula (age: centre -0.4753, scale 10.5, implied intercept correlation -0.05; sex: centre 0.5356, scale 0.4988, implied intercept correlation -0.73). Coefficients are returned on the ORIGINAL scale. Set control$standardize_covariates = FALSE to disable.
+  [linear r018 A]  13.9s  rhat_reg 1.007  div 0  (52/300, 13.8 min, ETA 66 min)
+standardize_covariates: standardized 2 covariate(s) in long_formula (age: centre -0.4753, scale 10.5, implied intercept correlation -0.05; sex: centre 0.5356, scale 0.4988, implied intercept correlation -0.73). Coefficients are returned on the ORIGINAL scale. Set control$standardize_covariates = FALSE to disable.
+sys:1: RuntimeWarning: orthogonalize_b: b[:,0] <- 3 direction(s) from X columns [0, 2, 3]; b[:,1] <- no basis (unconstrained)
+  [linear r018 D]  15.0s  rhat_reg 1.007  div 0  (53/300, 14.0 min, ETA 65 min)
+standardize_covariates: standardized 2 covariate(s) in long_formula (age: centre -0.4753, scale 10.5, implied intercept correlation -0.05; sex: centre 0.5356, scale 0.4988, implied intercept correlation -0.73). Coefficients are returned on the ORIGINAL scale. Set control$standardize_covariates = FALSE to disable.
+sys:1: RuntimeWarning: orthogonalize_b: b[:,0] <- 3 direction(s) from X columns [0, 2, 3]; b[:,1] <- no basis (unconstrained)
+  [linear r018 D_rot]  19.3s  rhat_reg 1.000  div 0  (54/300, 14.3 min, ETA 65 min)
+standardize_covariates: standardized 2 covariate(s) in long_formula (age: centre -1.867, scale 10.5, implied intercept correlation -0.18; sex: centre 0.4458, scale 0.4971, implied intercept correlation -0.67). Coefficients are returned on the ORIGINAL scale. Set control$standardize_covariates = FALSE to disable.
+  [linear r019 A]  13.9s  rhat_reg 1.002  div 0  (55/300, 14.6 min, ETA 65 min)
+standardize_covariates: standardized 2 covariate(s) in long_formula (age: centre -1.867, scale 10.5, implied intercept correlation -0.18; sex: centre 0.4458, scale 0.4971, implied intercept correlation -0.67). Coefficients are returned on the ORIGINAL scale. Set control$standardize_covariates = FALSE to disable.
+sys:1: RuntimeWarning: orthogonalize_b: b[:,0] <- 3 direction(s) from X columns [0, 2, 3]; b[:,1] <- no basis (unconstrained)
+  [linear r019 D]  14.3s  rhat_reg 1.000  div 0  (56/300, 14.8 min, ETA 65 min)
+standardize_covariates: standardized 2 covariate(s) in long_formula (age: centre -1.867, scale 10.5, implied intercept correlation -0.18; sex: centre 0.4458, scale 0.4971, implied intercept correlation -0.67). Coefficients are returned on the ORIGINAL scale. Set control$standardize_covariates = FALSE to disable.
+sys:1: RuntimeWarning: orthogonalize_b: b[:,0] <- 3 direction(s) from X columns [0, 2, 3]; b[:,1] <- no basis (unconstrained)
+  [linear r019 D_rot]  20.1s  rhat_reg 1.003  div 0  (57/300, 15.1 min, ETA 65 min)
+standardize_covariates: standardized 2 covariate(s) in long_formula (age: centre -0.5882, scale 10.93, implied intercept correlation -0.05; sex: centre 0.4979, scale 0.5001, implied intercept correlation -0.71). Coefficients are returned on the ORIGINAL scale. Set control$standardize_covariates = FALSE to disable.
+  [linear r020 A]  14.1s  rhat_reg 1.016  div 0  (58/300, 15.4 min, ETA 64 min)
+standardize_covariates: standardized 2 covariate(s) in long_formula (age: centre -0.5882, scale 10.93, implied intercept correlation -0.05; sex: centre 0.4979, scale 0.5001, implied intercept correlation -0.71). Coefficients are returned on the ORIGINAL scale. Set control$standardize_covariates = FALSE to disable.
+sys:1: RuntimeWarning: orthogonalize_b: b[:,0] <- 3 direction(s) from X columns [0, 2, 3]; b[:,1] <- no basis (unconstrained)
+  [linear r020 D]  14.0s  rhat_reg 1.013  div 0  (59/300, 15.6 min, ETA 64 min)
+standardize_covariates: standardized 2 covariate(s) in long_formula (age: centre -0.5882, scale 10.93, implied intercept correlation -0.05; sex: centre 0.4979, scale 0.5001, implied intercept correlation -0.71). Coefficients are returned on the ORIGINAL scale. Set control$standardize_covariates = FALSE to disable.
+sys:1: RuntimeWarning: orthogonalize_b: b[:,0] <- 3 direction(s) from X columns [0, 2, 3]; b[:,1] <- no basis (unconstrained)
+  [linear r020 D_rot]  19.1s  rhat_reg 1.001  div 0  (60/300, 15.9 min, ETA 64 min)
+standardize_covariates: standardized 2 covariate(s) in long_formula (age: centre -0.7917, scale 10.1, implied intercept correlation -0.08; sex: centre 0.5432, scale 0.4982, implied intercept correlation -0.74). Coefficients are returned on the ORIGINAL scale. Set control$standardize_covariates = FALSE to disable.
+  [linear r021 A]  14.0s  rhat_reg 1.008  div 0  (61/300, 16.2 min, ETA 63 min)
+standardize_covariates: standardized 2 covariate(s) in long_formula (age: centre -0.7917, scale 10.1, implied intercept correlation -0.08; sex: centre 0.5432, scale 0.4982, implied intercept correlation -0.74). Coefficients are returned on the ORIGINAL scale. Set control$standardize_covariates = FALSE to disable.
+sys:1: RuntimeWarning: orthogonalize_b: b[:,0] <- 3 direction(s) from X columns [0, 2, 3]; b[:,1] <- no basis (unconstrained)
+  [linear r021 D]  14.2s  rhat_reg 1.007  div 0  (62/300, 16.4 min, ETA 63 min)
+standardize_covariates: standardized 2 covariate(s) in long_formula (age: centre -0.7917, scale 10.1, implied intercept correlation -0.08; sex: centre 0.5432, scale 0.4982, implied intercept correlation -0.74). Coefficients are returned on the ORIGINAL scale. Set control$standardize_covariates = FALSE to disable.
+sys:1: RuntimeWarning: orthogonalize_b: b[:,0] <- 3 direction(s) from X columns [0, 2, 3]; b[:,1] <- no basis (unconstrained)
+  [linear r021 D_rot]  20.2s  rhat_reg 1.005  div 0  (63/300, 16.7 min, ETA 63 min)
+standardize_covariates: standardized 2 covariate(s) in long_formula (age: centre -0.1962, scale 10.08, implied intercept correlation -0.02; sex: centre 0.4756, scale 0.4995, implied intercept correlation -0.69). Coefficients are returned on the ORIGINAL scale. Set control$standardize_covariates = FALSE to disable.
+  [linear r022 A]  13.8s  rhat_reg 1.027  div 0  (64/300, 17.0 min, ETA 63 min)
+standardize_covariates: standardized 2 covariate(s) in long_formula (age: centre -0.1962, scale 10.08, implied intercept correlation -0.02; sex: centre 0.4756, scale 0.4995, implied intercept correlation -0.69). Coefficients are returned on the ORIGINAL scale. Set control$standardize_covariates = FALSE to disable.
+sys:1: RuntimeWarning: orthogonalize_b: b[:,0] <- 3 direction(s) from X columns [0, 2, 3]; b[:,1] <- no basis (unconstrained)
+  [linear r022 D]  14.2s  rhat_reg 1.021  div 0  (65/300, 17.2 min, ETA 62 min)
+standardize_covariates: standardized 2 covariate(s) in long_formula (age: centre -0.1962, scale 10.08, implied intercept correlation -0.02; sex: centre 0.4756, scale 0.4995, implied intercept correlation -0.69). Coefficients are returned on the ORIGINAL scale. Set control$standardize_covariates = FALSE to disable.
+sys:1: RuntimeWarning: orthogonalize_b: b[:,0] <- 3 direction(s) from X columns [0, 2, 3]; b[:,1] <- no basis (unconstrained)
+  [linear r022 D_rot]  21.1s  rhat_reg 1.006  div 0  (66/300, 17.6 min, ETA 62 min)
+standardize_covariates: standardized 2 covariate(s) in long_formula (age: centre -0.7377, scale 9.959, implied intercept correlation -0.07; sex: centre 0.5104, scale 0.5, implied intercept correlation -0.71). Coefficients are returned on the ORIGINAL scale. Set control$standardize_covariates = FALSE to disable.
+  [linear r023 A]  13.2s  rhat_reg 1.011  div 0  (67/300, 17.8 min, ETA 62 min)
+standardize_covariates: standardized 2 covariate(s) in long_formula (age: centre -0.7377, scale 9.959, implied intercept correlation -0.07; sex: centre 0.5104, scale 0.5, implied intercept correlation -0.71). Coefficients are returned on the ORIGINAL scale. Set control$standardize_covariates = FALSE to disable.
+sys:1: RuntimeWarning: orthogonalize_b: b[:,0] <- 3 direction(s) from X columns [0, 2, 3]; b[:,1] <- no basis (unconstrained)
+  [linear r023 D]  15.2s  rhat_reg 1.006  div 0  (68/300, 18.0 min, ETA 62 min)
+standardize_covariates: standardized 2 covariate(s) in long_formula (age: centre -0.7377, scale 9.959, implied intercept correlation -0.07; sex: centre 0.5104, scale 0.5, implied intercept correlation -0.71). Coefficients are returned on the ORIGINAL scale. Set control$standardize_covariates = FALSE to disable.
+sys:1: RuntimeWarning: orthogonalize_b: b[:,0] <- 3 direction(s) from X columns [0, 2, 3]; b[:,1] <- no basis (unconstrained)
+  [linear r023 D_rot]  19.9s  rhat_reg 1.004  div 0  (69/300, 18.4 min, ETA 62 min)
+standardize_covariates: standardized 2 covariate(s) in long_formula (age: centre -0.8279, scale 10.61, implied intercept correlation -0.08; sex: centre 0.5481, scale 0.4978, implied intercept correlation -0.74). Coefficients are returned on the ORIGINAL scale. Set control$standardize_covariates = FALSE to disable.
+  [linear r024 A]  14.1s  rhat_reg 1.013  div 0  (70/300, 18.6 min, ETA 61 min)
+standardize_covariates: standardized 2 covariate(s) in long_formula (age: centre -0.8279, scale 10.61, implied intercept correlation -0.08; sex: centre 0.5481, scale 0.4978, implied intercept correlation -0.74). Coefficients are returned on the ORIGINAL scale. Set control$standardize_covariates = FALSE to disable.
+sys:1: RuntimeWarning: orthogonalize_b: b[:,0] <- 3 direction(s) from X columns [0, 2, 3]; b[:,1] <- no basis (unconstrained)
+  [linear r024 D]  14.7s  rhat_reg 1.030  div 0  (71/300, 18.9 min, ETA 61 min)
+standardize_covariates: standardized 2 covariate(s) in long_formula (age: centre -0.8279, scale 10.61, implied intercept correlation -0.08; sex: centre 0.5481, scale 0.4978, implied intercept correlation -0.74). Coefficients are returned on the ORIGINAL scale. Set control$standardize_covariates = FALSE to disable.
+sys:1: RuntimeWarning: orthogonalize_b: b[:,0] <- 3 direction(s) from X columns [0, 2, 3]; b[:,1] <- no basis (unconstrained)
+  [linear r024 D_rot]  19.7s  rhat_reg 1.001  div 0  (72/300, 19.2 min, ETA 61 min)
+standardize_covariates: standardized 2 covariate(s) in long_formula (age: centre -1.277, scale 9.832, implied intercept correlation -0.13; sex: centre 0.4583, scale 0.4984, implied intercept correlation -0.68). Coefficients are returned on the ORIGINAL scale. Set control$standardize_covariates = FALSE to disable.
+  [linear r025 A]  14.0s  rhat_reg 1.014  div 0  (73/300, 19.4 min, ETA 60 min)
+standardize_covariates: standardized 2 covariate(s) in long_formula (age: centre -1.277, scale 9.832, implied intercept correlation -0.13; sex: centre 0.4583, scale 0.4984, implied intercept correlation -0.68). Coefficients are returned on the ORIGINAL scale. Set control$standardize_covariates = FALSE to disable.
+sys:1: RuntimeWarning: orthogonalize_b: b[:,0] <- 3 direction(s) from X columns [0, 2, 3]; b[:,1] <- no basis (unconstrained)
+  [linear r025 D]  14.5s  rhat_reg 1.003  div 0  (74/300, 19.7 min, ETA 60 min)
+standardize_covariates: standardized 2 covariate(s) in long_formula (age: centre -1.277, scale 9.832, implied intercept correlation -0.13; sex: centre 0.4583, scale 0.4984, implied intercept correlation -0.68). Coefficients are returned on the ORIGINAL scale. Set control$standardize_covariates = FALSE to disable.
+sys:1: RuntimeWarning: orthogonalize_b: b[:,0] <- 3 direction(s) from X columns [0, 2, 3]; b[:,1] <- no basis (unconstrained)
+  [linear r025 D_rot]  20.1s  rhat_reg 1.003  div 0  (75/300, 20.0 min, ETA 60 min)
+standardize_covariates: standardized 2 covariate(s) in long_formula (age: centre 0.1332, scale 9.548, implied intercept correlation -0.01; sex: centre 0.4898, scale 0.5, implied intercept correlation -0.70). Coefficients are returned on the ORIGINAL scale. Set control$standardize_covariates = FALSE to disable.
+  [linear r026 A]  13.5s  rhat_reg 1.016  div 0  (76/300, 20.2 min, ETA 60 min)
+standardize_covariates: standardized 2 covariate(s) in long_formula (age: centre 0.1332, scale 9.548, implied intercept correlation -0.01; sex: centre 0.4898, scale 0.5, implied intercept correlation -0.70). Coefficients are returned on the ORIGINAL scale. Set control$standardize_covariates = FALSE to disable.
+sys:1: RuntimeWarning: orthogonalize_b: b[:,0] <- 3 direction(s) from X columns [0, 2, 3]; b[:,1] <- no basis (unconstrained)
+  [linear r026 D]  11.4s  rhat_reg 1.002  div 0  (77/300, 20.4 min, ETA 59 min)
+standardize_covariates: standardized 2 covariate(s) in long_formula (age: centre 0.1332, scale 9.548, implied intercept correlation -0.01; sex: centre 0.4898, scale 0.5, implied intercept correlation -0.70). Coefficients are returned on the ORIGINAL scale. Set control$standardize_covariates = FALSE to disable.
+sys:1: RuntimeWarning: orthogonalize_b: b[:,0] <- 3 direction(s) from X columns [0, 2, 3]; b[:,1] <- no basis (unconstrained)
+  [linear r026 D_rot]  20.0s  rhat_reg 1.003  div 0  (78/300, 20.8 min, ETA 59 min)
+standardize_covariates: standardized 2 covariate(s) in long_formula (age: centre 0.2567, scale 9.71, implied intercept correlation -0.03; sex: centre 0.4813, scale 0.4997, implied intercept correlation -0.69). Coefficients are returned on the ORIGINAL scale. Set control$standardize_covariates = FALSE to disable.
+  [linear r027 A]  13.3s  rhat_reg 1.024  div 0  (79/300, 21.0 min, ETA 59 min)
+standardize_covariates: standardized 2 covariate(s) in long_formula (age: centre 0.2567, scale 9.71, implied intercept correlation -0.03; sex: centre 0.4813, scale 0.4997, implied intercept correlation -0.69). Coefficients are returned on the ORIGINAL scale. Set control$standardize_covariates = FALSE to disable.
+sys:1: RuntimeWarning: orthogonalize_b: b[:,0] <- 3 direction(s) from X columns [0, 2, 3]; b[:,1] <- no basis (unconstrained)
+  [linear r027 D]  14.6s  rhat_reg 1.020  div 0  (80/300, 21.2 min, ETA 58 min)
+standardize_covariates: standardized 2 covariate(s) in long_formula (age: centre 0.2567, scale 9.71, implied intercept correlation -0.03; sex: centre 0.4813, scale 0.4997, implied intercept correlation -0.69). Coefficients are returned on the ORIGINAL scale. Set control$standardize_covariates = FALSE to disable.
+sys:1: RuntimeWarning: orthogonalize_b: b[:,0] <- 3 direction(s) from X columns [0, 2, 3]; b[:,1] <- no basis (unconstrained)
+  [linear r027 D_rot]  21.3s  rhat_reg 1.002  div 0  (81/300, 21.6 min, ETA 58 min)
+standardize_covariates: standardized 2 covariate(s) in long_formula (age: centre 0.3149, scale 9.946, implied intercept correlation -0.03; sex: centre 0.4683, scale 0.4991, implied intercept correlation -0.68). Coefficients are returned on the ORIGINAL scale. Set control$standardize_covariates = FALSE to disable.
+  [linear r028 A]  12.9s  rhat_reg 1.012  div 0  (82/300, 21.8 min, ETA 58 min)
+standardize_covariates: standardized 2 covariate(s) in long_formula (age: centre 0.3149, scale 9.946, implied intercept correlation -0.03; sex: centre 0.4683, scale 0.4991, implied intercept correlation -0.68). Coefficients are returned on the ORIGINAL scale. Set control$standardize_covariates = FALSE to disable.
+sys:1: RuntimeWarning: orthogonalize_b: b[:,0] <- 3 direction(s) from X columns [0, 2, 3]; b[:,1] <- no basis (unconstrained)
+  [linear r028 D]  14.5s  rhat_reg 1.014  div 0  (83/300, 22.0 min, ETA 58 min)
+standardize_covariates: standardized 2 covariate(s) in long_formula (age: centre 0.3149, scale 9.946, implied intercept correlation -0.03; sex: centre 0.4683, scale 0.4991, implied intercept correlation -0.68). Coefficients are returned on the ORIGINAL scale. Set control$standardize_covariates = FALSE to disable.
+sys:1: RuntimeWarning: orthogonalize_b: b[:,0] <- 3 direction(s) from X columns [0, 2, 3]; b[:,1] <- no basis (unconstrained)
+  [linear r028 D_rot]  20.5s  rhat_reg 1.018  div 0  (84/300, 22.4 min, ETA 58 min)
+standardize_covariates: standardized 2 covariate(s) in long_formula (age: centre 0.5404, scale 10.08, implied intercept correlation -0.05; sex: centre 0.4518, scale 0.4978, implied intercept correlation -0.67). Coefficients are returned on the ORIGINAL scale. Set control$standardize_covariates = FALSE to disable.
+  [linear r029 A]  14.5s  rhat_reg 1.005  div 0  (85/300, 22.6 min, ETA 57 min)
+standardize_covariates: standardized 2 covariate(s) in long_formula (age: centre 0.5404, scale 10.08, implied intercept correlation -0.05; sex: centre 0.4518, scale 0.4978, implied intercept correlation -0.67). Coefficients are returned on the ORIGINAL scale. Set control$standardize_covariates = FALSE to disable.
+sys:1: RuntimeWarning: orthogonalize_b: b[:,0] <- 3 direction(s) from X columns [0, 2, 3]; b[:,1] <- no basis (unconstrained)
+  [linear r029 D]  13.0s  rhat_reg 1.004  div 0  (86/300, 22.9 min, ETA 57 min)
+standardize_covariates: standardized 2 covariate(s) in long_formula (age: centre 0.5404, scale 10.08, implied intercept correlation -0.05; sex: centre 0.4518, scale 0.4978, implied intercept correlation -0.67). Coefficients are returned on the ORIGINAL scale. Set control$standardize_covariates = FALSE to disable.
+sys:1: RuntimeWarning: orthogonalize_b: b[:,0] <- 3 direction(s) from X columns [0, 2, 3]; b[:,1] <- no basis (unconstrained)
+  [linear r029 D_rot]  21.1s  rhat_reg 1.001  div 0  (87/300, 23.2 min, ETA 57 min)
+standardize_covariates: standardized 2 covariate(s) in long_formula (age: centre -0.6723, scale 9.987, implied intercept correlation -0.07; sex: centre 0.4915, scale 0.5, implied intercept correlation -0.70). Coefficients are returned on the ORIGINAL scale. Set control$standardize_covariates = FALSE to disable.
+  [linear r030 A]  14.8s  rhat_reg 1.007  div 0  (88/300, 23.5 min, ETA 57 min)
+standardize_covariates: standardized 2 covariate(s) in long_formula (age: centre -0.6723, scale 9.987, implied intercept correlation -0.07; sex: centre 0.4915, scale 0.5, implied intercept correlation -0.70). Coefficients are returned on the ORIGINAL scale. Set control$standardize_covariates = FALSE to disable.
+sys:1: RuntimeWarning: orthogonalize_b: b[:,0] <- 3 direction(s) from X columns [0, 2, 3]; b[:,1] <- no basis (unconstrained)
+  [linear r030 D]  13.9s  rhat_reg 1.008  div 0  (89/300, 23.7 min, ETA 56 min)
+standardize_covariates: standardized 2 covariate(s) in long_formula (age: centre -0.6723, scale 9.987, implied intercept correlation -0.07; sex: centre 0.4915, scale 0.5, implied intercept correlation -0.70). Coefficients are returned on the ORIGINAL scale. Set control$standardize_covariates = FALSE to disable.
+sys:1: RuntimeWarning: orthogonalize_b: b[:,0] <- 3 direction(s) from X columns [0, 2, 3]; b[:,1] <- no basis (unconstrained)
+  [linear r030 D_rot]  21.8s  rhat_reg 1.005  div 0  (90/300, 24.1 min, ETA 56 min)
+standardize_covariates: standardized 2 covariate(s) in long_formula (age: centre -1.023, scale 10.26, implied intercept correlation -0.10; sex: centre 0.5314, scale 0.4991, implied intercept correlation -0.73). Coefficients are returned on the ORIGINAL scale. Set control$standardize_covariates = FALSE to disable.
+  [linear r031 A]  13.1s  rhat_reg 1.012  div 0  (91/300, 24.3 min, ETA 56 min)
+standardize_covariates: standardized 2 covariate(s) in long_formula (age: centre -1.023, scale 10.26, implied intercept correlation -0.10; sex: centre 0.5314, scale 0.4991, implied intercept correlation -0.73). Coefficients are returned on the ORIGINAL scale. Set control$standardize_covariates = FALSE to disable.
+sys:1: RuntimeWarning: orthogonalize_b: b[:,0] <- 3 direction(s) from X columns [0, 2, 3]; b[:,1] <- no basis (unconstrained)
+  [linear r031 D]  14.7s  rhat_reg 1.006  div 0  (92/300, 24.5 min, ETA 55 min)
+standardize_covariates: standardized 2 covariate(s) in long_formula (age: centre -1.023, scale 10.26, implied intercept correlation -0.10; sex: centre 0.5314, scale 0.4991, implied intercept correlation -0.73). Coefficients are returned on the ORIGINAL scale. Set control$standardize_covariates = FALSE to disable.
+sys:1: RuntimeWarning: orthogonalize_b: b[:,0] <- 3 direction(s) from X columns [0, 2, 3]; b[:,1] <- no basis (unconstrained)
+  [linear r031 D_rot]  20.9s  rhat_reg 1.023  div 0  (93/300, 24.9 min, ETA 55 min)
+standardize_covariates: standardized 2 covariate(s) in long_formula (age: centre 0.4759, scale 10.31, implied intercept correlation -0.05; sex: centre 0.52, scale 0.4997, implied intercept correlation -0.72). Coefficients are returned on the ORIGINAL scale. Set control$standardize_covariates = FALSE to disable.
+  [linear r032 A]  13.0s  rhat_reg 1.007  div 0  (94/300, 25.1 min, ETA 55 min)
+standardize_covariates: standardized 2 covariate(s) in long_formula (age: centre 0.4759, scale 10.31, implied intercept correlation -0.05; sex: centre 0.52, scale 0.4997, implied intercept correlation -0.72). Coefficients are returned on the ORIGINAL scale. Set control$standardize_covariates = FALSE to disable.
+sys:1: RuntimeWarning: orthogonalize_b: b[:,0] <- 3 direction(s) from X columns [0, 2, 3]; b[:,1] <- no basis (unconstrained)
+  [linear r032 D]  14.7s  rhat_reg 1.004  div 0  (95/300, 25.3 min, ETA 55 min)
+standardize_covariates: standardized 2 covariate(s) in long_formula (age: centre 0.4759, scale 10.31, implied intercept correlation -0.05; sex: centre 0.52, scale 0.4997, implied intercept correlation -0.72). Coefficients are returned on the ORIGINAL scale. Set control$standardize_covariates = FALSE to disable.
+sys:1: RuntimeWarning: orthogonalize_b: b[:,0] <- 3 direction(s) from X columns [0, 2, 3]; b[:,1] <- no basis (unconstrained)
+  [linear r032 D_rot]  20.0s  rhat_reg 1.007  div 0  (96/300, 25.7 min, ETA 55 min)
+standardize_covariates: standardized 2 covariate(s) in long_formula (age: centre -0.07318, scale 10.27, implied intercept correlation -0.01; sex: centre 0.5206, scale 0.4997, implied intercept correlation -0.72). Coefficients are returned on the ORIGINAL scale. Set control$standardize_covariates = FALSE to disable.
+  [linear r033 A]  14.4s  rhat_reg 1.041  div 0  (97/300, 25.9 min, ETA 54 min)
+standardize_covariates: standardized 2 covariate(s) in long_formula (age: centre -0.07318, scale 10.27, implied intercept correlation -0.01; sex: centre 0.5206, scale 0.4997, implied intercept correlation -0.72). Coefficients are returned on the ORIGINAL scale. Set control$standardize_covariates = FALSE to disable.
+sys:1: RuntimeWarning: orthogonalize_b: b[:,0] <- 3 direction(s) from X columns [0, 2, 3]; b[:,1] <- no basis (unconstrained)
+  [linear r033 D]  14.7s  rhat_reg 1.048  div 0  (98/300, 26.2 min, ETA 54 min)
+standardize_covariates: standardized 2 covariate(s) in long_formula (age: centre -0.07318, scale 10.27, implied intercept correlation -0.01; sex: centre 0.5206, scale 0.4997, implied intercept correlation -0.72). Coefficients are returned on the ORIGINAL scale. Set control$standardize_covariates = FALSE to disable.
+sys:1: RuntimeWarning: orthogonalize_b: b[:,0] <- 3 direction(s) from X columns [0, 2, 3]; b[:,1] <- no basis (unconstrained)
+  [linear r033 D_rot]  20.4s  rhat_reg 1.008  div 0  (99/300, 26.5 min, ETA 54 min)
+standardize_covariates: standardized 2 covariate(s) in long_formula (age: centre -0.9706, scale 9.93, implied intercept correlation -0.10; sex: centre 0.4325, scale 0.4955, implied intercept correlation -0.66). Coefficients are returned on the ORIGINAL scale. Set control$standardize_covariates = FALSE to disable.
+  [linear r034 A]  14.5s  rhat_reg 1.041  div 0  (100/300, 26.7 min, ETA 53 min)
+standardize_covariates: standardized 2 covariate(s) in long_formula (age: centre -0.9706, scale 9.93, implied intercept correlation -0.10; sex: centre 0.4325, scale 0.4955, implied intercept correlation -0.66). Coefficients are returned on the ORIGINAL scale. Set control$standardize_covariates = FALSE to disable.
+sys:1: RuntimeWarning: orthogonalize_b: b[:,0] <- 3 direction(s) from X columns [0, 2, 3]; b[:,1] <- no basis (unconstrained)
+  [linear r034 D]  14.6s  rhat_reg 1.012  div 0  (101/300, 27.0 min, ETA 53 min)
+standardize_covariates: standardized 2 covariate(s) in long_formula (age: centre -0.9706, scale 9.93, implied intercept correlation -0.10; sex: centre 0.4325, scale 0.4955, implied intercept correlation -0.66). Coefficients are returned on the ORIGINAL scale. Set control$standardize_covariates = FALSE to disable.
+sys:1: RuntimeWarning: orthogonalize_b: b[:,0] <- 3 direction(s) from X columns [0, 2, 3]; b[:,1] <- no basis (unconstrained)
+  [linear r034 D_rot]  19.9s  rhat_reg 1.017  div 0  (102/300, 27.3 min, ETA 53 min)
+standardize_covariates: standardized 2 covariate(s) in long_formula (age: centre -0.1917, scale 9.554, implied intercept correlation -0.02; sex: centre 0.5137, scale 0.4999, implied intercept correlation -0.72). Coefficients are returned on the ORIGINAL scale. Set control$standardize_covariates = FALSE to disable.
+  [linear r035 A]  14.4s  rhat_reg 1.010  div 0  (103/300, 27.6 min, ETA 53 min)
+standardize_covariates: standardized 2 covariate(s) in long_formula (age: centre -0.1917, scale 9.554, implied intercept correlation -0.02; sex: centre 0.5137, scale 0.4999, implied intercept correlation -0.72). Coefficients are returned on the ORIGINAL scale. Set control$standardize_covariates = FALSE to disable.
+sys:1: RuntimeWarning: orthogonalize_b: b[:,0] <- 3 direction(s) from X columns [0, 2, 3]; b[:,1] <- no basis (unconstrained)
+  [linear r035 D]  13.2s  rhat_reg 1.008  div 0  (104/300, 27.8 min, ETA 52 min)
+standardize_covariates: standardized 2 covariate(s) in long_formula (age: centre -0.1917, scale 9.554, implied intercept correlation -0.02; sex: centre 0.5137, scale 0.4999, implied intercept correlation -0.72). Coefficients are returned on the ORIGINAL scale. Set control$standardize_covariates = FALSE to disable.
+sys:1: RuntimeWarning: orthogonalize_b: b[:,0] <- 3 direction(s) from X columns [0, 2, 3]; b[:,1] <- no basis (unconstrained)
+  [linear r035 D_rot]  21.6s  rhat_reg 1.005  div 0  (105/300, 28.1 min, ETA 52 min)
+standardize_covariates: standardized 2 covariate(s) in long_formula (age: centre -0.1844, scale 9.846, implied intercept correlation -0.02; sex: centre 0.5085, scale 0.5, implied intercept correlation -0.71). Coefficients are returned on the ORIGINAL scale. Set control$standardize_covariates = FALSE to disable.
+  [linear r036 A]  13.0s  rhat_reg 1.008  div 0  (106/300, 28.4 min, ETA 52 min)
+standardize_covariates: standardized 2 covariate(s) in long_formula (age: centre -0.1844, scale 9.846, implied intercept correlation -0.02; sex: centre 0.5085, scale 0.5, implied intercept correlation -0.71). Coefficients are returned on the ORIGINAL scale. Set control$standardize_covariates = FALSE to disable.
+sys:1: RuntimeWarning: orthogonalize_b: b[:,0] <- 3 direction(s) from X columns [0, 2, 3]; b[:,1] <- no basis (unconstrained)
+  [linear r036 D]  15.1s  rhat_reg 1.005  div 0  (107/300, 28.6 min, ETA 52 min)
+standardize_covariates: standardized 2 covariate(s) in long_formula (age: centre -0.1844, scale 9.846, implied intercept correlation -0.02; sex: centre 0.5085, scale 0.5, implied intercept correlation -0.71). Coefficients are returned on the ORIGINAL scale. Set control$standardize_covariates = FALSE to disable.
+sys:1: RuntimeWarning: orthogonalize_b: b[:,0] <- 3 direction(s) from X columns [0, 2, 3]; b[:,1] <- no basis (unconstrained)
+  [linear r036 D_rot]  20.5s  rhat_reg 1.001  div 0  (108/300, 29.0 min, ETA 51 min)
+standardize_covariates: standardized 2 covariate(s) in long_formula (age: centre 0.3113, scale 10.21, implied intercept correlation -0.03; sex: centre 0.4915, scale 0.5, implied intercept correlation -0.70). Coefficients are returned on the ORIGINAL scale. Set control$standardize_covariates = FALSE to disable.
+  [linear r037 A]  14.6s  rhat_reg 1.008  div 0  (109/300, 29.2 min, ETA 51 min)
+standardize_covariates: standardized 2 covariate(s) in long_formula (age: centre 0.3113, scale 10.21, implied intercept correlation -0.03; sex: centre 0.4915, scale 0.5, implied intercept correlation -0.70). Coefficients are returned on the ORIGINAL scale. Set control$standardize_covariates = FALSE to disable.
+sys:1: RuntimeWarning: orthogonalize_b: b[:,0] <- 3 direction(s) from X columns [0, 2, 3]; b[:,1] <- no basis (unconstrained)
+  [linear r037 D]  13.5s  rhat_reg 1.004  div 0  (110/300, 29.4 min, ETA 51 min)
+standardize_covariates: standardized 2 covariate(s) in long_formula (age: centre 0.3113, scale 10.21, implied intercept correlation -0.03; sex: centre 0.4915, scale 0.5, implied intercept correlation -0.70). Coefficients are returned on the ORIGINAL scale. Set control$standardize_covariates = FALSE to disable.
+sys:1: RuntimeWarning: orthogonalize_b: b[:,0] <- 3 direction(s) from X columns [0, 2, 3]; b[:,1] <- no basis (unconstrained)
+  [linear r037 D_rot]  21.6s  rhat_reg 1.009  div 0  (111/300, 29.8 min, ETA 51 min)
+standardize_covariates: standardized 2 covariate(s) in long_formula (age: centre 0.05292, scale 9.747, implied intercept correlation -0.01; sex: centre 0.4339, scale 0.4957, implied intercept correlation -0.66). Coefficients are returned on the ORIGINAL scale. Set control$standardize_covariates = FALSE to disable.
+  [linear r038 A]  13.3s  rhat_reg 1.026  div 0  (112/300, 30.0 min, ETA 50 min)
+standardize_covariates: standardized 2 covariate(s) in long_formula (age: centre 0.05292, scale 9.747, implied intercept correlation -0.01; sex: centre 0.4339, scale 0.4957, implied intercept correlation -0.66). Coefficients are returned on the ORIGINAL scale. Set control$standardize_covariates = FALSE to disable.
+sys:1: RuntimeWarning: orthogonalize_b: b[:,0] <- 3 direction(s) from X columns [0, 2, 3]; b[:,1] <- no basis (unconstrained)
+  [linear r038 D]  15.1s  rhat_reg 1.019  div 0  (113/300, 30.3 min, ETA 50 min)
+standardize_covariates: standardized 2 covariate(s) in long_formula (age: centre 0.05292, scale 9.747, implied intercept correlation -0.01; sex: centre 0.4339, scale 0.4957, implied intercept correlation -0.66). Coefficients are returned on the ORIGINAL scale. Set control$standardize_covariates = FALSE to disable.
+sys:1: RuntimeWarning: orthogonalize_b: b[:,0] <- 3 direction(s) from X columns [0, 2, 3]; b[:,1] <- no basis (unconstrained)
+  [linear r038 D_rot]  21.1s  rhat_reg 1.001  div 0  (114/300, 30.6 min, ETA 50 min)
+standardize_covariates: standardized 2 covariate(s) in long_formula (age: centre 0.258, scale 10.38, implied intercept correlation -0.02; sex: centre 0.4896, scale 0.5, implied intercept correlation -0.70). Coefficients are returned on the ORIGINAL scale. Set control$standardize_covariates = FALSE to disable.
+  [linear r039 A]  14.9s  rhat_reg 1.013  div 0  (115/300, 30.9 min, ETA 50 min)
+standardize_covariates: standardized 2 covariate(s) in long_formula (age: centre 0.258, scale 10.38, implied intercept correlation -0.02; sex: centre 0.4896, scale 0.5, implied intercept correlation -0.70). Coefficients are returned on the ORIGINAL scale. Set control$standardize_covariates = FALSE to disable.
+sys:1: RuntimeWarning: orthogonalize_b: b[:,0] <- 3 direction(s) from X columns [0, 2, 3]; b[:,1] <- no basis (unconstrained)
+  [linear r039 D]  15.0s  rhat_reg 1.009  div 0  (116/300, 31.1 min, ETA 49 min)
+standardize_covariates: standardized 2 covariate(s) in long_formula (age: centre 0.258, scale 10.38, implied intercept correlation -0.02; sex: centre 0.4896, scale 0.5, implied intercept correlation -0.70). Coefficients are returned on the ORIGINAL scale. Set control$standardize_covariates = FALSE to disable.
+sys:1: RuntimeWarning: orthogonalize_b: b[:,0] <- 3 direction(s) from X columns [0, 2, 3]; b[:,1] <- no basis (unconstrained)
+  [linear r039 D_rot]  20.2s  rhat_reg 1.008  div 0  (117/300, 31.5 min, ETA 49 min)
+standardize_covariates: standardized 2 covariate(s) in long_formula (age: centre -0.2842, scale 10.07, implied intercept correlation -0.03; sex: centre 0.4768, scale 0.4996, implied intercept correlation -0.69). Coefficients are returned on the ORIGINAL scale. Set control$standardize_covariates = FALSE to disable.
+  [linear r040 A]  12.9s  rhat_reg 1.013  div 0  (118/300, 31.7 min, ETA 49 min)
+standardize_covariates: standardized 2 covariate(s) in long_formula (age: centre -0.2842, scale 10.07, implied intercept correlation -0.03; sex: centre 0.4768, scale 0.4996, implied intercept correlation -0.69). Coefficients are returned on the ORIGINAL scale. Set control$standardize_covariates = FALSE to disable.
+sys:1: RuntimeWarning: orthogonalize_b: b[:,0] <- 3 direction(s) from X columns [0, 2, 3]; b[:,1] <- no basis (unconstrained)
+  [linear r040 D]  14.9s  rhat_reg 1.019  div 0  (119/300, 31.9 min, ETA 49 min)
+standardize_covariates: standardized 2 covariate(s) in long_formula (age: centre -0.2842, scale 10.07, implied intercept correlation -0.03; sex: centre 0.4768, scale 0.4996, implied intercept correlation -0.69). Coefficients are returned on the ORIGINAL scale. Set control$standardize_covariates = FALSE to disable.
+sys:1: RuntimeWarning: orthogonalize_b: b[:,0] <- 3 direction(s) from X columns [0, 2, 3]; b[:,1] <- no basis (unconstrained)
+  [linear r040 D_rot]  19.8s  rhat_reg 1.006  div 0  (120/300, 32.3 min, ETA 48 min)
+standardize_covariates: standardized 2 covariate(s) in long_formula (age: centre -1.379, scale 9.953, implied intercept correlation -0.14; sex: centre 0.4928, scale 0.5, implied intercept correlation -0.70). Coefficients are returned on the ORIGINAL scale. Set control$standardize_covariates = FALSE to disable.
+  [linear r041 A]  14.9s  rhat_reg 1.009  div 0  (121/300, 32.5 min, ETA 48 min)
+standardize_covariates: standardized 2 covariate(s) in long_formula (age: centre -1.379, scale 9.953, implied intercept correlation -0.14; sex: centre 0.4928, scale 0.5, implied intercept correlation -0.70). Coefficients are returned on the ORIGINAL scale. Set control$standardize_covariates = FALSE to disable.
+sys:1: RuntimeWarning: orthogonalize_b: b[:,0] <- 3 direction(s) from X columns [0, 2, 3]; b[:,1] <- no basis (unconstrained)
+  [linear r041 D]  13.2s  rhat_reg 1.005  div 0  (122/300, 32.7 min, ETA 48 min)
+standardize_covariates: standardized 2 covariate(s) in long_formula (age: centre -1.379, scale 9.953, implied intercept correlation -0.14; sex: centre 0.4928, scale 0.5, implied intercept correlation -0.70). Coefficients are returned on the ORIGINAL scale. Set control$standardize_covariates = FALSE to disable.
+sys:1: RuntimeWarning: orthogonalize_b: b[:,0] <- 3 direction(s) from X columns [0, 2, 3]; b[:,1] <- no basis (unconstrained)
+  [linear r041 D_rot]  19.6s  rhat_reg 1.012  div 0  (123/300, 33.1 min, ETA 48 min)
+standardize_covariates: standardized 2 covariate(s) in long_formula (age: centre 0.1413, scale 9.417, implied intercept correlation -0.02; sex: centre 0.4664, scale 0.499, implied intercept correlation -0.68). Coefficients are returned on the ORIGINAL scale. Set control$standardize_covariates = FALSE to disable.
+  [linear r042 A]  14.8s  rhat_reg 1.018  div 0  (124/300, 33.3 min, ETA 47 min)
+standardize_covariates: standardized 2 covariate(s) in long_formula (age: centre 0.1413, scale 9.417, implied intercept correlation -0.02; sex: centre 0.4664, scale 0.499, implied intercept correlation -0.68). Coefficients are returned on the ORIGINAL scale. Set control$standardize_covariates = FALSE to disable.
+sys:1: RuntimeWarning: orthogonalize_b: b[:,0] <- 3 direction(s) from X columns [0, 2, 3]; b[:,1] <- no basis (unconstrained)
+  [linear r042 D]  15.3s  rhat_reg 1.005  div 0  (125/300, 33.6 min, ETA 47 min)
+standardize_covariates: standardized 2 covariate(s) in long_formula (age: centre 0.1413, scale 9.417, implied intercept correlation -0.02; sex: centre 0.4664, scale 0.499, implied intercept correlation -0.68). Coefficients are returned on the ORIGINAL scale. Set control$standardize_covariates = FALSE to disable.
+sys:1: RuntimeWarning: orthogonalize_b: b[:,0] <- 3 direction(s) from X columns [0, 2, 3]; b[:,1] <- no basis (unconstrained)
+  [linear r042 D_rot]  20.7s  rhat_reg 1.009  div 0  (126/300, 33.9 min, ETA 47 min)
+standardize_covariates: standardized 2 covariate(s) in long_formula (age: centre -0.03174, scale 9.43, implied intercept correlation -0.00; sex: centre 0.4696, scale 0.4992, implied intercept correlation -0.69). Coefficients are returned on the ORIGINAL scale. Set control$standardize_covariates = FALSE to disable.
+  [linear r043 A]  13.1s  rhat_reg 1.023  div 0  (127/300, 34.1 min, ETA 47 min)
+standardize_covariates: standardized 2 covariate(s) in long_formula (age: centre -0.03174, scale 9.43, implied intercept correlation -0.00; sex: centre 0.4696, scale 0.4992, implied intercept correlation -0.69). Coefficients are returned on the ORIGINAL scale. Set control$standardize_covariates = FALSE to disable.
+sys:1: RuntimeWarning: orthogonalize_b: b[:,0] <- 3 direction(s) from X columns [0, 2, 3]; b[:,1] <- no basis (unconstrained)
+  [linear r043 D]  15.3s  rhat_reg 1.013  div 0  (128/300, 34.4 min, ETA 46 min)
+standardize_covariates: standardized 2 covariate(s) in long_formula (age: centre -0.03174, scale 9.43, implied intercept correlation -0.00; sex: centre 0.4696, scale 0.4992, implied intercept correlation -0.69). Coefficients are returned on the ORIGINAL scale. Set control$standardize_covariates = FALSE to disable.
+sys:1: RuntimeWarning: orthogonalize_b: b[:,0] <- 3 direction(s) from X columns [0, 2, 3]; b[:,1] <- no basis (unconstrained)
+  [linear r043 D_rot]  20.6s  rhat_reg 1.003  div 0  (129/300, 34.7 min, ETA 46 min)
+standardize_covariates: standardized 2 covariate(s) in long_formula (age: centre 0.4837, scale 10.19, implied intercept correlation -0.05; sex: centre 0.5563, scale 0.4969, implied intercept correlation -0.75). Coefficients are returned on the ORIGINAL scale. Set control$standardize_covariates = FALSE to disable.
+  [linear r044 A]  14.9s  rhat_reg 1.011  div 0  (130/300, 35.0 min, ETA 46 min)
+standardize_covariates: standardized 2 covariate(s) in long_formula (age: centre 0.4837, scale 10.19, implied intercept correlation -0.05; sex: centre 0.5563, scale 0.4969, implied intercept correlation -0.75). Coefficients are returned on the ORIGINAL scale. Set control$standardize_covariates = FALSE to disable.
+sys:1: RuntimeWarning: orthogonalize_b: b[:,0] <- 3 direction(s) from X columns [0, 2, 3]; b[:,1] <- no basis (unconstrained)
+  [linear r044 D]  15.1s  rhat_reg 1.013  div 0  (131/300, 35.2 min, ETA 45 min)
+standardize_covariates: standardized 2 covariate(s) in long_formula (age: centre 0.4837, scale 10.19, implied intercept correlation -0.05; sex: centre 0.5563, scale 0.4969, implied intercept correlation -0.75). Coefficients are returned on the ORIGINAL scale. Set control$standardize_covariates = FALSE to disable.
+sys:1: RuntimeWarning: orthogonalize_b: b[:,0] <- 3 direction(s) from X columns [0, 2, 3]; b[:,1] <- no basis (unconstrained)
+  [linear r044 D_rot]  18.3s  rhat_reg 1.004  div 0  (132/300, 35.6 min, ETA 45 min)
+standardize_covariates: standardized 2 covariate(s) in long_formula (age: centre 0.4286, scale 10.65, implied intercept correlation -0.04; sex: centre 0.4733, scale 0.4994, implied intercept correlation -0.69). Coefficients are returned on the ORIGINAL scale. Set control$standardize_covariates = FALSE to disable.
+  [linear r045 A]  14.9s  rhat_reg 1.015  div 0  (133/300, 35.8 min, ETA 45 min)
+standardize_covariates: standardized 2 covariate(s) in long_formula (age: centre 0.4286, scale 10.65, implied intercept correlation -0.04; sex: centre 0.4733, scale 0.4994, implied intercept correlation -0.69). Coefficients are returned on the ORIGINAL scale. Set control$standardize_covariates = FALSE to disable.
+sys:1: RuntimeWarning: orthogonalize_b: b[:,0] <- 3 direction(s) from X columns [0, 2, 3]; b[:,1] <- no basis (unconstrained)
+  [linear r045 D]  15.0s  rhat_reg 1.015  div 0  (134/300, 36.1 min, ETA 45 min)
+standardize_covariates: standardized 2 covariate(s) in long_formula (age: centre 0.4286, scale 10.65, implied intercept correlation -0.04; sex: centre 0.4733, scale 0.4994, implied intercept correlation -0.69). Coefficients are returned on the ORIGINAL scale. Set control$standardize_covariates = FALSE to disable.
+sys:1: RuntimeWarning: orthogonalize_b: b[:,0] <- 3 direction(s) from X columns [0, 2, 3]; b[:,1] <- no basis (unconstrained)
+  [linear r045 D_rot]  20.0s  rhat_reg 1.004  div 0  (135/300, 36.4 min, ETA 44 min)
+standardize_covariates: standardized 2 covariate(s) in long_formula (age: centre -0.9188, scale 9.68, implied intercept correlation -0.09; sex: centre 0.5017, scale 0.5001, implied intercept correlation -0.71). Coefficients are returned on the ORIGINAL scale. Set control$standardize_covariates = FALSE to disable.
+  [linear r046 A]  13.2s  rhat_reg 1.015  div 0  (136/300, 36.6 min, ETA 44 min)
+standardize_covariates: standardized 2 covariate(s) in long_formula (age: centre -0.9188, scale 9.68, implied intercept correlation -0.09; sex: centre 0.5017, scale 0.5001, implied intercept correlation -0.71). Coefficients are returned on the ORIGINAL scale. Set control$standardize_covariates = FALSE to disable.
+sys:1: RuntimeWarning: orthogonalize_b: b[:,0] <- 3 direction(s) from X columns [0, 2, 3]; b[:,1] <- no basis (unconstrained)
+  [linear r046 D]  15.3s  rhat_reg 1.017  div 0  (137/300, 36.9 min, ETA 44 min)
+standardize_covariates: standardized 2 covariate(s) in long_formula (age: centre -0.9188, scale 9.68, implied intercept correlation -0.09; sex: centre 0.5017, scale 0.5001, implied intercept correlation -0.71). Coefficients are returned on the ORIGINAL scale. Set control$standardize_covariates = FALSE to disable.
+sys:1: RuntimeWarning: orthogonalize_b: b[:,0] <- 3 direction(s) from X columns [0, 2, 3]; b[:,1] <- no basis (unconstrained)
+  [linear r046 D_rot]  20.5s  rhat_reg 1.021  div 0  (138/300, 37.2 min, ETA 44 min)
+standardize_covariates: standardized 2 covariate(s) in long_formula (age: centre -0.7687, scale 10.71, implied intercept correlation -0.07; sex: centre 0.4647, scale 0.4988, implied intercept correlation -0.68). Coefficients are returned on the ORIGINAL scale. Set control$standardize_covariates = FALSE to disable.
+  [linear r047 A]  15.1s  rhat_reg 1.029  div 0  (139/300, 37.5 min, ETA 43 min)
+standardize_covariates: standardized 2 covariate(s) in long_formula (age: centre -0.7687, scale 10.71, implied intercept correlation -0.07; sex: centre 0.4647, scale 0.4988, implied intercept correlation -0.68). Coefficients are returned on the ORIGINAL scale. Set control$standardize_covariates = FALSE to disable.
+sys:1: RuntimeWarning: orthogonalize_b: b[:,0] <- 3 direction(s) from X columns [0, 2, 3]; b[:,1] <- no basis (unconstrained)
+  [linear r047 D]  13.3s  rhat_reg 1.021  div 0  (140/300, 37.7 min, ETA 43 min)
+standardize_covariates: standardized 2 covariate(s) in long_formula (age: centre -0.7687, scale 10.71, implied intercept correlation -0.07; sex: centre 0.4647, scale 0.4988, implied intercept correlation -0.68). Coefficients are returned on the ORIGINAL scale. Set control$standardize_covariates = FALSE to disable.
+sys:1: RuntimeWarning: orthogonalize_b: b[:,0] <- 3 direction(s) from X columns [0, 2, 3]; b[:,1] <- no basis (unconstrained)
+  [linear r047 D_rot]  20.6s  rhat_reg 1.009  div 0  (141/300, 38.0 min, ETA 43 min)
+standardize_covariates: standardized 2 covariate(s) in long_formula (age: centre 0.5154, scale 9.45, implied intercept correlation -0.05; sex: centre 0.4824, scale 0.4998, implied intercept correlation -0.69). Coefficients are returned on the ORIGINAL scale. Set control$standardize_covariates = FALSE to disable.
+  [linear r048 A]  15.2s  rhat_reg 1.011  div 0  (142/300, 38.3 min, ETA 43 min)
+standardize_covariates: standardized 2 covariate(s) in long_formula (age: centre 0.5154, scale 9.45, implied intercept correlation -0.05; sex: centre 0.4824, scale 0.4998, implied intercept correlation -0.69). Coefficients are returned on the ORIGINAL scale. Set control$standardize_covariates = FALSE to disable.
+sys:1: RuntimeWarning: orthogonalize_b: b[:,0] <- 3 direction(s) from X columns [0, 2, 3]; b[:,1] <- no basis (unconstrained)
+  [linear r048 D]  15.6s  rhat_reg 1.005  div 0  (143/300, 38.6 min, ETA 42 min)
+standardize_covariates: standardized 2 covariate(s) in long_formula (age: centre 0.5154, scale 9.45, implied intercept correlation -0.05; sex: centre 0.4824, scale 0.4998, implied intercept correlation -0.69). Coefficients are returned on the ORIGINAL scale. Set control$standardize_covariates = FALSE to disable.
+sys:1: RuntimeWarning: orthogonalize_b: b[:,0] <- 3 direction(s) from X columns [0, 2, 3]; b[:,1] <- no basis (unconstrained)
+  [linear r048 D_rot]  20.7s  rhat_reg 1.023  div 0  (144/300, 38.9 min, ETA 42 min)
+standardize_covariates: standardized 2 covariate(s) in long_formula (age: centre -1.269, scale 9.307, implied intercept correlation -0.14; sex: centre 0.5253, scale 0.4995, implied intercept correlation -0.72). Coefficients are returned on the ORIGINAL scale. Set control$standardize_covariates = FALSE to disable.
+  [linear r049 A]  13.3s  rhat_reg 1.010  div 0  (145/300, 39.1 min, ETA 42 min)
+standardize_covariates: standardized 2 covariate(s) in long_formula (age: centre -1.269, scale 9.307, implied intercept correlation -0.14; sex: centre 0.5253, scale 0.4995, implied intercept correlation -0.72). Coefficients are returned on the ORIGINAL scale. Set control$standardize_covariates = FALSE to disable.
+sys:1: RuntimeWarning: orthogonalize_b: b[:,0] <- 3 direction(s) from X columns [0, 2, 3]; b[:,1] <- no basis (unconstrained)
+  [linear r049 D]  15.7s  rhat_reg 1.000  div 0  (146/300, 39.4 min, ETA 42 min)
+standardize_covariates: standardized 2 covariate(s) in long_formula (age: centre -1.269, scale 9.307, implied intercept correlation -0.14; sex: centre 0.5253, scale 0.4995, implied intercept correlation -0.72). Coefficients are returned on the ORIGINAL scale. Set control$standardize_covariates = FALSE to disable.
+sys:1: RuntimeWarning: orthogonalize_b: b[:,0] <- 3 direction(s) from X columns [0, 2, 3]; b[:,1] <- no basis (unconstrained)
+  [linear r049 D_rot]  20.9s  rhat_reg 1.002  div 0  (147/300, 39.7 min, ETA 41 min)
+standardize_covariates: standardized 2 covariate(s) in long_formula (age: centre 0.8518, scale 10.36, implied intercept correlation -0.08; sex: centre 0.5028, scale 0.5001, implied intercept correlation -0.71). Coefficients are returned on the ORIGINAL scale. Set control$standardize_covariates = FALSE to disable.
+  [linear r050 A]  13.2s  rhat_reg 1.016  div 0  (148/300, 40.0 min, ETA 41 min)
+standardize_covariates: standardized 2 covariate(s) in long_formula (age: centre 0.8518, scale 10.36, implied intercept correlation -0.08; sex: centre 0.5028, scale 0.5001, implied intercept correlation -0.71). Coefficients are returned on the ORIGINAL scale. Set control$standardize_covariates = FALSE to disable.
+sys:1: RuntimeWarning: orthogonalize_b: b[:,0] <- 3 direction(s) from X columns [0, 2, 3]; b[:,1] <- no basis (unconstrained)
+  [linear r050 D]  15.3s  rhat_reg 1.009  div 0  (149/300, 40.2 min, ETA 41 min)
+standardize_covariates: standardized 2 covariate(s) in long_formula (age: centre 0.8518, scale 10.36, implied intercept correlation -0.08; sex: centre 0.5028, scale 0.5001, implied intercept correlation -0.71). Coefficients are returned on the ORIGINAL scale. Set control$standardize_covariates = FALSE to disable.
+sys:1: RuntimeWarning: orthogonalize_b: b[:,0] <- 3 direction(s) from X columns [0, 2, 3]; b[:,1] <- no basis (unconstrained)
+  [linear r050 D_rot]  20.5s  rhat_reg 1.011  div 0  (150/300, 40.6 min, ETA 41 min)
+standardize_covariates: standardized 2 covariate(s) in long_formula (age: centre -0.1159, scale 10.71, implied intercept correlation -0.01; sex: centre 0.5053, scale 0.5001, implied intercept correlation -0.71). Coefficients are returned on the ORIGINAL scale. Set control$standardize_covariates = FALSE to disable.
+  [linear r051 A]  13.2s  rhat_reg 1.006  div 0  (151/300, 40.8 min, ETA 40 min)
+standardize_covariates: standardized 2 covariate(s) in long_formula (age: centre -0.1159, scale 10.71, implied intercept correlation -0.01; sex: centre 0.5053, scale 0.5001, implied intercept correlation -0.71). Coefficients are returned on the ORIGINAL scale. Set control$standardize_covariates = FALSE to disable.
+sys:1: RuntimeWarning: orthogonalize_b: b[:,0] <- 3 direction(s) from X columns [0, 2, 3]; b[:,1] <- no basis (unconstrained)
+  [linear r051 D]  15.2s  rhat_reg 1.005  div 0  (152/300, 41.0 min, ETA 40 min)
+standardize_covariates: standardized 2 covariate(s) in long_formula (age: centre -0.1159, scale 10.71, implied intercept correlation -0.01; sex: centre 0.5053, scale 0.5001, implied intercept correlation -0.71). Coefficients are returned on the ORIGINAL scale. Set control$standardize_covariates = FALSE to disable.
+sys:1: RuntimeWarning: orthogonalize_b: b[:,0] <- 3 direction(s) from X columns [0, 2, 3]; b[:,1] <- no basis (unconstrained)
+  [linear r051 D_rot]  20.6s  rhat_reg 1.000  div 0  (153/300, 41.4 min, ETA 40 min)
+standardize_covariates: standardized 2 covariate(s) in long_formula (age: centre 1.573, scale 9.571, implied intercept correlation -0.16; sex: centre 0.5213, scale 0.4996, implied intercept correlation -0.72). Coefficients are returned on the ORIGINAL scale. Set control$standardize_covariates = FALSE to disable.
+  [linear r052 A]  15.2s  rhat_reg 1.012  div 0  (154/300, 41.6 min, ETA 39 min)
+standardize_covariates: standardized 2 covariate(s) in long_formula (age: centre 1.573, scale 9.571, implied intercept correlation -0.16; sex: centre 0.5213, scale 0.4996, implied intercept correlation -0.72). Coefficients are returned on the ORIGINAL scale. Set control$standardize_covariates = FALSE to disable.
+sys:1: RuntimeWarning: orthogonalize_b: b[:,0] <- 3 direction(s) from X columns [0, 2, 3]; b[:,1] <- no basis (unconstrained)
+  [linear r052 D]  13.3s  rhat_reg 1.012  div 0  (155/300, 41.9 min, ETA 39 min)
+standardize_covariates: standardized 2 covariate(s) in long_formula (age: centre 1.573, scale 9.571, implied intercept correlation -0.16; sex: centre 0.5213, scale 0.4996, implied intercept correlation -0.72). Coefficients are returned on the ORIGINAL scale. Set control$standardize_covariates = FALSE to disable.
+sys:1: RuntimeWarning: orthogonalize_b: b[:,0] <- 3 direction(s) from X columns [0, 2, 3]; b[:,1] <- no basis (unconstrained)
+  [linear r052 D_rot]  20.7s  rhat_reg 1.006  div 0  (156/300, 42.2 min, ETA 39 min)
+standardize_covariates: standardized 2 covariate(s) in long_formula (age: centre -0.5159, scale 9.715, implied intercept correlation -0.05; sex: centre 0.5154, scale 0.4999, implied intercept correlation -0.72). Coefficients are returned on the ORIGINAL scale. Set control$standardize_covariates = FALSE to disable.
+  [linear r053 A]  13.1s  rhat_reg 1.016  div 0  (157/300, 42.4 min, ETA 39 min)
+standardize_covariates: standardized 2 covariate(s) in long_formula (age: centre -0.5159, scale 9.715, implied intercept correlation -0.05; sex: centre 0.5154, scale 0.4999, implied intercept correlation -0.72). Coefficients are returned on the ORIGINAL scale. Set control$standardize_covariates = FALSE to disable.
+sys:1: RuntimeWarning: orthogonalize_b: b[:,0] <- 3 direction(s) from X columns [0, 2, 3]; b[:,1] <- no basis (unconstrained)
+  [linear r053 D]  15.5s  rhat_reg 1.007  div 0  (158/300, 42.7 min, ETA 38 min)
+standardize_covariates: standardized 2 covariate(s) in long_formula (age: centre -0.5159, scale 9.715, implied intercept correlation -0.05; sex: centre 0.5154, scale 0.4999, implied intercept correlation -0.72). Coefficients are returned on the ORIGINAL scale. Set control$standardize_covariates = FALSE to disable.
+sys:1: RuntimeWarning: orthogonalize_b: b[:,0] <- 3 direction(s) from X columns [0, 2, 3]; b[:,1] <- no basis (unconstrained)
+  [linear r053 D_rot]  20.6s  rhat_reg 1.023  div 0  (159/300, 43.0 min, ETA 38 min)
+standardize_covariates: standardized 2 covariate(s) in long_formula (age: centre -0.3373, scale 10.2, implied intercept correlation -0.03; sex: centre 0.5381, scale 0.4986, implied intercept correlation -0.73). Coefficients are returned on the ORIGINAL scale. Set control$standardize_covariates = FALSE to disable.
+  [linear r054 A]  15.2s  rhat_reg 1.012  div 0  (160/300, 43.3 min, ETA 38 min)
+standardize_covariates: standardized 2 covariate(s) in long_formula (age: centre -0.3373, scale 10.2, implied intercept correlation -0.03; sex: centre 0.5381, scale 0.4986, implied intercept correlation -0.73). Coefficients are returned on the ORIGINAL scale. Set control$standardize_covariates = FALSE to disable.
+sys:1: RuntimeWarning: orthogonalize_b: b[:,0] <- 3 direction(s) from X columns [0, 2, 3]; b[:,1] <- no basis (unconstrained)
+  [linear r054 D]  13.2s  rhat_reg 1.005  div 0  (161/300, 43.5 min, ETA 38 min)
+standardize_covariates: standardized 2 covariate(s) in long_formula (age: centre -0.3373, scale 10.2, implied intercept correlation -0.03; sex: centre 0.5381, scale 0.4986, implied intercept correlation -0.73). Coefficients are returned on the ORIGINAL scale. Set control$standardize_covariates = FALSE to disable.
+sys:1: RuntimeWarning: orthogonalize_b: b[:,0] <- 3 direction(s) from X columns [0, 2, 3]; b[:,1] <- no basis (unconstrained)
+  [linear r054 D_rot]  20.6s  rhat_reg 1.019  div 0  (162/300, 43.9 min, ETA 37 min)
+standardize_covariates: standardized 2 covariate(s) in long_formula (age: centre 0.1828, scale 10.27, implied intercept correlation -0.02; sex: centre 0.5107, scale 0.5, implied intercept correlation -0.71). Coefficients are returned on the ORIGINAL scale. Set control$standardize_covariates = FALSE to disable.
+  [linear r055 A]  15.2s  rhat_reg 1.010  div 0  (163/300, 44.1 min, ETA 37 min)
+standardize_covariates: standardized 2 covariate(s) in long_formula (age: centre 0.1828, scale 10.27, implied intercept correlation -0.02; sex: centre 0.5107, scale 0.5, implied intercept correlation -0.71). Coefficients are returned on the ORIGINAL scale. Set control$standardize_covariates = FALSE to disable.
+sys:1: RuntimeWarning: orthogonalize_b: b[:,0] <- 3 direction(s) from X columns [0, 2, 3]; b[:,1] <- no basis (unconstrained)
+  [linear r055 D]  13.1s  rhat_reg 1.006  div 0  (164/300, 44.3 min, ETA 37 min)
+standardize_covariates: standardized 2 covariate(s) in long_formula (age: centre 0.1828, scale 10.27, implied intercept correlation -0.02; sex: centre 0.5107, scale 0.5, implied intercept correlation -0.71). Coefficients are returned on the ORIGINAL scale. Set control$standardize_covariates = FALSE to disable.
+sys:1: RuntimeWarning: orthogonalize_b: b[:,0] <- 3 direction(s) from X columns [0, 2, 3]; b[:,1] <- no basis (unconstrained)
+  [linear r055 D_rot]  20.6s  rhat_reg 1.012  div 0  (165/300, 44.7 min, ETA 37 min)
+standardize_covariates: standardized 2 covariate(s) in long_formula (age: centre -1.135, scale 10.11, implied intercept correlation -0.11; sex: centre 0.5356, scale 0.4988, implied intercept correlation -0.73). Coefficients are returned on the ORIGINAL scale. Set control$standardize_covariates = FALSE to disable.
+  [linear r056 A]  13.2s  rhat_reg 1.019  div 0  (166/300, 44.9 min, ETA 36 min)
+standardize_covariates: standardized 2 covariate(s) in long_formula (age: centre -1.135, scale 10.11, implied intercept correlation -0.11; sex: centre 0.5356, scale 0.4988, implied intercept correlation -0.73). Coefficients are returned on the ORIGINAL scale. Set control$standardize_covariates = FALSE to disable.
+sys:1: RuntimeWarning: orthogonalize_b: b[:,0] <- 3 direction(s) from X columns [0, 2, 3]; b[:,1] <- no basis (unconstrained)
+  [linear r056 D]  16.1s  rhat_reg 1.015  div 0  (167/300, 45.2 min, ETA 36 min)
+standardize_covariates: standardized 2 covariate(s) in long_formula (age: centre -1.135, scale 10.11, implied intercept correlation -0.11; sex: centre 0.5356, scale 0.4988, implied intercept correlation -0.73). Coefficients are returned on the ORIGINAL scale. Set control$standardize_covariates = FALSE to disable.
+sys:1: RuntimeWarning: orthogonalize_b: b[:,0] <- 3 direction(s) from X columns [0, 2, 3]; b[:,1] <- no basis (unconstrained)
+  [linear r056 D_rot]  21.0s  rhat_reg 1.006  div 0  (168/300, 45.5 min, ETA 36 min)
+standardize_covariates: standardized 2 covariate(s) in long_formula (age: centre -0.05622, scale 9.445, implied intercept correlation -0.01; sex: centre 0.5114, scale 0.5, implied intercept correlation -0.72). Coefficients are returned on the ORIGINAL scale. Set control$standardize_covariates = FALSE to disable.
+  [linear r057 A]  13.2s  rhat_reg 1.005  div 0  (169/300, 45.7 min, ETA 35 min)
+standardize_covariates: standardized 2 covariate(s) in long_formula (age: centre -0.05622, scale 9.445, implied intercept correlation -0.01; sex: centre 0.5114, scale 0.5, implied intercept correlation -0.72). Coefficients are returned on the ORIGINAL scale. Set control$standardize_covariates = FALSE to disable.
+sys:1: RuntimeWarning: orthogonalize_b: b[:,0] <- 3 direction(s) from X columns [0, 2, 3]; b[:,1] <- no basis (unconstrained)
+  [linear r057 D]  15.9s  rhat_reg 1.001  div 0  (170/300, 46.0 min, ETA 35 min)
+standardize_covariates: standardized 2 covariate(s) in long_formula (age: centre -0.05622, scale 9.445, implied intercept correlation -0.01; sex: centre 0.5114, scale 0.5, implied intercept correlation -0.72). Coefficients are returned on the ORIGINAL scale. Set control$standardize_covariates = FALSE to disable.
+sys:1: RuntimeWarning: orthogonalize_b: b[:,0] <- 3 direction(s) from X columns [0, 2, 3]; b[:,1] <- no basis (unconstrained)
+  [linear r057 D_rot]  21.3s  rhat_reg 1.004  div 0  (171/300, 46.4 min, ETA 35 min)
+standardize_covariates: standardized 2 covariate(s) in long_formula (age: centre -0.9542, scale 9.846, implied intercept correlation -0.10; sex: centre 0.5011, scale 0.5001, implied intercept correlation -0.71). Coefficients are returned on the ORIGINAL scale. Set control$standardize_covariates = FALSE to disable.
+  [linear r058 A]  13.0s  rhat_reg 1.011  div 0  (172/300, 46.6 min, ETA 35 min)
+standardize_covariates: standardized 2 covariate(s) in long_formula (age: centre -0.9542, scale 9.846, implied intercept correlation -0.10; sex: centre 0.5011, scale 0.5001, implied intercept correlation -0.71). Coefficients are returned on the ORIGINAL scale. Set control$standardize_covariates = FALSE to disable.
+sys:1: RuntimeWarning: orthogonalize_b: b[:,0] <- 3 direction(s) from X columns [0, 2, 3]; b[:,1] <- no basis (unconstrained)
+  [linear r058 D]  15.7s  rhat_reg 1.012  div 0  (173/300, 46.8 min, ETA 34 min)
+standardize_covariates: standardized 2 covariate(s) in long_formula (age: centre -0.9542, scale 9.846, implied intercept correlation -0.10; sex: centre 0.5011, scale 0.5001, implied intercept correlation -0.71). Coefficients are returned on the ORIGINAL scale. Set control$standardize_covariates = FALSE to disable.
+sys:1: RuntimeWarning: orthogonalize_b: b[:,0] <- 3 direction(s) from X columns [0, 2, 3]; b[:,1] <- no basis (unconstrained)
+  [linear r058 D_rot]  20.3s  rhat_reg 1.006  div 0  (174/300, 47.2 min, ETA 34 min)
+standardize_covariates: standardized 2 covariate(s) in long_formula (age: centre -0.4622, scale 9.893, implied intercept correlation -0.05; sex: centre 0.5115, scale 0.5, implied intercept correlation -0.72). Coefficients are returned on the ORIGINAL scale. Set control$standardize_covariates = FALSE to disable.
+  [linear r059 A]  13.0s  rhat_reg 1.003  div 0  (175/300, 47.4 min, ETA 34 min)
+standardize_covariates: standardized 2 covariate(s) in long_formula (age: centre -0.4622, scale 9.893, implied intercept correlation -0.05; sex: centre 0.5115, scale 0.5, implied intercept correlation -0.72). Coefficients are returned on the ORIGINAL scale. Set control$standardize_covariates = FALSE to disable.
+sys:1: RuntimeWarning: orthogonalize_b: b[:,0] <- 3 direction(s) from X columns [0, 2, 3]; b[:,1] <- no basis (unconstrained)
+  [linear r059 D]  16.0s  rhat_reg 1.000  div 0  (176/300, 47.7 min, ETA 34 min)
+standardize_covariates: standardized 2 covariate(s) in long_formula (age: centre -0.4622, scale 9.893, implied intercept correlation -0.05; sex: centre 0.5115, scale 0.5, implied intercept correlation -0.72). Coefficients are returned on the ORIGINAL scale. Set control$standardize_covariates = FALSE to disable.
+sys:1: RuntimeWarning: orthogonalize_b: b[:,0] <- 3 direction(s) from X columns [0, 2, 3]; b[:,1] <- no basis (unconstrained)
+  [linear r059 D_rot]  20.6s  rhat_reg 1.001  div 0  (177/300, 48.0 min, ETA 33 min)
+standardize_covariates: standardized 2 covariate(s) in long_formula (age: centre -0.4672, scale 10.41, implied intercept correlation -0.04; sex: centre 0.523, scale 0.4996, implied intercept correlation -0.72). Coefficients are returned on the ORIGINAL scale. Set control$standardize_covariates = FALSE to disable.
+  [linear r060 A]  13.2s  rhat_reg 1.011  div 0  (178/300, 48.2 min, ETA 33 min)
+standardize_covariates: standardized 2 covariate(s) in long_formula (age: centre -0.4672, scale 10.41, implied intercept correlation -0.04; sex: centre 0.523, scale 0.4996, implied intercept correlation -0.72). Coefficients are returned on the ORIGINAL scale. Set control$standardize_covariates = FALSE to disable.
+sys:1: RuntimeWarning: orthogonalize_b: b[:,0] <- 3 direction(s) from X columns [0, 2, 3]; b[:,1] <- no basis (unconstrained)
+  [linear r060 D]  16.3s  rhat_reg 1.002  div 0  (179/300, 48.5 min, ETA 33 min)
+standardize_covariates: standardized 2 covariate(s) in long_formula (age: centre -0.4672, scale 10.41, implied intercept correlation -0.04; sex: centre 0.523, scale 0.4996, implied intercept correlation -0.72). Coefficients are returned on the ORIGINAL scale. Set control$standardize_covariates = FALSE to disable.
+sys:1: RuntimeWarning: orthogonalize_b: b[:,0] <- 3 direction(s) from X columns [0, 2, 3]; b[:,1] <- no basis (unconstrained)
+  [linear r060 D_rot]  18.6s  rhat_reg 1.000  div 0  (180/300, 48.8 min, ETA 33 min)
+standardize_covariates: standardized 2 covariate(s) in long_formula (age: centre 0.3741, scale 9.904, implied intercept correlation -0.04; sex: centre 0.5098, scale 0.5, implied intercept correlation -0.71). Coefficients are returned on the ORIGINAL scale. Set control$standardize_covariates = FALSE to disable.
+  [linear r061 A]  15.7s  rhat_reg 1.007  div 0  (181/300, 49.1 min, ETA 32 min)
+standardize_covariates: standardized 2 covariate(s) in long_formula (age: centre 0.3741, scale 9.904, implied intercept correlation -0.04; sex: centre 0.5098, scale 0.5, implied intercept correlation -0.71). Coefficients are returned on the ORIGINAL scale. Set control$standardize_covariates = FALSE to disable.
+sys:1: RuntimeWarning: orthogonalize_b: b[:,0] <- 3 direction(s) from X columns [0, 2, 3]; b[:,1] <- no basis (unconstrained)
+  [linear r061 D]  16.1s  rhat_reg 1.002  div 0  (182/300, 49.4 min, ETA 32 min)
+standardize_covariates: standardized 2 covariate(s) in long_formula (age: centre 0.3741, scale 9.904, implied intercept correlation -0.04; sex: centre 0.5098, scale 0.5, implied intercept correlation -0.71). Coefficients are returned on the ORIGINAL scale. Set control$standardize_covariates = FALSE to disable.
+sys:1: RuntimeWarning: orthogonalize_b: b[:,0] <- 3 direction(s) from X columns [0, 2, 3]; b[:,1] <- no basis (unconstrained)
+  [linear r061 D_rot]  17.8s  rhat_reg 1.000  div 0  (183/300, 49.7 min, ETA 32 min)
+standardize_covariates: standardized 2 covariate(s) in long_formula (age: centre -0.3164, scale 10.4, implied intercept correlation -0.03; sex: centre 0.4915, scale 0.5, implied intercept correlation -0.70). Coefficients are returned on the ORIGINAL scale. Set control$standardize_covariates = FALSE to disable.
+  [linear r062 A]  15.8s  rhat_reg 1.012  div 0  (184/300, 49.9 min, ETA 31 min)
+standardize_covariates: standardized 2 covariate(s) in long_formula (age: centre -0.3164, scale 10.4, implied intercept correlation -0.03; sex: centre 0.4915, scale 0.5, implied intercept correlation -0.70). Coefficients are returned on the ORIGINAL scale. Set control$standardize_covariates = FALSE to disable.
+sys:1: RuntimeWarning: orthogonalize_b: b[:,0] <- 3 direction(s) from X columns [0, 2, 3]; b[:,1] <- no basis (unconstrained)
+  [linear r062 D]  13.9s  rhat_reg 1.002  div 0  (185/300, 50.2 min, ETA 31 min)
+standardize_covariates: standardized 2 covariate(s) in long_formula (age: centre -0.3164, scale 10.4, implied intercept correlation -0.03; sex: centre 0.4915, scale 0.5, implied intercept correlation -0.70). Coefficients are returned on the ORIGINAL scale. Set control$standardize_covariates = FALSE to disable.
+sys:1: RuntimeWarning: orthogonalize_b: b[:,0] <- 3 direction(s) from X columns [0, 2, 3]; b[:,1] <- no basis (unconstrained)
+  [linear r062 D_rot]  21.5s  rhat_reg 1.006  div 0  (186/300, 50.5 min, ETA 31 min)
+standardize_covariates: standardized 2 covariate(s) in long_formula (age: centre 0.9753, scale 9.818, implied intercept correlation -0.10; sex: centre 0.4634, scale 0.4987, implied intercept correlation -0.68). Coefficients are returned on the ORIGINAL scale. Set control$standardize_covariates = FALSE to disable.
+  [linear r063 A]  15.7s  rhat_reg 1.006  div 0  (187/300, 50.8 min, ETA 31 min)
+standardize_covariates: standardized 2 covariate(s) in long_formula (age: centre 0.9753, scale 9.818, implied intercept correlation -0.10; sex: centre 0.4634, scale 0.4987, implied intercept correlation -0.68). Coefficients are returned on the ORIGINAL scale. Set control$standardize_covariates = FALSE to disable.
+sys:1: RuntimeWarning: orthogonalize_b: b[:,0] <- 3 direction(s) from X columns [0, 2, 3]; b[:,1] <- no basis (unconstrained)
+  [linear r063 D]  13.2s  rhat_reg 1.002  div 0  (188/300, 51.0 min, ETA 30 min)
+standardize_covariates: standardized 2 covariate(s) in long_formula (age: centre 0.9753, scale 9.818, implied intercept correlation -0.10; sex: centre 0.4634, scale 0.4987, implied intercept correlation -0.68). Coefficients are returned on the ORIGINAL scale. Set control$standardize_covariates = FALSE to disable.
+sys:1: RuntimeWarning: orthogonalize_b: b[:,0] <- 3 direction(s) from X columns [0, 2, 3]; b[:,1] <- no basis (unconstrained)
+  [linear r063 D_rot]  20.8s  rhat_reg 1.000  div 0  (189/300, 51.4 min, ETA 30 min)
+standardize_covariates: standardized 2 covariate(s) in long_formula (age: centre -0.8324, scale 9.574, implied intercept correlation -0.09; sex: centre 0.5112, scale 0.5, implied intercept correlation -0.71). Coefficients are returned on the ORIGINAL scale. Set control$standardize_covariates = FALSE to disable.
+  [linear r064 A]  15.5s  rhat_reg 1.008  div 0  (190/300, 51.6 min, ETA 30 min)
+standardize_covariates: standardized 2 covariate(s) in long_formula (age: centre -0.8324, scale 9.574, implied intercept correlation -0.09; sex: centre 0.5112, scale 0.5, implied intercept correlation -0.71). Coefficients are returned on the ORIGINAL scale. Set control$standardize_covariates = FALSE to disable.
+sys:1: RuntimeWarning: orthogonalize_b: b[:,0] <- 3 direction(s) from X columns [0, 2, 3]; b[:,1] <- no basis (unconstrained)
+  [linear r064 D]  13.2s  rhat_reg 1.026  div 0  (191/300, 51.8 min, ETA 30 min)
+standardize_covariates: standardized 2 covariate(s) in long_formula (age: centre -0.8324, scale 9.574, implied intercept correlation -0.09; sex: centre 0.5112, scale 0.5, implied intercept correlation -0.71). Coefficients are returned on the ORIGINAL scale. Set control$standardize_covariates = FALSE to disable.
+sys:1: RuntimeWarning: orthogonalize_b: b[:,0] <- 3 direction(s) from X columns [0, 2, 3]; b[:,1] <- no basis (unconstrained)
+  [linear r064 D_rot]  21.1s  rhat_reg 1.001  div 0  (192/300, 52.2 min, ETA 29 min)
+standardize_covariates: standardized 2 covariate(s) in long_formula (age: centre 0.02755, scale 9.138, implied intercept correlation -0.00; sex: centre 0.4402, scale 0.4965, implied intercept correlation -0.66). Coefficients are returned on the ORIGINAL scale. Set control$standardize_covariates = FALSE to disable.
+  [linear r065 A]  13.0s  rhat_reg 1.020  div 0  (193/300, 52.4 min, ETA 29 min)
+standardize_covariates: standardized 2 covariate(s) in long_formula (age: centre 0.02755, scale 9.138, implied intercept correlation -0.00; sex: centre 0.4402, scale 0.4965, implied intercept correlation -0.66). Coefficients are returned on the ORIGINAL scale. Set control$standardize_covariates = FALSE to disable.
+sys:1: RuntimeWarning: orthogonalize_b: b[:,0] <- 3 direction(s) from X columns [0, 2, 3]; b[:,1] <- no basis (unconstrained)
+  [linear r065 D]  16.1s  rhat_reg 1.001  div 0  (194/300, 52.7 min, ETA 29 min)
+standardize_covariates: standardized 2 covariate(s) in long_formula (age: centre 0.02755, scale 9.138, implied intercept correlation -0.00; sex: centre 0.4402, scale 0.4965, implied intercept correlation -0.66). Coefficients are returned on the ORIGINAL scale. Set control$standardize_covariates = FALSE to disable.
+sys:1: RuntimeWarning: orthogonalize_b: b[:,0] <- 3 direction(s) from X columns [0, 2, 3]; b[:,1] <- no basis (unconstrained)
+  [linear r065 D_rot]  21.4s  rhat_reg 1.009  div 0  (195/300, 53.0 min, ETA 29 min)
+standardize_covariates: standardized 2 covariate(s) in long_formula (age: centre 0.3898, scale 10.04, implied intercept correlation -0.04; sex: centre 0.5104, scale 0.5, implied intercept correlation -0.71). Coefficients are returned on the ORIGINAL scale. Set control$standardize_covariates = FALSE to disable.
+  [linear r066 A]  13.0s  rhat_reg 1.014  div 0  (196/300, 53.3 min, ETA 28 min)
+standardize_covariates: standardized 2 covariate(s) in long_formula (age: centre 0.3898, scale 10.04, implied intercept correlation -0.04; sex: centre 0.5104, scale 0.5, implied intercept correlation -0.71). Coefficients are returned on the ORIGINAL scale. Set control$standardize_covariates = FALSE to disable.
+sys:1: RuntimeWarning: orthogonalize_b: b[:,0] <- 3 direction(s) from X columns [0, 2, 3]; b[:,1] <- no basis (unconstrained)
+  [linear r066 D]  16.0s  rhat_reg 1.008  div 0  (197/300, 53.5 min, ETA 28 min)
+standardize_covariates: standardized 2 covariate(s) in long_formula (age: centre 0.3898, scale 10.04, implied intercept correlation -0.04; sex: centre 0.5104, scale 0.5, implied intercept correlation -0.71). Coefficients are returned on the ORIGINAL scale. Set control$standardize_covariates = FALSE to disable.
+sys:1: RuntimeWarning: orthogonalize_b: b[:,0] <- 3 direction(s) from X columns [0, 2, 3]; b[:,1] <- no basis (unconstrained)
+  [linear r066 D_rot]  18.5s  rhat_reg 1.006  div 0  (198/300, 53.8 min, ETA 28 min)
+standardize_covariates: standardized 2 covariate(s) in long_formula (age: centre -0.7806, scale 9.478, implied intercept correlation -0.08; sex: centre 0.4989, scale 0.5001, implied intercept correlation -0.71). Coefficients are returned on the ORIGINAL scale. Set control$standardize_covariates = FALSE to disable.
+  [linear r067 A]  15.8s  rhat_reg 1.005  div 0  (199/300, 54.1 min, ETA 27 min)
+standardize_covariates: standardized 2 covariate(s) in long_formula (age: centre -0.7806, scale 9.478, implied intercept correlation -0.08; sex: centre 0.4989, scale 0.5001, implied intercept correlation -0.71). Coefficients are returned on the ORIGINAL scale. Set control$standardize_covariates = FALSE to disable.
+sys:1: RuntimeWarning: orthogonalize_b: b[:,0] <- 3 direction(s) from X columns [0, 2, 3]; b[:,1] <- no basis (unconstrained)
+  [linear r067 D]  13.2s  rhat_reg 1.004  div 0  (200/300, 54.3 min, ETA 27 min)
+standardize_covariates: standardized 2 covariate(s) in long_formula (age: centre -0.7806, scale 9.478, implied intercept correlation -0.08; sex: centre 0.4989, scale 0.5001, implied intercept correlation -0.71). Coefficients are returned on the ORIGINAL scale. Set control$standardize_covariates = FALSE to disable.
+sys:1: RuntimeWarning: orthogonalize_b: b[:,0] <- 3 direction(s) from X columns [0, 2, 3]; b[:,1] <- no basis (unconstrained)
+  [linear r067 D_rot]  21.1s  rhat_reg 1.001  div 0  (201/300, 54.7 min, ETA 27 min)
+standardize_covariates: standardized 2 covariate(s) in long_formula (age: centre -0.1772, scale 9.688, implied intercept correlation -0.02; sex: centre 0.502, scale 0.5001, implied intercept correlation -0.71). Coefficients are returned on the ORIGINAL scale. Set control$standardize_covariates = FALSE to disable.
+  [linear r068 A]  15.9s  rhat_reg 1.015  div 0  (202/300, 54.9 min, ETA 27 min)
+standardize_covariates: standardized 2 covariate(s) in long_formula (age: centre -0.1772, scale 9.688, implied intercept correlation -0.02; sex: centre 0.502, scale 0.5001, implied intercept correlation -0.71). Coefficients are returned on the ORIGINAL scale. Set control$standardize_covariates = FALSE to disable.
+sys:1: RuntimeWarning: orthogonalize_b: b[:,0] <- 3 direction(s) from X columns [0, 2, 3]; b[:,1] <- no basis (unconstrained)
+  [linear r068 D]  13.3s  rhat_reg 1.010  div 0  (203/300, 55.2 min, ETA 26 min)
+standardize_covariates: standardized 2 covariate(s) in long_formula (age: centre -0.1772, scale 9.688, implied intercept correlation -0.02; sex: centre 0.502, scale 0.5001, implied intercept correlation -0.71). Coefficients are returned on the ORIGINAL scale. Set control$standardize_covariates = FALSE to disable.
+sys:1: RuntimeWarning: orthogonalize_b: b[:,0] <- 3 direction(s) from X columns [0, 2, 3]; b[:,1] <- no basis (unconstrained)
+  [linear r068 D_rot]  21.2s  rhat_reg 1.004  div 0  (204/300, 55.5 min, ETA 26 min)
+standardize_covariates: standardized 2 covariate(s) in long_formula (age: centre 0.2356, scale 9.782, implied intercept correlation -0.02; sex: centre 0.539, scale 0.4986, implied intercept correlation -0.73). Coefficients are returned on the ORIGINAL scale. Set control$standardize_covariates = FALSE to disable.
+  [linear r069 A]  12.6s  rhat_reg 1.012  div 0  (205/300, 55.7 min, ETA 26 min)
+standardize_covariates: standardized 2 covariate(s) in long_formula (age: centre 0.2356, scale 9.782, implied intercept correlation -0.02; sex: centre 0.539, scale 0.4986, implied intercept correlation -0.73). Coefficients are returned on the ORIGINAL scale. Set control$standardize_covariates = FALSE to disable.
+sys:1: RuntimeWarning: orthogonalize_b: b[:,0] <- 3 direction(s) from X columns [0, 2, 3]; b[:,1] <- no basis (unconstrained)
+  [linear r069 D]  16.1s  rhat_reg 1.001  div 0  (206/300, 56.0 min, ETA 26 min)
+standardize_covariates: standardized 2 covariate(s) in long_formula (age: centre 0.2356, scale 9.782, implied intercept correlation -0.02; sex: centre 0.539, scale 0.4986, implied intercept correlation -0.73). Coefficients are returned on the ORIGINAL scale. Set control$standardize_covariates = FALSE to disable.
+sys:1: RuntimeWarning: orthogonalize_b: b[:,0] <- 3 direction(s) from X columns [0, 2, 3]; b[:,1] <- no basis (unconstrained)
+  [linear r069 D_rot]  18.2s  rhat_reg 1.009  div 0  (207/300, 56.3 min, ETA 25 min)
+standardize_covariates: standardized 2 covariate(s) in long_formula (age: centre -0.9654, scale 10.11, implied intercept correlation -0.10; sex: centre 0.4476, scale 0.4973, implied intercept correlation -0.67). Coefficients are returned on the ORIGINAL scale. Set control$standardize_covariates = FALSE to disable.
+  [linear r070 A]  16.0s  rhat_reg 1.018  div 0  (208/300, 56.6 min, ETA 25 min)
+standardize_covariates: standardized 2 covariate(s) in long_formula (age: centre -0.9654, scale 10.11, implied intercept correlation -0.10; sex: centre 0.4476, scale 0.4973, implied intercept correlation -0.67). Coefficients are returned on the ORIGINAL scale. Set control$standardize_covariates = FALSE to disable.
+sys:1: RuntimeWarning: orthogonalize_b: b[:,0] <- 3 direction(s) from X columns [0, 2, 3]; b[:,1] <- no basis (unconstrained)
+  [linear r070 D]  13.2s  rhat_reg 1.014  div 0  (209/300, 56.8 min, ETA 25 min)
+standardize_covariates: standardized 2 covariate(s) in long_formula (age: centre -0.9654, scale 10.11, implied intercept correlation -0.10; sex: centre 0.4476, scale 0.4973, implied intercept correlation -0.67). Coefficients are returned on the ORIGINAL scale. Set control$standardize_covariates = FALSE to disable.
+sys:1: RuntimeWarning: orthogonalize_b: b[:,0] <- 3 direction(s) from X columns [0, 2, 3]; b[:,1] <- no basis (unconstrained)
+  [linear r070 D_rot]  21.5s  rhat_reg 1.014  div 0  (210/300, 57.2 min, ETA 24 min)
+standardize_covariates: standardized 2 covariate(s) in long_formula (age: centre 0.02558, scale 9.749, implied intercept correlation -0.00; sex: centre 0.4994, scale 0.5001, implied intercept correlation -0.71). Coefficients are returned on the ORIGINAL scale. Set control$standardize_covariates = FALSE to disable.
+  [linear r071 A]  15.8s  rhat_reg 1.012  div 0  (211/300, 57.4 min, ETA 24 min)
+standardize_covariates: standardized 2 covariate(s) in long_formula (age: centre 0.02558, scale 9.749, implied intercept correlation -0.00; sex: centre 0.4994, scale 0.5001, implied intercept correlation -0.71). Coefficients are returned on the ORIGINAL scale. Set control$standardize_covariates = FALSE to disable.
+sys:1: RuntimeWarning: orthogonalize_b: b[:,0] <- 3 direction(s) from X columns [0, 2, 3]; b[:,1] <- no basis (unconstrained)
+  [linear r071 D]  12.2s  rhat_reg 1.034  div 0  (212/300, 57.6 min, ETA 24 min)
+standardize_covariates: standardized 2 covariate(s) in long_formula (age: centre 0.02558, scale 9.749, implied intercept correlation -0.00; sex: centre 0.4994, scale 0.5001, implied intercept correlation -0.71). Coefficients are returned on the ORIGINAL scale. Set control$standardize_covariates = FALSE to disable.
+sys:1: RuntimeWarning: orthogonalize_b: b[:,0] <- 3 direction(s) from X columns [0, 2, 3]; b[:,1] <- no basis (unconstrained)
+  [linear r071 D_rot]  20.6s  rhat_reg 1.011  div 0  (213/300, 58.0 min, ETA 24 min)
+standardize_covariates: standardized 2 covariate(s) in long_formula (age: centre 0.6692, scale 9.751, implied intercept correlation -0.07; sex: centre 0.5265, scale 0.4994, implied intercept correlation -0.73). Coefficients are returned on the ORIGINAL scale. Set control$standardize_covariates = FALSE to disable.
+  [linear r072 A]  13.1s  rhat_reg 1.021  div 0  (214/300, 58.2 min, ETA 23 min)
+standardize_covariates: standardized 2 covariate(s) in long_formula (age: centre 0.6692, scale 9.751, implied intercept correlation -0.07; sex: centre 0.5265, scale 0.4994, implied intercept correlation -0.73). Coefficients are returned on the ORIGINAL scale. Set control$standardize_covariates = FALSE to disable.
+sys:1: RuntimeWarning: orthogonalize_b: b[:,0] <- 3 direction(s) from X columns [0, 2, 3]; b[:,1] <- no basis (unconstrained)
+  [linear r072 D]  16.3s  rhat_reg 1.017  div 0  (215/300, 58.5 min, ETA 23 min)
+standardize_covariates: standardized 2 covariate(s) in long_formula (age: centre 0.6692, scale 9.751, implied intercept correlation -0.07; sex: centre 0.5265, scale 0.4994, implied intercept correlation -0.73). Coefficients are returned on the ORIGINAL scale. Set control$standardize_covariates = FALSE to disable.
+sys:1: RuntimeWarning: orthogonalize_b: b[:,0] <- 3 direction(s) from X columns [0, 2, 3]; b[:,1] <- no basis (unconstrained)
+  [linear r072 D_rot]  18.5s  rhat_reg 1.011  div 0  (216/300, 58.8 min, ETA 23 min)
+standardize_covariates: standardized 2 covariate(s) in long_formula (age: centre -0.6013, scale 10.25, implied intercept correlation -0.06; sex: centre 0.515, scale 0.4999, implied intercept correlation -0.72). Coefficients are returned on the ORIGINAL scale. Set control$standardize_covariates = FALSE to disable.
+  [linear r073 A]  15.9s  rhat_reg 1.013  div 0  (217/300, 59.0 min, ETA 23 min)
+standardize_covariates: standardized 2 covariate(s) in long_formula (age: centre -0.6013, scale 10.25, implied intercept correlation -0.06; sex: centre 0.515, scale 0.4999, implied intercept correlation -0.72). Coefficients are returned on the ORIGINAL scale. Set control$standardize_covariates = FALSE to disable.
+sys:1: RuntimeWarning: orthogonalize_b: b[:,0] <- 3 direction(s) from X columns [0, 2, 3]; b[:,1] <- no basis (unconstrained)
+  [linear r073 D]  13.1s  rhat_reg 1.006  div 0  (218/300, 59.3 min, ETA 22 min)
+standardize_covariates: standardized 2 covariate(s) in long_formula (age: centre -0.6013, scale 10.25, implied intercept correlation -0.06; sex: centre 0.515, scale 0.4999, implied intercept correlation -0.72). Coefficients are returned on the ORIGINAL scale. Set control$standardize_covariates = FALSE to disable.
+sys:1: RuntimeWarning: orthogonalize_b: b[:,0] <- 3 direction(s) from X columns [0, 2, 3]; b[:,1] <- no basis (unconstrained)
+  [linear r073 D_rot]  21.1s  rhat_reg 1.007  div 0  (219/300, 59.6 min, ETA 22 min)
+standardize_covariates: standardized 2 covariate(s) in long_formula (age: centre 0.7883, scale 9.88, implied intercept correlation -0.08; sex: centre 0.5205, scale 0.4997, implied intercept correlation -0.72). Coefficients are returned on the ORIGINAL scale. Set control$standardize_covariates = FALSE to disable.
+  [linear r074 A]  13.5s  rhat_reg 1.002  div 0  (220/300, 59.8 min, ETA 22 min)
+standardize_covariates: standardized 2 covariate(s) in long_formula (age: centre 0.7883, scale 9.88, implied intercept correlation -0.08; sex: centre 0.5205, scale 0.4997, implied intercept correlation -0.72). Coefficients are returned on the ORIGINAL scale. Set control$standardize_covariates = FALSE to disable.
+sys:1: RuntimeWarning: orthogonalize_b: b[:,0] <- 3 direction(s) from X columns [0, 2, 3]; b[:,1] <- no basis (unconstrained)
+  [linear r074 D]  16.7s  rhat_reg 1.001  div 0  (221/300, 60.1 min, ETA 21 min)
+standardize_covariates: standardized 2 covariate(s) in long_formula (age: centre 0.7883, scale 9.88, implied intercept correlation -0.08; sex: centre 0.5205, scale 0.4997, implied intercept correlation -0.72). Coefficients are returned on the ORIGINAL scale. Set control$standardize_covariates = FALSE to disable.
+sys:1: RuntimeWarning: orthogonalize_b: b[:,0] <- 3 direction(s) from X columns [0, 2, 3]; b[:,1] <- no basis (unconstrained)
+  [linear r074 D_rot]  21.8s  rhat_reg 1.007  div 0  (222/300, 60.5 min, ETA 21 min)
+standardize_covariates: standardized 2 covariate(s) in long_formula (age: centre -0.4424, scale 10.67, implied intercept correlation -0.04; sex: centre 0.53, scale 0.4992, implied intercept correlation -0.73). Coefficients are returned on the ORIGINAL scale. Set control$standardize_covariates = FALSE to disable.
+  [linear r075 A]  13.1s  rhat_reg 1.012  div 0  (223/300, 60.7 min, ETA 21 min)
+standardize_covariates: standardized 2 covariate(s) in long_formula (age: centre -0.4424, scale 10.67, implied intercept correlation -0.04; sex: centre 0.53, scale 0.4992, implied intercept correlation -0.73). Coefficients are returned on the ORIGINAL scale. Set control$standardize_covariates = FALSE to disable.
+sys:1: RuntimeWarning: orthogonalize_b: b[:,0] <- 3 direction(s) from X columns [0, 2, 3]; b[:,1] <- no basis (unconstrained)
+  [linear r075 D]  13.4s  rhat_reg 1.023  div 0  (224/300, 60.9 min, ETA 21 min)
+standardize_covariates: standardized 2 covariate(s) in long_formula (age: centre -0.4424, scale 10.67, implied intercept correlation -0.04; sex: centre 0.53, scale 0.4992, implied intercept correlation -0.73). Coefficients are returned on the ORIGINAL scale. Set control$standardize_covariates = FALSE to disable.
+sys:1: RuntimeWarning: orthogonalize_b: b[:,0] <- 3 direction(s) from X columns [0, 2, 3]; b[:,1] <- no basis (unconstrained)
+  [linear r075 D_rot]  21.5s  rhat_reg 1.006  div 0  (225/300, 61.3 min, ETA 20 min)
+standardize_covariates: standardized 2 covariate(s) in long_formula (age: centre -0.3581, scale 10.46, implied intercept correlation -0.03; sex: centre 0.5488, scale 0.4977, implied intercept correlation -0.74). Coefficients are returned on the ORIGINAL scale. Set control$standardize_covariates = FALSE to disable.
+  [linear r076 A]  13.1s  rhat_reg 1.009  div 0  (226/300, 61.5 min, ETA 20 min)
+standardize_covariates: standardized 2 covariate(s) in long_formula (age: centre -0.3581, scale 10.46, implied intercept correlation -0.03; sex: centre 0.5488, scale 0.4977, implied intercept correlation -0.74). Coefficients are returned on the ORIGINAL scale. Set control$standardize_covariates = FALSE to disable.
+sys:1: RuntimeWarning: orthogonalize_b: b[:,0] <- 3 direction(s) from X columns [0, 2, 3]; b[:,1] <- no basis (unconstrained)
+  [linear r076 D]  16.5s  rhat_reg 1.011  div 0  (227/300, 61.8 min, ETA 20 min)
+standardize_covariates: standardized 2 covariate(s) in long_formula (age: centre -0.3581, scale 10.46, implied intercept correlation -0.03; sex: centre 0.5488, scale 0.4977, implied intercept correlation -0.74). Coefficients are returned on the ORIGINAL scale. Set control$standardize_covariates = FALSE to disable.
+sys:1: RuntimeWarning: orthogonalize_b: b[:,0] <- 3 direction(s) from X columns [0, 2, 3]; b[:,1] <- no basis (unconstrained)
+  [linear r076 D_rot]  22.0s  rhat_reg 1.000  div 0  (228/300, 62.2 min, ETA 20 min)
+standardize_covariates: standardized 2 covariate(s) in long_formula (age: centre -0.4775, scale 10.18, implied intercept correlation -0.05; sex: centre 0.4945, scale 0.5001, implied intercept correlation -0.70). Coefficients are returned on the ORIGINAL scale. Set control$standardize_covariates = FALSE to disable.
+  [linear r077 A]  13.3s  rhat_reg 1.014  div 0  (229/300, 62.4 min, ETA 19 min)
+standardize_covariates: standardized 2 covariate(s) in long_formula (age: centre -0.4775, scale 10.18, implied intercept correlation -0.05; sex: centre 0.4945, scale 0.5001, implied intercept correlation -0.70). Coefficients are returned on the ORIGINAL scale. Set control$standardize_covariates = FALSE to disable.
+sys:1: RuntimeWarning: orthogonalize_b: b[:,0] <- 3 direction(s) from X columns [0, 2, 3]; b[:,1] <- no basis (unconstrained)
+  [linear r077 D]  13.7s  rhat_reg 1.015  div 0  (230/300, 62.6 min, ETA 19 min)
+standardize_covariates: standardized 2 covariate(s) in long_formula (age: centre -0.4775, scale 10.18, implied intercept correlation -0.05; sex: centre 0.4945, scale 0.5001, implied intercept correlation -0.70). Coefficients are returned on the ORIGINAL scale. Set control$standardize_covariates = FALSE to disable.
+sys:1: RuntimeWarning: orthogonalize_b: b[:,0] <- 3 direction(s) from X columns [0, 2, 3]; b[:,1] <- no basis (unconstrained)
+  [linear r077 D_rot]  22.0s  rhat_reg 1.007  div 0  (231/300, 63.0 min, ETA 19 min)
+standardize_covariates: standardized 2 covariate(s) in long_formula (age: centre 0.1597, scale 9.823, implied intercept correlation -0.02; sex: centre 0.4931, scale 0.5, implied intercept correlation -0.70). Coefficients are returned on the ORIGINAL scale. Set control$standardize_covariates = FALSE to disable.
+  [linear r078 A]  16.2s  rhat_reg 1.011  div 0  (232/300, 63.3 min, ETA 19 min)
+standardize_covariates: standardized 2 covariate(s) in long_formula (age: centre 0.1597, scale 9.823, implied intercept correlation -0.02; sex: centre 0.4931, scale 0.5, implied intercept correlation -0.70). Coefficients are returned on the ORIGINAL scale. Set control$standardize_covariates = FALSE to disable.
+sys:1: RuntimeWarning: orthogonalize_b: b[:,0] <- 3 direction(s) from X columns [0, 2, 3]; b[:,1] <- no basis (unconstrained)
+  [linear r078 D]  13.2s  rhat_reg 1.001  div 0  (233/300, 63.5 min, ETA 18 min)
+standardize_covariates: standardized 2 covariate(s) in long_formula (age: centre 0.1597, scale 9.823, implied intercept correlation -0.02; sex: centre 0.4931, scale 0.5, implied intercept correlation -0.70). Coefficients are returned on the ORIGINAL scale. Set control$standardize_covariates = FALSE to disable.
+sys:1: RuntimeWarning: orthogonalize_b: b[:,0] <- 3 direction(s) from X columns [0, 2, 3]; b[:,1] <- no basis (unconstrained)
+  [linear r078 D_rot]  21.8s  rhat_reg 1.010  div 0  (234/300, 63.8 min, ETA 18 min)
+standardize_covariates: standardized 2 covariate(s) in long_formula (age: centre -1.251, scale 9.02, implied intercept correlation -0.14; sex: centre 0.5154, scale 0.4999, implied intercept correlation -0.72). Coefficients are returned on the ORIGINAL scale. Set control$standardize_covariates = FALSE to disable.
+  [linear r079 A]  12.9s  rhat_reg 1.014  div 0  (235/300, 64.1 min, ETA 18 min)
+standardize_covariates: standardized 2 covariate(s) in long_formula (age: centre -1.251, scale 9.02, implied intercept correlation -0.14; sex: centre 0.5154, scale 0.4999, implied intercept correlation -0.72). Coefficients are returned on the ORIGINAL scale. Set control$standardize_covariates = FALSE to disable.
+sys:1: RuntimeWarning: orthogonalize_b: b[:,0] <- 3 direction(s) from X columns [0, 2, 3]; b[:,1] <- no basis (unconstrained)
+  [linear r079 D]  16.2s  rhat_reg 1.000  div 0  (236/300, 64.3 min, ETA 17 min)
+standardize_covariates: standardized 2 covariate(s) in long_formula (age: centre -1.251, scale 9.02, implied intercept correlation -0.14; sex: centre 0.5154, scale 0.4999, implied intercept correlation -0.72). Coefficients are returned on the ORIGINAL scale. Set control$standardize_covariates = FALSE to disable.
+sys:1: RuntimeWarning: orthogonalize_b: b[:,0] <- 3 direction(s) from X columns [0, 2, 3]; b[:,1] <- no basis (unconstrained)
+  [linear r079 D_rot]  18.3s  rhat_reg 1.006  div 0  (237/300, 64.6 min, ETA 17 min)
+standardize_covariates: standardized 2 covariate(s) in long_formula (age: centre -0.6673, scale 10.38, implied intercept correlation -0.06; sex: centre 0.4751, scale 0.4995, implied intercept correlation -0.69). Coefficients are returned on the ORIGINAL scale. Set control$standardize_covariates = FALSE to disable.
+  [linear r080 A]  16.5s  rhat_reg 1.007  div 0  (238/300, 64.9 min, ETA 17 min)
+standardize_covariates: standardized 2 covariate(s) in long_formula (age: centre -0.6673, scale 10.38, implied intercept correlation -0.06; sex: centre 0.4751, scale 0.4995, implied intercept correlation -0.69). Coefficients are returned on the ORIGINAL scale. Set control$standardize_covariates = FALSE to disable.
+sys:1: RuntimeWarning: orthogonalize_b: b[:,0] <- 3 direction(s) from X columns [0, 2, 3]; b[:,1] <- no basis (unconstrained)
+  [linear r080 D]  13.4s  rhat_reg 1.005  div 0  (239/300, 65.1 min, ETA 17 min)
+standardize_covariates: standardized 2 covariate(s) in long_formula (age: centre -0.6673, scale 10.38, implied intercept correlation -0.06; sex: centre 0.4751, scale 0.4995, implied intercept correlation -0.69). Coefficients are returned on the ORIGINAL scale. Set control$standardize_covariates = FALSE to disable.
+sys:1: RuntimeWarning: orthogonalize_b: b[:,0] <- 3 direction(s) from X columns [0, 2, 3]; b[:,1] <- no basis (unconstrained)
+  [linear r080 D_rot]  22.2s  rhat_reg 1.000  div 0  (240/300, 65.5 min, ETA 16 min)
+standardize_covariates: standardized 2 covariate(s) in long_formula (age: centre -0.1831, scale 10.16, implied intercept correlation -0.02; sex: centre 0.5153, scale 0.4999, implied intercept correlation -0.72). Coefficients are returned on the ORIGINAL scale. Set control$standardize_covariates = FALSE to disable.
+  [linear r081 A]  13.6s  rhat_reg 1.007  div 0  (241/300, 65.7 min, ETA 16 min)
+standardize_covariates: standardized 2 covariate(s) in long_formula (age: centre -0.1831, scale 10.16, implied intercept correlation -0.02; sex: centre 0.5153, scale 0.4999, implied intercept correlation -0.72). Coefficients are returned on the ORIGINAL scale. Set control$standardize_covariates = FALSE to disable.
+sys:1: RuntimeWarning: orthogonalize_b: b[:,0] <- 3 direction(s) from X columns [0, 2, 3]; b[:,1] <- no basis (unconstrained)
+  [linear r081 D]  13.4s  rhat_reg 1.000  div 0  (242/300, 66.0 min, ETA 16 min)
+standardize_covariates: standardized 2 covariate(s) in long_formula (age: centre -0.1831, scale 10.16, implied intercept correlation -0.02; sex: centre 0.5153, scale 0.4999, implied intercept correlation -0.72). Coefficients are returned on the ORIGINAL scale. Set control$standardize_covariates = FALSE to disable.
+sys:1: RuntimeWarning: orthogonalize_b: b[:,0] <- 3 direction(s) from X columns [0, 2, 3]; b[:,1] <- no basis (unconstrained)
+  [linear r081 D_rot]  21.7s  rhat_reg 1.005  div 0  (243/300, 66.3 min, ETA 16 min)
+standardize_covariates: standardized 2 covariate(s) in long_formula (age: centre 0.2886, scale 9.841, implied intercept correlation -0.03; sex: centre 0.5436, scale 0.4982, implied intercept correlation -0.74). Coefficients are returned on the ORIGINAL scale. Set control$standardize_covariates = FALSE to disable.
+  [linear r082 A]  13.2s  rhat_reg 1.010  div 0  (244/300, 66.6 min, ETA 15 min)
+standardize_covariates: standardized 2 covariate(s) in long_formula (age: centre 0.2886, scale 9.841, implied intercept correlation -0.03; sex: centre 0.5436, scale 0.4982, implied intercept correlation -0.74). Coefficients are returned on the ORIGINAL scale. Set control$standardize_covariates = FALSE to disable.
+sys:1: RuntimeWarning: orthogonalize_b: b[:,0] <- 3 direction(s) from X columns [0, 2, 3]; b[:,1] <- no basis (unconstrained)
+  [linear r082 D]  16.8s  rhat_reg 1.003  div 0  (245/300, 66.8 min, ETA 15 min)
+standardize_covariates: standardized 2 covariate(s) in long_formula (age: centre 0.2886, scale 9.841, implied intercept correlation -0.03; sex: centre 0.5436, scale 0.4982, implied intercept correlation -0.74). Coefficients are returned on the ORIGINAL scale. Set control$standardize_covariates = FALSE to disable.
+sys:1: RuntimeWarning: orthogonalize_b: b[:,0] <- 3 direction(s) from X columns [0, 2, 3]; b[:,1] <- no basis (unconstrained)
+  [linear r082 D_rot]  18.8s  rhat_reg 1.001  div 0  (246/300, 67.1 min, ETA 15 min)
+standardize_covariates: standardized 2 covariate(s) in long_formula (age: centre 0.03855, scale 8.961, implied intercept correlation -0.00; sex: centre 0.5141, scale 0.4999, implied intercept correlation -0.72). Coefficients are returned on the ORIGINAL scale. Set control$standardize_covariates = FALSE to disable.
+  [linear r083 A]  16.5s  rhat_reg 1.018  div 0  (247/300, 67.4 min, ETA 14 min)
+standardize_covariates: standardized 2 covariate(s) in long_formula (age: centre 0.03855, scale 8.961, implied intercept correlation -0.00; sex: centre 0.5141, scale 0.4999, implied intercept correlation -0.72). Coefficients are returned on the ORIGINAL scale. Set control$standardize_covariates = FALSE to disable.
+sys:1: RuntimeWarning: orthogonalize_b: b[:,0] <- 3 direction(s) from X columns [0, 2, 3]; b[:,1] <- no basis (unconstrained)
+  [linear r083 D]  13.3s  rhat_reg 1.005  div 0  (248/300, 67.6 min, ETA 14 min)
+standardize_covariates: standardized 2 covariate(s) in long_formula (age: centre 0.03855, scale 8.961, implied intercept correlation -0.00; sex: centre 0.5141, scale 0.4999, implied intercept correlation -0.72). Coefficients are returned on the ORIGINAL scale. Set control$standardize_covariates = FALSE to disable.
+sys:1: RuntimeWarning: orthogonalize_b: b[:,0] <- 3 direction(s) from X columns [0, 2, 3]; b[:,1] <- no basis (unconstrained)
+  [linear r083 D_rot]  22.0s  rhat_reg 1.002  div 0  (249/300, 68.0 min, ETA 14 min)
+standardize_covariates: standardized 2 covariate(s) in long_formula (age: centre -0.5595, scale 10.34, implied intercept correlation -0.05; sex: centre 0.535, scale 0.4989, implied intercept correlation -0.73). Coefficients are returned on the ORIGINAL scale. Set control$standardize_covariates = FALSE to disable.
+  [linear r084 A]  13.0s  rhat_reg 1.006  div 0  (250/300, 68.2 min, ETA 14 min)
+standardize_covariates: standardized 2 covariate(s) in long_formula (age: centre -0.5595, scale 10.34, implied intercept correlation -0.05; sex: centre 0.535, scale 0.4989, implied intercept correlation -0.73). Coefficients are returned on the ORIGINAL scale. Set control$standardize_covariates = FALSE to disable.
+sys:1: RuntimeWarning: orthogonalize_b: b[:,0] <- 3 direction(s) from X columns [0, 2, 3]; b[:,1] <- no basis (unconstrained)
+  [linear r084 D]  16.9s  rhat_reg 1.003  div 0  (251/300, 68.5 min, ETA 13 min)
+standardize_covariates: standardized 2 covariate(s) in long_formula (age: centre -0.5595, scale 10.34, implied intercept correlation -0.05; sex: centre 0.535, scale 0.4989, implied intercept correlation -0.73). Coefficients are returned on the ORIGINAL scale. Set control$standardize_covariates = FALSE to disable.
+sys:1: RuntimeWarning: orthogonalize_b: b[:,0] <- 3 direction(s) from X columns [0, 2, 3]; b[:,1] <- no basis (unconstrained)
+  [linear r084 D_rot]  17.9s  rhat_reg 1.002  div 0  (252/300, 68.8 min, ETA 13 min)
+standardize_covariates: standardized 2 covariate(s) in long_formula (age: centre -0.2315, scale 9.941, implied intercept correlation -0.02; sex: centre 0.5063, scale 0.5001, implied intercept correlation -0.71). Coefficients are returned on the ORIGINAL scale. Set control$standardize_covariates = FALSE to disable.
+  [linear r085 A]  16.6s  rhat_reg 1.005  div 0  (253/300, 69.1 min, ETA 13 min)
+standardize_covariates: standardized 2 covariate(s) in long_formula (age: centre -0.2315, scale 9.941, implied intercept correlation -0.02; sex: centre 0.5063, scale 0.5001, implied intercept correlation -0.71). Coefficients are returned on the ORIGINAL scale. Set control$standardize_covariates = FALSE to disable.
+sys:1: RuntimeWarning: orthogonalize_b: b[:,0] <- 3 direction(s) from X columns [0, 2, 3]; b[:,1] <- no basis (unconstrained)
+  [linear r085 D]  13.2s  rhat_reg 1.000  div 0  (254/300, 69.3 min, ETA 13 min)
+standardize_covariates: standardized 2 covariate(s) in long_formula (age: centre -0.2315, scale 9.941, implied intercept correlation -0.02; sex: centre 0.5063, scale 0.5001, implied intercept correlation -0.71). Coefficients are returned on the ORIGINAL scale. Set control$standardize_covariates = FALSE to disable.
+sys:1: RuntimeWarning: orthogonalize_b: b[:,0] <- 3 direction(s) from X columns [0, 2, 3]; b[:,1] <- no basis (unconstrained)
+  [linear r085 D_rot]  21.9s  rhat_reg 1.012  div 0  (255/300, 69.7 min, ETA 12 min)
+standardize_covariates: standardized 2 covariate(s) in long_formula (age: centre 0.5409, scale 10, implied intercept correlation -0.05; sex: centre 0.5173, scale 0.4998, implied intercept correlation -0.72). Coefficients are returned on the ORIGINAL scale. Set control$standardize_covariates = FALSE to disable.
+  [linear r086 A]  13.1s  rhat_reg 1.006  div 0  (256/300, 69.9 min, ETA 12 min)
+standardize_covariates: standardized 2 covariate(s) in long_formula (age: centre 0.5409, scale 10, implied intercept correlation -0.05; sex: centre 0.5173, scale 0.4998, implied intercept correlation -0.72). Coefficients are returned on the ORIGINAL scale. Set control$standardize_covariates = FALSE to disable.
+sys:1: RuntimeWarning: orthogonalize_b: b[:,0] <- 3 direction(s) from X columns [0, 2, 3]; b[:,1] <- no basis (unconstrained)
+  [linear r086 D]  16.9s  rhat_reg 1.001  div 0  (257/300, 70.2 min, ETA 12 min)
+standardize_covariates: standardized 2 covariate(s) in long_formula (age: centre 0.5409, scale 10, implied intercept correlation -0.05; sex: centre 0.5173, scale 0.4998, implied intercept correlation -0.72). Coefficients are returned on the ORIGINAL scale. Set control$standardize_covariates = FALSE to disable.
+sys:1: RuntimeWarning: orthogonalize_b: b[:,0] <- 3 direction(s) from X columns [0, 2, 3]; b[:,1] <- no basis (unconstrained)
+  [linear r086 D_rot]  18.6s  rhat_reg 1.003  div 0  (258/300, 70.5 min, ETA 11 min)
+standardize_covariates: standardized 2 covariate(s) in long_formula (age: centre 0.6019, scale 10.47, implied intercept correlation -0.06; sex: centre 0.4571, scale 0.4982, implied intercept correlation -0.68). Coefficients are returned on the ORIGINAL scale. Set control$standardize_covariates = FALSE to disable.
+  [linear r087 A]  16.7s  rhat_reg 1.011  div 0  (259/300, 70.8 min, ETA 11 min)
+standardize_covariates: standardized 2 covariate(s) in long_formula (age: centre 0.6019, scale 10.47, implied intercept correlation -0.06; sex: centre 0.4571, scale 0.4982, implied intercept correlation -0.68). Coefficients are returned on the ORIGINAL scale. Set control$standardize_covariates = FALSE to disable.
+sys:1: RuntimeWarning: orthogonalize_b: b[:,0] <- 3 direction(s) from X columns [0, 2, 3]; b[:,1] <- no basis (unconstrained)
+  [linear r087 D]  13.2s  rhat_reg 1.008  div 0  (260/300, 71.0 min, ETA 11 min)
+standardize_covariates: standardized 2 covariate(s) in long_formula (age: centre 0.6019, scale 10.47, implied intercept correlation -0.06; sex: centre 0.4571, scale 0.4982, implied intercept correlation -0.68). Coefficients are returned on the ORIGINAL scale. Set control$standardize_covariates = FALSE to disable.
+sys:1: RuntimeWarning: orthogonalize_b: b[:,0] <- 3 direction(s) from X columns [0, 2, 3]; b[:,1] <- no basis (unconstrained)
+  [linear r087 D_rot]  22.1s  rhat_reg 1.008  div 0  (261/300, 71.4 min, ETA 11 min)
+standardize_covariates: standardized 2 covariate(s) in long_formula (age: centre -0.9428, scale 10.19, implied intercept correlation -0.09; sex: centre 0.5259, scale 0.4994, implied intercept correlation -0.73). Coefficients are returned on the ORIGINAL scale. Set control$standardize_covariates = FALSE to disable.
+  [linear r088 A]  13.3s  rhat_reg 1.008  div 0  (262/300, 71.6 min, ETA 10 min)
+standardize_covariates: standardized 2 covariate(s) in long_formula (age: centre -0.9428, scale 10.19, implied intercept correlation -0.09; sex: centre 0.5259, scale 0.4994, implied intercept correlation -0.73). Coefficients are returned on the ORIGINAL scale. Set control$standardize_covariates = FALSE to disable.
+sys:1: RuntimeWarning: orthogonalize_b: b[:,0] <- 3 direction(s) from X columns [0, 2, 3]; b[:,1] <- no basis (unconstrained)
+  [linear r088 D]  17.4s  rhat_reg 1.010  div 0  (263/300, 71.9 min, ETA 10 min)
+standardize_covariates: standardized 2 covariate(s) in long_formula (age: centre -0.9428, scale 10.19, implied intercept correlation -0.09; sex: centre 0.5259, scale 0.4994, implied intercept correlation -0.73). Coefficients are returned on the ORIGINAL scale. Set control$standardize_covariates = FALSE to disable.
+sys:1: RuntimeWarning: orthogonalize_b: b[:,0] <- 3 direction(s) from X columns [0, 2, 3]; b[:,1] <- no basis (unconstrained)
+  [linear r088 D_rot]  18.8s  rhat_reg 1.013  div 0  (264/300, 72.2 min, ETA 10 min)
+standardize_covariates: standardized 2 covariate(s) in long_formula (age: centre -0.3405, scale 10.49, implied intercept correlation -0.03; sex: centre 0.4919, scale 0.5, implied intercept correlation -0.70). Coefficients are returned on the ORIGINAL scale. Set control$standardize_covariates = FALSE to disable.
+  [linear r089 A]  12.9s  rhat_reg 1.014  div 0  (265/300, 72.4 min, ETA 10 min)
+standardize_covariates: standardized 2 covariate(s) in long_formula (age: centre -0.3405, scale 10.49, implied intercept correlation -0.03; sex: centre 0.4919, scale 0.5, implied intercept correlation -0.70). Coefficients are returned on the ORIGINAL scale. Set control$standardize_covariates = FALSE to disable.
+sys:1: RuntimeWarning: orthogonalize_b: b[:,0] <- 3 direction(s) from X columns [0, 2, 3]; b[:,1] <- no basis (unconstrained)
+  [linear r089 D]  16.8s  rhat_reg 1.001  div 0  (266/300, 72.7 min, ETA 9 min)
+standardize_covariates: standardized 2 covariate(s) in long_formula (age: centre -0.3405, scale 10.49, implied intercept correlation -0.03; sex: centre 0.4919, scale 0.5, implied intercept correlation -0.70). Coefficients are returned on the ORIGINAL scale. Set control$standardize_covariates = FALSE to disable.
+sys:1: RuntimeWarning: orthogonalize_b: b[:,0] <- 3 direction(s) from X columns [0, 2, 3]; b[:,1] <- no basis (unconstrained)
+  [linear r089 D_rot]  18.2s  rhat_reg 1.009  div 0  (267/300, 73.0 min, ETA 9 min)
+standardize_covariates: standardized 2 covariate(s) in long_formula (age: centre -0.8514, scale 9.02, implied intercept correlation -0.09; sex: centre 0.474, scale 0.4994, implied intercept correlation -0.69). Coefficients are returned on the ORIGINAL scale. Set control$standardize_covariates = FALSE to disable.
+  [linear r090 A]  16.5s  rhat_reg 1.009  div 0  (268/300, 73.3 min, ETA 9 min)
+standardize_covariates: standardized 2 covariate(s) in long_formula (age: centre -0.8514, scale 9.02, implied intercept correlation -0.09; sex: centre 0.474, scale 0.4994, implied intercept correlation -0.69). Coefficients are returned on the ORIGINAL scale. Set control$standardize_covariates = FALSE to disable.
+sys:1: RuntimeWarning: orthogonalize_b: b[:,0] <- 3 direction(s) from X columns [0, 2, 3]; b[:,1] <- no basis (unconstrained)
+  [linear r090 D]  13.3s  rhat_reg 1.007  div 0  (269/300, 73.5 min, ETA 8 min)
+standardize_covariates: standardized 2 covariate(s) in long_formula (age: centre -0.8514, scale 9.02, implied intercept correlation -0.09; sex: centre 0.474, scale 0.4994, implied intercept correlation -0.69). Coefficients are returned on the ORIGINAL scale. Set control$standardize_covariates = FALSE to disable.
+sys:1: RuntimeWarning: orthogonalize_b: b[:,0] <- 3 direction(s) from X columns [0, 2, 3]; b[:,1] <- no basis (unconstrained)
+  [linear r090 D_rot]  21.7s  rhat_reg 1.003  div 0  (270/300, 73.9 min, ETA 8 min)
+standardize_covariates: standardized 2 covariate(s) in long_formula (age: centre 0.2657, scale 8.956, implied intercept correlation -0.03; sex: centre 0.5461, scale 0.498, implied intercept correlation -0.74). Coefficients are returned on the ORIGINAL scale. Set control$standardize_covariates = FALSE to disable.
+  [linear r091 A]  13.3s  rhat_reg 1.023  div 0  (271/300, 74.1 min, ETA 8 min)
+standardize_covariates: standardized 2 covariate(s) in long_formula (age: centre 0.2657, scale 8.956, implied intercept correlation -0.03; sex: centre 0.5461, scale 0.498, implied intercept correlation -0.74). Coefficients are returned on the ORIGINAL scale. Set control$standardize_covariates = FALSE to disable.
+sys:1: RuntimeWarning: orthogonalize_b: b[:,0] <- 3 direction(s) from X columns [0, 2, 3]; b[:,1] <- no basis (unconstrained)
+  [linear r091 D]  17.3s  rhat_reg 1.825  div 86  (272/300, 74.4 min, ETA 8 min)
+standardize_covariates: standardized 2 covariate(s) in long_formula (age: centre 0.2657, scale 8.956, implied intercept correlation -0.03; sex: centre 0.5461, scale 0.498, implied intercept correlation -0.74). Coefficients are returned on the ORIGINAL scale. Set control$standardize_covariates = FALSE to disable.
+sys:1: RuntimeWarning: orthogonalize_b: b[:,0] <- 3 direction(s) from X columns [0, 2, 3]; b[:,1] <- no basis (unconstrained)
+  [linear r091 D_rot]  18.4s  rhat_reg 1.013  div 0  (273/300, 74.7 min, ETA 7 min)
+standardize_covariates: standardized 2 covariate(s) in long_formula (age: centre 0.7268, scale 10.59, implied intercept correlation -0.07; sex: centre 0.5156, scale 0.4999, implied intercept correlation -0.72). Coefficients are returned on the ORIGINAL scale. Set control$standardize_covariates = FALSE to disable.
+  [linear r092 A]  17.0s  rhat_reg 1.014  div 0  (274/300, 75.0 min, ETA 7 min)
+standardize_covariates: standardized 2 covariate(s) in long_formula (age: centre 0.7268, scale 10.59, implied intercept correlation -0.07; sex: centre 0.5156, scale 0.4999, implied intercept correlation -0.72). Coefficients are returned on the ORIGINAL scale. Set control$standardize_covariates = FALSE to disable.
+sys:1: RuntimeWarning: orthogonalize_b: b[:,0] <- 3 direction(s) from X columns [0, 2, 3]; b[:,1] <- no basis (unconstrained)
+  [linear r092 D]  13.4s  rhat_reg 1.007  div 0  (275/300, 75.2 min, ETA 7 min)
+standardize_covariates: standardized 2 covariate(s) in long_formula (age: centre 0.7268, scale 10.59, implied intercept correlation -0.07; sex: centre 0.5156, scale 0.4999, implied intercept correlation -0.72). Coefficients are returned on the ORIGINAL scale. Set control$standardize_covariates = FALSE to disable.
+sys:1: RuntimeWarning: orthogonalize_b: b[:,0] <- 3 direction(s) from X columns [0, 2, 3]; b[:,1] <- no basis (unconstrained)
+  [linear r092 D_rot]  22.5s  rhat_reg 1.005  div 0  (276/300, 75.6 min, ETA 7 min)
+standardize_covariates: standardized 2 covariate(s) in long_formula (age: centre -1.325, scale 9.626, implied intercept correlation -0.14; sex: centre 0.4656, scale 0.4989, implied intercept correlation -0.68). Coefficients are returned on the ORIGINAL scale. Set control$standardize_covariates = FALSE to disable.
+  [linear r093 A]  13.4s  rhat_reg 1.008  div 0  (277/300, 75.8 min, ETA 6 min)
+standardize_covariates: standardized 2 covariate(s) in long_formula (age: centre -1.325, scale 9.626, implied intercept correlation -0.14; sex: centre 0.4656, scale 0.4989, implied intercept correlation -0.68). Coefficients are returned on the ORIGINAL scale. Set control$standardize_covariates = FALSE to disable.
+sys:1: RuntimeWarning: orthogonalize_b: b[:,0] <- 3 direction(s) from X columns [0, 2, 3]; b[:,1] <- no basis (unconstrained)
+  [linear r093 D]  13.3s  rhat_reg 1.005  div 0  (278/300, 76.0 min, ETA 6 min)
+standardize_covariates: standardized 2 covariate(s) in long_formula (age: centre -1.325, scale 9.626, implied intercept correlation -0.14; sex: centre 0.4656, scale 0.4989, implied intercept correlation -0.68). Coefficients are returned on the ORIGINAL scale. Set control$standardize_covariates = FALSE to disable.
+sys:1: RuntimeWarning: orthogonalize_b: b[:,0] <- 3 direction(s) from X columns [0, 2, 3]; b[:,1] <- no basis (unconstrained)
+  [linear r093 D_rot]  22.2s  rhat_reg 1.006  div 0  (279/300, 76.4 min, ETA 6 min)
+standardize_covariates: standardized 2 covariate(s) in long_formula (age: centre 0.2221, scale 9.966, implied intercept correlation -0.02; sex: centre 0.5478, scale 0.4978, implied intercept correlation -0.74). Coefficients are returned on the ORIGINAL scale. Set control$standardize_covariates = FALSE to disable.
+  [linear r094 A]  13.1s  rhat_reg 1.012  div 0  (280/300, 76.6 min, ETA 5 min)
+standardize_covariates: standardized 2 covariate(s) in long_formula (age: centre 0.2221, scale 9.966, implied intercept correlation -0.02; sex: centre 0.5478, scale 0.4978, implied intercept correlation -0.74). Coefficients are returned on the ORIGINAL scale. Set control$standardize_covariates = FALSE to disable.
+sys:1: RuntimeWarning: orthogonalize_b: b[:,0] <- 3 direction(s) from X columns [0, 2, 3]; b[:,1] <- no basis (unconstrained)
+  [linear r094 D]  17.0s  rhat_reg 1.017  div 0  (281/300, 76.9 min, ETA 5 min)
+standardize_covariates: standardized 2 covariate(s) in long_formula (age: centre 0.2221, scale 9.966, implied intercept correlation -0.02; sex: centre 0.5478, scale 0.4978, implied intercept correlation -0.74). Coefficients are returned on the ORIGINAL scale. Set control$standardize_covariates = FALSE to disable.
+sys:1: RuntimeWarning: orthogonalize_b: b[:,0] <- 3 direction(s) from X columns [0, 2, 3]; b[:,1] <- no basis (unconstrained)
+  [linear r094 D_rot]  18.6s  rhat_reg 1.015  div 0  (282/300, 77.2 min, ETA 5 min)
+standardize_covariates: standardized 2 covariate(s) in long_formula (age: centre -0.01039, scale 10.13, implied intercept correlation -0.00; sex: centre 0.512, scale 0.4999, implied intercept correlation -0.72). Coefficients are returned on the ORIGINAL scale. Set control$standardize_covariates = FALSE to disable.
+  [linear r095 A]  17.0s  rhat_reg 1.012  div 0  (283/300, 77.5 min, ETA 5 min)
+standardize_covariates: standardized 2 covariate(s) in long_formula (age: centre -0.01039, scale 10.13, implied intercept correlation -0.00; sex: centre 0.512, scale 0.4999, implied intercept correlation -0.72). Coefficients are returned on the ORIGINAL scale. Set control$standardize_covariates = FALSE to disable.
+sys:1: RuntimeWarning: orthogonalize_b: b[:,0] <- 3 direction(s) from X columns [0, 2, 3]; b[:,1] <- no basis (unconstrained)
+  [linear r095 D]  13.4s  rhat_reg 1.015  div 0  (284/300, 77.7 min, ETA 4 min)
+standardize_covariates: standardized 2 covariate(s) in long_formula (age: centre -0.01039, scale 10.13, implied intercept correlation -0.00; sex: centre 0.512, scale 0.4999, implied intercept correlation -0.72). Coefficients are returned on the ORIGINAL scale. Set control$standardize_covariates = FALSE to disable.
+sys:1: RuntimeWarning: orthogonalize_b: b[:,0] <- 3 direction(s) from X columns [0, 2, 3]; b[:,1] <- no basis (unconstrained)
+  [linear r095 D_rot]  18.9s  rhat_reg 1.003  div 0  (285/300, 78.1 min, ETA 4 min)
+standardize_covariates: standardized 2 covariate(s) in long_formula (age: centre -1.501, scale 9.141, implied intercept correlation -0.16; sex: centre 0.4439, scale 0.4969, implied intercept correlation -0.67). Coefficients are returned on the ORIGINAL scale. Set control$standardize_covariates = FALSE to disable.
+  [linear r096 A]  17.0s  rhat_reg 1.011  div 0  (286/300, 78.3 min, ETA 4 min)
+standardize_covariates: standardized 2 covariate(s) in long_formula (age: centre -1.501, scale 9.141, implied intercept correlation -0.16; sex: centre 0.4439, scale 0.4969, implied intercept correlation -0.67). Coefficients are returned on the ORIGINAL scale. Set control$standardize_covariates = FALSE to disable.
+sys:1: RuntimeWarning: orthogonalize_b: b[:,0] <- 3 direction(s) from X columns [0, 2, 3]; b[:,1] <- no basis (unconstrained)
+  [linear r096 D]  13.5s  rhat_reg 1.014  div 0  (287/300, 78.6 min, ETA 4 min)
+standardize_covariates: standardized 2 covariate(s) in long_formula (age: centre -1.501, scale 9.141, implied intercept correlation -0.16; sex: centre 0.4439, scale 0.4969, implied intercept correlation -0.67). Coefficients are returned on the ORIGINAL scale. Set control$standardize_covariates = FALSE to disable.
+sys:1: RuntimeWarning: orthogonalize_b: b[:,0] <- 3 direction(s) from X columns [0, 2, 3]; b[:,1] <- no basis (unconstrained)
+  [linear r096 D_rot]  22.6s  rhat_reg 1.003  div 0  (288/300, 78.9 min, ETA 3 min)
+standardize_covariates: standardized 2 covariate(s) in long_formula (age: centre -0.1251, scale 10.71, implied intercept correlation -0.01; sex: centre 0.5057, scale 0.5001, implied intercept correlation -0.71). Coefficients are returned on the ORIGINAL scale. Set control$standardize_covariates = FALSE to disable.
+  [linear r097 A]  12.9s  rhat_reg 1.016  div 0  (289/300, 79.2 min, ETA 3 min)
+standardize_covariates: standardized 2 covariate(s) in long_formula (age: centre -0.1251, scale 10.71, implied intercept correlation -0.01; sex: centre 0.5057, scale 0.5001, implied intercept correlation -0.71). Coefficients are returned on the ORIGINAL scale. Set control$standardize_covariates = FALSE to disable.
+sys:1: RuntimeWarning: orthogonalize_b: b[:,0] <- 3 direction(s) from X columns [0, 2, 3]; b[:,1] <- no basis (unconstrained)
+  [linear r097 D]  13.4s  rhat_reg 1.009  div 0  (290/300, 79.4 min, ETA 3 min)
+standardize_covariates: standardized 2 covariate(s) in long_formula (age: centre -0.1251, scale 10.71, implied intercept correlation -0.01; sex: centre 0.5057, scale 0.5001, implied intercept correlation -0.71). Coefficients are returned on the ORIGINAL scale. Set control$standardize_covariates = FALSE to disable.
+sys:1: RuntimeWarning: orthogonalize_b: b[:,0] <- 3 direction(s) from X columns [0, 2, 3]; b[:,1] <- no basis (unconstrained)
+  [linear r097 D_rot]  22.5s  rhat_reg 1.001  div 0  (291/300, 79.8 min, ETA 2 min)
+standardize_covariates: standardized 2 covariate(s) in long_formula (age: centre -0.4027, scale 9.946, implied intercept correlation -0.04; sex: centre 0.4076, scale 0.4915, implied intercept correlation -0.64). Coefficients are returned on the ORIGINAL scale. Set control$standardize_covariates = FALSE to disable.
+  [linear r098 A]  12.9s  rhat_reg 1.011  div 0  (292/300, 80.0 min, ETA 2 min)
+standardize_covariates: standardized 2 covariate(s) in long_formula (age: centre -0.4027, scale 9.946, implied intercept correlation -0.04; sex: centre 0.4076, scale 0.4915, implied intercept correlation -0.64). Coefficients are returned on the ORIGINAL scale. Set control$standardize_covariates = FALSE to disable.
+sys:1: RuntimeWarning: orthogonalize_b: b[:,0] <- 3 direction(s) from X columns [0, 2, 3]; b[:,1] <- no basis (unconstrained)
+  [linear r098 D]  17.2s  rhat_reg 1.000  div 0  (293/300, 80.3 min, ETA 2 min)
+standardize_covariates: standardized 2 covariate(s) in long_formula (age: centre -0.4027, scale 9.946, implied intercept correlation -0.04; sex: centre 0.4076, scale 0.4915, implied intercept correlation -0.64). Coefficients are returned on the ORIGINAL scale. Set control$standardize_covariates = FALSE to disable.
+sys:1: RuntimeWarning: orthogonalize_b: b[:,0] <- 3 direction(s) from X columns [0, 2, 3]; b[:,1] <- no basis (unconstrained)
+  [linear r098 D_rot]  18.4s  rhat_reg 1.003  div 0  (294/300, 80.6 min, ETA 2 min)
+standardize_covariates: standardized 2 covariate(s) in long_formula (age: centre -0.1827, scale 9.26, implied intercept correlation -0.02; sex: centre 0.5358, scale 0.4988, implied intercept correlation -0.73). Coefficients are returned on the ORIGINAL scale. Set control$standardize_covariates = FALSE to disable.
+  [linear r099 A]  17.5s  rhat_reg 1.029  div 0  (295/300, 80.9 min, ETA 1 min)
+standardize_covariates: standardized 2 covariate(s) in long_formula (age: centre -0.1827, scale 9.26, implied intercept correlation -0.02; sex: centre 0.5358, scale 0.4988, implied intercept correlation -0.73). Coefficients are returned on the ORIGINAL scale. Set control$standardize_covariates = FALSE to disable.
+sys:1: RuntimeWarning: orthogonalize_b: b[:,0] <- 3 direction(s) from X columns [0, 2, 3]; b[:,1] <- no basis (unconstrained)
+  [linear r099 D]  13.5s  rhat_reg 1.001  div 0  (296/300, 81.1 min, ETA 1 min)
+standardize_covariates: standardized 2 covariate(s) in long_formula (age: centre -0.1827, scale 9.26, implied intercept correlation -0.02; sex: centre 0.5358, scale 0.4988, implied intercept correlation -0.73). Coefficients are returned on the ORIGINAL scale. Set control$standardize_covariates = FALSE to disable.
+sys:1: RuntimeWarning: orthogonalize_b: b[:,0] <- 3 direction(s) from X columns [0, 2, 3]; b[:,1] <- no basis (unconstrained)
+  [linear r099 D_rot]  22.8s  rhat_reg 1.008  div 0  (297/300, 81.5 min, ETA 1 min)
+standardize_covariates: standardized 2 covariate(s) in long_formula (age: centre -0.521, scale 10.11, implied intercept correlation -0.05; sex: centre 0.4233, scale 0.4942, implied intercept correlation -0.65). Coefficients are returned on the ORIGINAL scale. Set control$standardize_covariates = FALSE to disable.
+  [linear r100 A]  13.3s  rhat_reg 1.005  div 0  (298/300, 81.7 min, ETA 1 min)
+standardize_covariates: standardized 2 covariate(s) in long_formula (age: centre -0.521, scale 10.11, implied intercept correlation -0.05; sex: centre 0.4233, scale 0.4942, implied intercept correlation -0.65). Coefficients are returned on the ORIGINAL scale. Set control$standardize_covariates = FALSE to disable.
+sys:1: RuntimeWarning: orthogonalize_b: b[:,0] <- 3 direction(s) from X columns [0, 2, 3]; b[:,1] <- no basis (unconstrained)
+  [linear r100 D]  12.9s  rhat_reg 1.000  div 0  (299/300, 81.9 min, ETA 0 min)
+standardize_covariates: standardized 2 covariate(s) in long_formula (age: centre -0.521, scale 10.11, implied intercept correlation -0.05; sex: centre 0.4233, scale 0.4942, implied intercept correlation -0.65). Coefficients are returned on the ORIGINAL scale. Set control$standardize_covariates = FALSE to disable.
+sys:1: RuntimeWarning: orthogonalize_b: b[:,0] <- 3 direction(s) from X columns [0, 2, 3]; b[:,1] <- no basis (unconstrained)
+  [linear r100 D_rot]  22.3s  rhat_reg 1.005  div 0  (300/300, 82.3 min, ETA 0 min)
+
+
+Convergence gate (regression-only R-hat <= 1.05): 1594 of 1600 rows kept
+dropped per design x arm:
+        
+         D
+  linear 6
+
+=========================================================================
+ CALIBRATION. coverage = fraction of replicates containing the truth.
+ sd_ratio = mean(posterior SD) / SD(posterior means); 1 is calibrated,
+ below 1 means intervals too narrow. bias is in MC standard errors.
+=========================================================================
+
+design   arm  param          n   cov50   cov80   cov95  sd_ratio  bias/se
+linear   A    beta_0       100   0.490   0.870   0.990     1.164     1.68
+linear   D    beta_0        99   0.152   0.242   0.323     0.262     1.13
+linear   D_rot beta_0       100   0.150   0.240   0.320     0.263     1.23
+linear   A    beta_slope   100   0.490   0.820   0.970     1.027    -0.30
+linear   D    beta_slope    99   0.475   0.838   0.960     1.032    -0.19
+linear   D_rot beta_slope   100   0.460   0.840   0.950     1.035    -0.28
+linear   A    alpha        100   0.480   0.800   0.930     0.922     2.97
+linear   D    alpha         99   0.465   0.788   0.929     0.920     2.91
+linear   D_rot alpha        100   0.470   0.770   0.930     0.921     2.96
+linear   A    sigma_b0     100   0.510   0.830   0.940     0.914     0.63
+linear   D    sigma_b0      99   0.475   0.838   0.929     0.906     0.58
+linear   D_rot sigma_b0     100   0.500   0.840   0.930     0.910     0.71
+linear   D    beta_0_corrected   99   0.515   0.859   0.990     1.164     1.52
+linear   D_rot beta_0_corrected  100   0.490   0.870   0.990     1.156     1.55
+linear   D    beta_slope_corrected   99   0.475   0.838   0.960     1.032    -0.19
+linear   D_rot beta_slope_corrected  100   0.460   0.840   0.950     1.035    -0.28
+
+Monte Carlo SE on 95% coverage at these counts: ~0.011
+
+Read this against arm A. A departure shared by A, D and E is a
+property of the model or these settings, not of orthogonalization.
+alpha is the negative control: no arm should move it.

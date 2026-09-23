@@ -1,0 +1,49 @@
+
+ESS pilot: n = 300, 500 warmup + 1000 samples x 2 chains, 3 seed(s)
+design: y ~ time + age + sex
+
+standardize_covariates: standardized 2 covariate(s) in long_formula (age: centre -0.5688, scale 9.371, implied intercept correlation -0.06; sex: centre 0.5134, scale 0.4999, implied intercept correlation -0.72). Coefficients are returned on the ORIGINAL scale. Set control$standardize_covariates = FALSE to disable.
+  [seed 1 arm A] 13.7s  max R-hat 1.025
+standardize_covariates: standardized 2 covariate(s) in long_formula (age: centre -0.5688, scale 9.371, implied intercept correlation -0.06; sex: centre 0.5134, scale 0.4999, implied intercept correlation -0.72). Coefficients are returned on the ORIGINAL scale. Set control$standardize_covariates = FALSE to disable.
+sys:1: RuntimeWarning: orthogonalize_b: b[:,0] <- 3 direction(s) from X columns [0, 2, 3]; b[:,1] <- 1 direction(s) from X columns [1]
+  [seed 1 arm E] 13.6s  max R-hat 1.017
+standardize_covariates: standardized 2 covariate(s) in long_formula (age: centre 0.1636, scale 9.871, implied intercept correlation -0.02; sex: centre 0.5319, scale 0.4991, implied intercept correlation -0.73). Coefficients are returned on the ORIGINAL scale. Set control$standardize_covariates = FALSE to disable.
+  [seed 2 arm A] 13.4s  max R-hat 1.002
+standardize_covariates: standardized 2 covariate(s) in long_formula (age: centre 0.1636, scale 9.871, implied intercept correlation -0.02; sex: centre 0.5319, scale 0.4991, implied intercept correlation -0.73). Coefficients are returned on the ORIGINAL scale. Set control$standardize_covariates = FALSE to disable.
+sys:1: RuntimeWarning: orthogonalize_b: b[:,0] <- 3 direction(s) from X columns [0, 2, 3]; b[:,1] <- 1 direction(s) from X columns [1]
+  [seed 2 arm E] 13.6s  max R-hat 1.004
+standardize_covariates: standardized 2 covariate(s) in long_formula (age: centre -0.3036, scale 9.821, implied intercept correlation -0.03; sex: centre 0.495, scale 0.5001, implied intercept correlation -0.70). Coefficients are returned on the ORIGINAL scale. Set control$standardize_covariates = FALSE to disable.
+  [seed 3 arm A] 13.3s  max R-hat 1.005
+standardize_covariates: standardized 2 covariate(s) in long_formula (age: centre -0.3036, scale 9.821, implied intercept correlation -0.03; sex: centre 0.495, scale 0.5001, implied intercept correlation -0.70). Coefficients are returned on the ORIGINAL scale. Set control$standardize_covariates = FALSE to disable.
+sys:1: RuntimeWarning: orthogonalize_b: b[:,0] <- 3 direction(s) from X columns [0, 2, 3]; b[:,1] <- 1 direction(s) from X columns [1]
+  [seed 3 arm E] 13.8s  max R-hat 1.030
+
+=========================================================================
+ ESS of the CONSTRAINED estimand (E/beta) vs the IDENTIFIED one
+ (E/beta_corrected), against a default fit (A/beta) as reference.
+ beta_corrected is what a user may report; its ESS is the figure that
+ decides whether the efficiency gain is usable.
+=========================================================================
+
+param       quantity            n       ESS     ESS/sec   R-hat
+beta_0      A / beta            3     415.1       30.82   1.002
+beta_0      E / beta            3    3467.2      253.71   1.001
+beta_0      E / beta_corrected    3     405.0       29.68   1.030
+
+beta_slope  A / beta            3     199.2       14.80   1.025
+beta_slope  E / beta            3    2527.7      185.18   1.000
+beta_slope  E / beta_corrected    3     224.1       16.41   1.017
+
+-------------------------------------------------------------------------
+ The decisive ratios (ESS/sec relative to a default fit):
+
+  beta_0       E/beta   8.23x    E/beta_corrected   0.96x
+  beta_slope   E/beta  12.51x    E/beta_corrected   1.11x
+
+ Read the SECOND column. If it is close to the first, the efficiency
+ gain survives the correction and the option delivers a reportable
+ speedup. If it is close to 1.00x, the gain is confined to an estimand
+ that cannot be reported, and the headline claim needs restating.
+
+ 3 seed(s) only - this is a pilot. Treat a ratio near the
+ boundary as undecided rather than as a result.
