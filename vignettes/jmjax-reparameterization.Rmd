@@ -1,8 +1,8 @@
 ---
-title: "Location Degeneracy in jmjax's Joint Model: Diagnosis, a NUTS-Compatible Reparameterization, and Why It Beats JMbayes2 More on Regression Parameters Than on Nuisance Parameters"
+title: "Location Degeneracy in jmjax's Joint Model: Diagnosis, an Exact Rotation, and the Comparison with JMbayes2"
 output: rmarkdown::html_vignette
 vignette: >
-  %\VignetteIndexEntry{jmjax: Location Degeneracy, Reparameterization, and the JMbayes2 Comparison}
+  %\VignetteIndexEntry{jmjax: Location Degeneracy, an Exact Rotation, and the JMbayes2 Comparison}
   %\VignetteEngine{knitr::rmarkdown}
   %\VignetteEncoding{UTF-8}
 ---
@@ -16,121 +16,63 @@ knitr::opts_chunk$set(
 
 ## Abstract
 
-`jmjax` samples joint longitudinal-survival models with NUTS/HMC and, on
-identical data, mixes substantially better than `JMbayes2`'s block-Gibbs/
-Metropolis sampler - most robustly, and independently of any optional
-reparameterization, on the association parameter a joint-model analysis is
-usually run to estimate, where the advantage is several-fold to an order of
-magnitude (Sections 6.3, 7.1, 8). This document does six things. First, it names the mechanism precisely: a location degeneracy
-between subject-constant fixed effects and the matching linear combination
-of correlated random effects, which the likelihood pins only through their
-*sum*. This is not specific to the random intercept - this document shows,
-and traces to source, that the same degeneracy recurs for the random
-*slope* on time, independently of how many other covariates are in the
-model. Second, it describes `jmjax`'s fix (`control$orthogonalize_b0` /
-`orthogonalize_b`), a NUTS-space reparameterization that removes the
-absorbable directions from the random-effect prior rather than imposing an
-exact constraint, and explains concretely why it is a different (and, on
-current evidence, better-behaved) approach than an earlier, already-retracted
-attempt at the same problem (`wishart_gibbs_centered`). Third, it gives the
-fix a formal treatment: a precise definition of the absorbable set, an
-exact characterization of it, and a proof that the construction removes
-only genuinely absorbable directions - so that the model is provably, not
-just empirically, unchanged. The same analysis shows the construction is
-*not* complete: because it inspects one design column at a time while the
-absorbable set depends only on the column space, a spline or
-orthogonal-polynomial longitudinal mean paired with a random slope defeats
-it silently, and a basis-independent replacement is given - and now ships.
-Fourth, it settles the question the first draft left open, and the answer
-is two-sided. Posterior calibration *fails* for the reparameterized
-coordinates: credible intervals for exactly the swept parameters come back
-too narrow by close to the predicted $\sigma_b/\sqrt{N}$, reproducing the
-failure mode that retracted `wishart_gibbs_centered`, while point
-estimates stay unbiased - which is precisely why a bias check would have
-passed it. But the damage is to the *coordinates*, not the target, and it
-is exactly removable: a closed-form, unit-Jacobian affine map carries the
-reparameterized draws back onto the identified ones, using quantities the
-same fit already stores and requiring no refit. The correction is proved
-exact for the likelihood, shown to differ from the unconstrained posterior
-only by an explicit prior-invariance weight that is negligible under any
-diffuse prior on $\beta$, and measured to restore both coverage and
-interval width. Fifth, it
-reports a replicated simulation study across a covariate-count sweep (k = 1, 4, 8, 12
-extra covariates) and an independent real-data check (the `aids` clinical
-trial data, never used to build any of the diagnostics below), both showing
-the same pattern: the *swept-coefficient* efficiency advantage over
-`JMbayes2` is large, statistically significant, and *does not grow with
-covariate count* - because its dominant source is the covariate-count-
-independent slope degeneracy, not the covariate-count-dependent one. A
-separate, k-dependent effect is `JMbayes2`'s own catastrophic loss of
-convergence on its random-effects covariance parameter as covariate count
-grows (max R-hat past 10,000 at k = 12), which inflates naive "jmjax vs
-JMbayes2" ratios for reasons that have nothing to do with `jmjax`'s
-reparameterization. Sixth - and this changes the document's central claim -
-it measures the effective sample size of the corrected estimand itself,
-`beta_corrected` in Section 4.9's terms, and finds that the large advantage
-just described for the *swept* coordinate does not transfer to it: a pilot
-measurement puts the reportable estimand's gain at roughly 1.25x-1.31x, not
-an order of magnitude. Read together with a direct, reparameterization-
-independent measurement of the *association parameter* `alpha` - the
-quantity a joint-model analysis is usually run to estimate - the picture
-that emerges is a reallocation of `jmjax`'s central claim, not a loss of
-it: a default, non-orthogonalized fit already beats `JMbayes2` on `alpha`'s
-own ESS/second by 2.44x on real data and 5.7x-8.1x in simulation, with the
-reparameterization option contributing little on top (roughly 1.0x-1.5x,
-inconsistently across the two datasets). The large, robust, well-evidenced
-advantage is therefore Layer 1 - `jmjax`'s generic NUTS/HMC engine against
-`JMbayes2`'s block sampler (Section 8.1), now demonstrated directly rather
-than only argued for - and it needs no reparameterization option to hold.
-`orthogonalize_b0`/`orthogonalize_b` remains a genuine, worthwhile
-contribution on its own, narrower terms: it diagnoses and fixes a real
-identifiability bug that silently miscalibrates credible intervals for
-swept coefficients (Section 9.1), exactly as an earlier, retracted attempt
-at the same problem did, with a closed-form, verified correction - but its
-efficiency benefit for the coefficients it targets, once measured on
-coordinates a user may actually report, is modest, not dramatic. A late
-follow-up (Section 9.1.2), added after the claim above was set, finds
-that a further, currently experimental reparameterization
-(`orthogonalize_b0_rotate`) recovers most of `beta_corrected`'s missing
-efficiency - roughly 5x-8x over a default fit across three small pilots
-and two baseline-hazard forms - while leaving calibration unchanged
-within Monte Carlo noise on the one design checked so far. It is reported
-for completeness, because the evidence is consistent across every
-configuration tried, not because it has yet received the breadth of
-validation (multiple designs, real data, the random-slope column) the
-rest of this document's claims have. Section 4.10 proves the construction exact, shows that a conditioning
-effect of NUTS's diagonal mass matrix is sufficient to explain its gain
-without the funnel-type pathology first suspected, and derives an extension to the
-random-slope column that remains to be implemented and tested. The document closes by connecting
-this to established reparameterization and MCMC literature, including the
-specific point (Geyer, 1992) that explains why a sampled coordinate can
-mix beautifully while the linear combination needed to recover the
-identified quantity does not.
+`jmjax` fits joint longitudinal-survival models with NUTS/HMC. This
+document concerns one geometric obstacle those fits share with every
+hierarchical regression: a *location degeneracy*. The likelihood pins the
+sum of a subject-constant fixed effect and the matching linear combination
+of the random effects, but not the split between them. Section 3 names the
+mechanism and traces it to source, including a finding that is easy to
+miss. The same degeneracy recurs between the fixed slope on time and the
+mean random slope, for any model with a random slope, whatever the number
+of covariates.
+
+Section 4 characterizes exactly which random-effect directions are
+absorbable, gives a basis-independent construction, and states the
+condition the survival submodel imposes. Section 5 uses that basis
+for an exact rotation (`control$rotate_absorbable`). Every random-effect
+column is rotated by one fixed orthogonal matrix, so the absorbable
+directions become an explicit, small block of sampling coordinates. The
+fixed effects and that block then get a single small dense mass-matrix
+block (`control$dense_mass_generator_beta`). The rotation changes no
+prior, no likelihood and no reported quantity: it only changes which
+coordinates NUTS adapts to.
+
+In simulation (Section 6), the rotation raises the effective sample size
+per second of the regression coefficients a user reports to roughly 8x-25x
+(intercept) and 8x-60x (time slope) a default fit's, across ten designs, at the same wall time,
+with coverage in a 100-replicate calibration study identical to the
+default fit's. Section 8 separates this from the larger comparison with
+`JMbayes2`. There, `jmjax`'s default fit already mixes the association
+parameter `alpha` 2.4x-8x faster, a generic NUTS-versus-block-Gibbs effect
+that needs no reparameterization.
+
+An earlier approach, which swept the absorbable directions out of the
+random effects instead of rotating them, is retired. It is documented in
+the package repository's development record
+(`dev/notes/sweep-reparameterization.md`).
+
+> **Draft note.** This vignette is being rewritten around the rotation.
+Section 5.2 (where the degeneracy goes under the rotation, and what the
+dense block can and cannot do) and Section 7 (real data) are pending.
 
 ## 1. Motivation
 
 Across every real and simulated dataset `jmjax` has been benchmarked on, its
 NUTS/HMC sampler mixes better than `JMbayes2`'s sampler - sometimes by a
-modest, explainable margin (Section 7, and the existing benchmark section of
-`vignette("jmjax-validation")`), sometimes by a striking one. The striking
-cases concentrate on regression parameters, are essentially unaffected by
-whether `JMbayes2`'s *own* diagnostics have converged, and get *more*
-striking, not less, as the number of covariates grows - but, as this
-document shows, for a more specific and more interesting reason than "more
-covariates favor gradient-based samplers" in general.
+modest, explainable margin, sometimes by a striking one. Two different
+things contribute, and they should not be conflated. One is generic: a
+gradient-based sampler that moves all parameters jointly is not slowed by
+inter-block correlation the way a block-Gibbs sampler is (Sections 2.4,
+8). The other is specific to this model class: a location degeneracy
+between fixed and random effects that slows *any* sampler on the
+regression coefficients, including `jmjax`'s own default fit, and that a
+targeted reparameterization can remove (Sections 3-6).
 
-This is worth writing up carefully rather than reporting only the headline
-ratios, for two reasons. First, the mechanism is real, reproducible, and -
-as far as a genuine literature search turned up - not previously documented
-in exactly this form (Section 2.6), which makes it worth a citable record
-rather than only inline code comments. Second, an honest accounting has to
-separate what is actually attributable to `jmjax`'s design (a targeted
-reparameterization of a diagnosed degeneracy) from what is actually
-attributable to `JMbayes2`'s degradation under conditions its sampler was
-not designed to be robust to (Section 8). Conflating the two would overstate
-`jmjax`'s novelty on the axis where the advantage is smallest (nuisance
-parameters) and understate the well-grounded, citable case for it on the
-axis where the advantage is largest (regression parameters).
+This is worth writing up carefully rather than reporting only headline
+ratios. The mechanism is real, reproducible, and - as far as a literature
+search turned up - not previously documented in exactly this form for
+joint models (Section 2.6). And an honest accounting has to say which part
+of the advantage belongs to which cause.
 
 ## 2. Background: reparameterization in hierarchical Bayesian models
 
@@ -201,7 +143,7 @@ directly:
 | Identified (single intercept) | ~3 | ~31,000 | 1.0 |
 
 The "weakly identified" row is the mechanistically exact analogue of
-`jmjax`'s default (non-orthogonalized) fit: `jmjax` does not leave `beta_0`
+`jmjax`'s default fit: `jmjax` does not leave `beta_0`
 and `mean(b_i0)` entirely unconstrained (that would be improper), it
 constrains their *split* only through the prior on the random effects, at
 scale `sigma_b0/sqrt(N)` - a weak, N-dependent identifying prior in
@@ -228,7 +170,7 @@ mechanism from the location degeneracy itself: it does not require an
 unidentified direction, only a strongly correlated one, and it predicts
 degradation that tracks *inter-block correlation growing with problem size*
 even in a model that is *fully* identified everywhere - which is exactly
-the shape of the `JMbayes2` covariance-collapse finding in Section 6.4.
+the shape of the `JMbayes2` covariance-collapse finding in Section 8.2.
 
 ### 2.5 Applied precedent
 
@@ -259,7 +201,7 @@ contribution - not a rediscovery of general theory.
 
 Geyer (1992), "Practical Markov Chain Monte Carlo," *Statistical Science*,
 7(4), 473-483, is the classical reference for a fact that becomes
-load-bearing in Section 9: effective sample size and Monte Carlo standard
+load-bearing in Sections 5 and 6: effective sample size and Monte Carlo standard
 error are defined with respect to a *specific scalar function* of the
 chain being averaged, not as a property of the sampler or the state vector
 in the abstract. Two different linear functionals of the same joint draws
@@ -267,8 +209,8 @@ in the abstract. Two different linear functionals of the same joint draws
 coordinate with another block entirely - can therefore have arbitrarily
 different effective sample sizes even though they come from the identical
 run. This is not a surprising or unusual fact in the MCMC literature; it
-is why Section 9.1.1's correction needed its own, separate ESS measurement
-rather than inheriting the swept coordinate's.
+is why Section 6 measures ESS on the coefficients a user reports, not on
+whatever coordinates the sampler happens to use internally.
 
 ## 3. The location degeneracy in jmjax's joint model
 
@@ -315,94 +257,53 @@ must otherwise absorb. It is documented in the package as exploratory only,
 not recommended for final inference. This episode matters for what follows
 in two ways: it establishes that this general class of problem is not
 solved just by "removing" the degeneracy by any means available, and it is
-the point of comparison Section 3.5 returns to.
+the point of comparison Section 3.4 returns to.
 
-### 3.3 The new finding this document adds: the same degeneracy recurs for the random slope, independently of covariate count
+### 3.3 The same degeneracy recurs for the random slope, independently of covariate count
 
-The session behind this document set out to characterize how `jmjax`'s
-efficiency advantage over `JMbayes2` scales with the number of covariates
-`k`, on the hypothesis (reasonable a priori, and the initial motivating
-observation) that more covariates create more room for `beta_0`-type
-degeneracies and so a larger advantage for the orthogonalized fit. A fast
-`n = 500`, `k in {1, 3}` readout initially seemed to support this - but it
-was a single seed per cell, and the much larger, replicated sweep in
-Section 6 overturns it: the regression-parameter advantage of full
-orthogonalization (`orthogonalize_b`, "arm E" below) over the default fit
-("arm A") is **flat across k = 1, 4, 8, 12** (roughly 11-15x throughout, no
-trend - Table 6.3), not growing with covariate count as first guessed.
-
-The explanation, verified directly against `jmjax`'s own source
-(`inst/python/jmjax_backend/mcmc_model.py`, the `_absorbable_basis`
-function), is that the *dominant* win from full orthogonalization is not
-the `k`-dependent, `beta_0`-type degeneracy at all. It is a **second,
-separate degeneracy between the fixed slope coefficient `beta_1` (the
-population-average coefficient on `time`) and the population *mean* of the
-random slopes, `mean(b_i1)`** - and this one is present as soon as there is
-*any* random slope on time, regardless of how many other covariates are in
-the model. `_absorbable_basis`'s own docstring states this plainly, in code
-that is data-driven (it does not hard-code which columns are absorbable; it
-discovers them from the actual design matrices at fit time):
+The intercept-level degeneracy grows with the number of subject-constant
+covariates, since each adds one absorbable direction. A second degeneracy
+does not grow with them at all. It lies between the fixed slope on `time`,
+`beta_1`, and the population *mean* of the random slopes, `mean(b_i1)`, and
+it is present as soon as there is any random slope on time. `jmjax`'s
+basis construction finds it from the design matrices rather than assuming
+it. The docstring of `_absorbable_basis` (`inst/python/jmjax_backend/absorbable.py`)
+states it plainly:
 
 > "For q = 1 (a random slope on time) it picks up `time` itself, giving the
 > sum-to-zero constraint on b_1, and would also pick up any
 > covariate-by-time interaction present in X."
 
-That is: whenever the fixed-effects design includes a `time` column (as any
-model with a fixed slope on time does) and there is a correlated random
-slope on time, the fixed slope and the mean random slope are aliased in
-exactly the same "sum is identified, split is not" sense as the intercept
-case - and this holds at `k = 0` extra covariates just as much as at
-`k = 12`. This was directly confirmed by the replicated log in Section 6:
-across every `k` tested, the *binding* (lowest-ESS) regression parameter
-under the default fit is consistently `beta_1`, never one of the `k`
-covariate coefficients themselves - and `orthogonalize_b` (which sweeps the
-slope column too; `orthogonalize_b0` does not) is what fixes it, cleanly and
-consistently, at every `k`.
+Whenever the fixed-effects design includes a `time` column and there is a
+correlated random slope on time, the fixed slope and the mean random slope
+are aliased in exactly the same "sum is identified, split is not" sense as
+the intercept case. This holds with no extra covariates just as much as
+with twelve. It shows up directly in the measurements. In a replicated
+covariate-count sweep (k = 1, 4, 8, 12; recorded in the development record,
+Section 6), the binding - lowest-ESS - regression parameter under the
+default fit was `beta_1` at every `k`, never one of the covariate
+coefficients. In Section 6's grid, the default fit's time slope mixes
+slowest of the three monitored parameters in 7 of the 10 cells.
 
-### 3.4 The fix: `orthogonalize_b0` / `orthogonalize_b`
+### 3.4 Addressing it: rotate, don't constrain
 
-`control$orthogonalize_b0` (intercept column only) and `control$orthogonalize_b`
-(every random-effect column, i.e. intercept and slope) implement a NUTS-space
-reparameterization rather than an exact Gibbs constraint. For each
-random-effect column `q`, `_absorbable_basis()` inspects the actual (not
-assumed) fixed-effects design `X` and random-effects design `Z` and
-constructs an orthonormal basis `Q` for exactly the subject-level directions
-that some fixed-effects column can reproduce - i.e. the directions a shift
-in `b[:, q]` could equivalently be expressed as a shift in `beta`. The
-sampled random-effect column is then replaced by its residual off that
-column space (its projection onto the orthogonal complement of `Q`), so the
-degenerate directions are simply never given to the sampler as free
-parameters in the first place; everything the likelihood cannot separately
-identify about that direction is left entirely to `beta`, exactly as it
-should be.
-
-**The model is unchanged.** Every direction swept out of a random-effect
-column lies in a column space `beta` already spans, so for any posterior
-draw there exists a shift of `beta` that reproduces identical fitted values
-- the set of achievable mean structures is exactly the same before and
-after. What changes is only which parameterization NUTS samples in. Section 4 proves this (Corollary 1), and Section 5 verifies it
-empirically - "the algebra says so" and "the implementation does what the
-algebra says" are different claims, and both are now addressed: the first
-in Section 4, the second at general `k` in Section 5. Section 4 also shows
-that the *converse* claim - that the construction removes every absorbable
-direction - holds only under a condition on the design basis that a spline
-or orthogonal-polynomial longitudinal mean violates (Section 4.5).
-
-The option is data-driven rather than assumption-driven in a second sense
-worth noting: if the design has no intercept and no column matching a
-random-effect term, `_absorbable_basis` returns no basis and the option is
-a documented no-op with a warning, rather than silently doing nothing or
-erroring. The implementation also reports, via a `RuntimeWarning` at fit
-time, exactly which basis (if any) was constructed for each column and from
-which `X` columns - the log excerpts quoted in Section 6 include these
-messages verbatim, which is what makes it possible to state with confidence
-*which* directions were actually removed on each run, rather than inferring
-it indirectly from downstream ESS numbers.
+There are two obvious ways to deal with a degeneracy of this kind. One is
+to remove it: constrain or project the random effects so the absorbable
+directions are no longer free. `jmjax` tried this twice. An exact
+sum-to-zero Gibbs constraint (`wishart_gibbs_centered`, Section 3.2)
+miscalibrated `beta_0`'s intervals. A NUTS-space projection
+(`orthogonalize_b0`/`orthogonalize_b`) did the same until an exact
+correction was derived, after which its reportable efficiency gain was
+modest. Both are retired; the second is documented in full in the
+development record. The other way leaves the model and its coordinates'
+meaning alone, and changes only which coordinates the sampler adapts to.
+That is what `jmjax` does (Section 5). Section 4 characterizes the
+directions involved, since the rotation needs a basis for them.
 
 ### 3.5 Previously-measured magnitude, real data
 
-Prior to this document, `orthogonalize_b0`'s own package documentation
-(`?jm_fit`) already recorded a direct measurement on the `pbc2` dataset
+The package documentation for the retired sweep option (`?jm_fit`,
+`orthogonalize_b0`) recorded a direct measurement on the `pbc2` dataset
 (n = 312, 4 chains x 1000 draws, figures reported in the space NUTS actually
 samples): with an intercept and one baseline covariate in the design,
 
@@ -414,54 +315,18 @@ samples): with an intercept and one baseline covariate in the design,
   2893 and >4000 for the corresponding *identified sums* - a recoverable
   factor of **6.6x and >7.6x**.
 
-### 3.6 Why this is not the same fix as `wishart_gibbs_centered`, and what has *not* yet been checked
+## 4. The absorbable directions: definition, characterization, construction
 
-Directly on the same `pbc2` data, `wishart_gibbs_centered` (which pins only
-`mean(b_i0)` at exactly zero, removing one direction of the degeneracy) is
-recorded as moving `beta_0`'s ESS 441 -> 1490, but `beta_2`'s ESS 526 -> 291
-- *worse* than doing nothing for the second parameter, because pinning one
-direction of a two-dimensional degeneracy does not remove the other.
-`orthogonalize_b0`/`orthogonalize_b` differ in two structural ways: they
-identify *all* absorbable directions per column from the actual design
-(not just the intercept's own), and they operate as a continuous
-reparameterization inside the space NUTS explores with gradients, rather
-than as an exact constraint imposed by a separate Gibbs step. This is why
-the fix generalizes correctly to the multi-covariate case where the earlier
-one did not.
-
-It is important to be equally direct about where the two constructions turn
-out to be *alike*. `wishart_gibbs_centered`'s efficiency gain was checked
-for calibration and found wanting (Section 3.2). An earlier version of this
-document argued that `orthogonalize_b0`/`orthogonalize_b` had a plausible
-mechanistic reason to behave differently on that axis, since they change
-the prior's *support* rather than pinning a specific value the way an exact
-zero-sum constraint does, and listed the check as the single most important
-piece of unfinished work.
-
-The check has now been run, and that argument was wrong: on the
-reparameterized coordinates these options miscalibrate in the same way and
-for the same reason (Section 9.1). What differs is the remedy. Because the
-damage here is confined to the coordinates in which the sampler reports -
-the likelihood is untouched, by Corollary 1 - the discarded uncertainty can
-be put back exactly, in closed form, from the draws the same fit already
-produced (Section 4.9). No analogous closed-form recovery exists for an
-exact Gibbs constraint, which destroys the information rather than
-relocating it. That is the substantive difference between the two
-approaches, and it is a sharper one than the argument it replaces.
-
-## 4. Formal correctness of the absorbable-basis construction
-
-Section 3.4 states, informally, that `_absorbable_basis` removes exactly
-the directions the fixed effects can absorb, and that the model is
-therefore unchanged. Section 5 checks the consequence empirically. This
-section states and proves the claim, and in doing so establishes three
-things the informal argument does not: a precise condition under which the
-construction is sound for the *joint* model rather than the longitudinal
-submodel alone (Section 4.4), a precise condition under which it is
-*complete*, together with a natural design where completeness fails
-(Section 4.5), and a stronger justification than uniformity for the
-treatment of subjects whose longitudinal data does not determine their own
-ratio (Section 4.6).
+The rotation of Section 5 is exact for *any* fixed orthogonal matrix. What
+the basis controls is whether the rotation does anything useful. It should
+contain every absorbable direction (completeness), so that none is left
+spread across the per-subject coordinates. And it should contain only
+absorbable directions (soundness), so that it does not spend the explicit
+block on directions the data already pin down. This section states and
+proves both properties for the joint model, gives a natural design where
+the obvious column-wise construction is *not* complete, together with its
+basis-independent repair (Section 4.5), and settles how subjects whose own
+data do not determine their direction should be treated (Section 4.6).
 
 ### 4.1 Notation
 
@@ -617,7 +482,7 @@ resting on the argument above. This is recommended in Section 4.8.
 
 ### 4.5 Completeness, and a design where it fails
 
-Soundness says nothing is wrongly swept. Completeness - that nothing
+Soundness says nothing is wrongly treated as absorbable. Completeness - that nothing
 absorbable is *missed* - is a separate claim, and it is the one that does
 not hold in general.
 
@@ -679,11 +544,10 @@ $\operatorname{span}(X)$, whereas the construction's answer depends on
 which basis of that span `model.matrix()` happens to emit. That gap is the
 precise statement of the limitation.
 
-Its practical consequence is sharper than the generic caution in
-Section 9.2. With a spline or orthogonal-polynomial longitudinal mean and a
+Its practical consequence is sharper than a generic caution. With a spline or orthogonal-polynomial longitudinal mean and a
 random slope, the column-wise construction silently failed to remove the
 $\beta_1 \leftrightarrow \overline{b_{i1}}$ degeneracy that Section 3.3
-identifies as the *dominant* source of the efficiency advantage - and the
+identifies as the one present in every model with a random slope - and the
 existing no-op warning would not fire, because the intercept column still
 yields a basis (verified: in Example 1 the intercept column returns one
 direction). The user would see the option accepted, a basis reported for
@@ -704,10 +568,9 @@ costs a single decomposition performed once outside the sampler.
 
 This repair is no longer hypothetical: it ships as
 `_absorbable_basis_exact()` and is the basis the implementation actually
-sweeps, with the column-wise search retained alongside it for attribution
+uses, with the column-wise search retained alongside it for attribution
 and cross-checking. Section 4.8 describes what the implementation does with
-both, and Section 4.9 shows that the same generators the exact
-construction produces are what make the calibration correction computable.
+both.
 
 ### 4.6 Subjects whose own data does not determine their ratio
 
@@ -738,8 +601,8 @@ motivates imputing the median of the determined ratios on the grounds that
 the alternative left $Q[:,0]$ non-uniform and so projected out a
 subject-weighted quantity rather than the simple mean. Proposition 5 shows
 the imputation is not merely tidier: the previous fallback of $s_i = 0$
-produced a direction that is *not* in $\mathcal{A}$, so the old code swept
-a direction the survival submodel does identify, while the median
+produced a direction that is *not* in $\mathcal{A}$, so the old code treated as
+absorbable a direction the survival submodel does identify, while the median
 imputation is the unique choice consistent with joint-model invariance.
 The empirical symptom recorded in `dev/diag_slope_projection.R` -
 $\overline{b_{i1}}$ left at 0.04-0.07 instead of pinned near machine zero -
@@ -747,7 +610,7 @@ is the visible trace of that. (Checked against the shipped code: with five
 baseline-only subjects among twenty-five, the returned basis vector is
 uniform to $2.7 \times 10^{-17}$.)
 
-### 4.7 What this does and does not establish
+### 4.7 What this establishes
 
 **Corollary 1 (model invariance).** Let $v \in \mathcal{A}$ with witness
 $d$. Then for any parameter values, replacing $(\beta, b)$ by
@@ -756,40 +619,15 @@ $m_i(t)$, the hazard, and hence the entire joint likelihood exactly
 unchanged. Consequently the set of achievable mean structures is identical
 with and without the reparameterization.
 
-This is the claim Section 3.4 makes informally and Section 5 verifies
-empirically, and Propositions 2, 3 and 5 establish it for the directions
-the implementation actually removes, given (S).
-
-It is worth being exact about the boundary of the result. What is proved
-is *likelihood* invariance. What is not proved, and does not follow, is
-anything about the posterior. The reparameterized column
-$b[\,\cdot\,, q_\ast]$ is supported on the orthogonal complement of
-$\operatorname{span}(Q)$, a proper subspace, so the implied prior is
-singular there, while `sigma_b` continues to govern the unconstrained
-`b_raw` and the swept directions sample their prior unmodified. A
-construction can be provably likelihood-invariant and still be
-miscalibrated; indeed `wishart_gibbs_centered` was likelihood-invariant in
-the same sense and was found wanting on precisely that axis.
-
-An earlier version of this document left that as an open question and
-offered a conjecture: that because this construction changes the prior's
-*support* rather than imposing an exact Gibbs constraint, it might escape
-the failure mode. **That conjecture is false, and the simulation in
-Section 9.1 refutes it.** The credible intervals for exactly the swept
-parameters are too narrow by close to the predicted
-$\sigma_b/\sqrt{N}$ - measured $\mathrm{sd\_ratio} = 0.283$ against
-$1.177$ for an unmodified fit, with 95% coverage $0.50$ against $1.00$ -
-while point estimates remain unbiased and the negative control is
-untouched. The mechanism is not subtle in hindsight: the swept component
-of `b_raw` is, after the sweep, unconstrained by the likelihood, so it
-samples its prior, and nothing carries that uncertainty into $\beta$'s
-posterior.
-
-This is a statement about the *coordinates in which the sampler reports*,
-not about the sampler's target being wrong, and that distinction turns out
-to be actionable. Section 4.9 shows that the discarded uncertainty can be
-restored exactly, in closed form, from the draws the same fit already
-produces.
+Corollary 1 is the precise sense in which the degeneracy is a degeneracy:
+along an absorbable direction, paired with its witness shift of `beta`, the
+likelihood is exactly flat. Propositions 2, 3 and 5 establish that the
+directions the implementation finds are of this kind, given (S), and
+Proposition 4 with Section 4.5's repair establishes that it finds all of
+them. Nothing here involves the prior: the prior on the random effects is
+*not* invariant under these shifts, and that asymmetry is what pins the
+split at all (at scale $\sigma_b/\sqrt{N}$ for the intercept's mean
+direction).
 
 ### 4.8 What the implementation now does
 
@@ -802,16 +640,14 @@ records what ships rather than what was recommended.
    Section 4.5, implemented as `_absorbable_basis_exact()`: one SVD of a
    $\left(\sum_i n_i\right) \times p$ matrix, basis-independent, and
    provably exact by Proposition 4. It is now *authoritative* - the basis
-   actually swept. The column-wise `_absorbable_basis()` is retained
+   actually used. The column-wise `_absorbable_basis()` is retained
    alongside it for **attribution**, because it names *which* columns of
    $X$ expose each direction, which is what makes the fit's report
    diagnostic rather than a bare dimension count. The two are compared at
    every fit and any disagreement raises a warning naming the extra
    directions; the reverse disagreement (the exact construction finding
    *fewer*) would contradict Proposition 2 and is reported as a bug.
-   `fit$convergence$orthogonalize` carries `n_directions_column_search`
-   separately, so the spline/polynomial case is detectable
-   programmatically rather than by parsing warning text. Every returned
+   Every returned
    direction is verified against the defining identity before use, so the
    basis is sound by construction rather than by choice of tolerance.
 2. **Condition (S) is checked, not assumed.**
@@ -828,319 +664,29 @@ records what ships rather than what was recommended.
    invariance, since the survival submodel identifies what the
    longitudinal submodel alone does not.
 
-None of the three changes any number reported in Sections 5 through 7:
-every design used in this document spells `time` as its own column, so
-$K$ contains it, (C) holds, and both constructions agree exactly there.
+Every design used in Section 6 spells `time` as its own column, so $K$
+contains it, (C) holds, and both constructions agree exactly there.
 `dev/verify_absorbable_basis.py` checks that agreement directly, across
 the canonical designs and a randomized sweep, so the claim is a test
 rather than an assurance.
 
-### 4.9 Restoring the identified parameterization: an exact correction
+## 5. The rotation
 
-Section 4.7 establishes that the reparameterization is likelihood-
-invariant but not posterior-preserving, and Section 9.1 measures the
-consequence. This subsection shows the consequence is *removable*: the
-discarded uncertainty can be restored exactly, in closed form, from the
-draws an orthogonalized fit already produces. No second fit is required,
-and no sampled quantity changes.
+### 5.1 Construction and exactness
 
-The idea is that the sweep does not destroy information, it only moves
-it. The component $Q^{\top} b_{\mathrm{raw}}[\,\cdot\,, q_\ast]$ removed
-from $b$ is still present in the draws - `b_raw` is a deterministic
-function of the sampled `b_std`, `sigma_b` and `L_corr` - and by
-Definition 1 its effect on the fitted values is *exactly* reproducible by
-a shift in $\beta$. Recovering the unconstrained parameterization is
-therefore a matter of applying that shift.
+The random effects are sampled non-centred:
+$b = b_{\mathrm{std}} L^{\top}$, with the entries of
+$b_{\mathrm{std}} \in \mathbb{R}^{N \times q}$ independent $\mathcal{N}(0,1)$
+a priori and $L = \operatorname{diag}(\sigma_b) L_{\mathrm{corr}}$
+lower-triangular; write $\theta$ for every other parameter, including
+$\beta$, $\sigma_b$ and $L_{\mathrm{corr}}$. Let $Q_j$ be the orthonormal basis of absorbable
+directions for random-effect column $j$ (Section 4) and $Q_{\cup} \in
+\mathbb{R}^{N \times k}$ an orthonormal basis of the span of all of them.
+Complete $Q_{\cup}$ to an orthogonal matrix $R = [\,Q_{\cup} \mid
+Q_{\perp}\,]$. `jmjax` uses the Householder completion, stored as $k$
+reflectors, so it costs $O(Nk)$ memory and work and needs no seed.
 
-**Prior work.** The same construction appears, for a spatial random
-effect in a linear or generalized linear model, in the restricted spatial
-regression literature (Reich, Hodges & Zadnik 2006; Hughes & Haran 2013,
-who also motivate the restriction computationally). Hanks et al. (2015,
-eq. 17) give the bijection $\delta = \beta + (X^{\top}X)^{-1}X^{\top}\eta$
-between the unrestricted model's coefficients $\beta$ and the restricted
-model's $\delta$, under which the two likelihoods coincide, and Bradley
-(2024) states the corresponding posterior equivalence in general form.
-Definition 2 and Propositions 6-7 below are the joint-model analogue of the
-inverse map - restricted to unrestricted, hence the opposite sign - with
-the absorbable set $\mathcal{A}$ in place of the column space of $X$ and
-Condition (S) carrying the argument through the survival submodel. The
-narrow intervals of the uncorrected, restricted coefficient that Section
-9.1 measures are likewise the joint-model counterpart of Khan & Calder's
-(2022) finding for restricted spatial regression. Earlier versions of
-this section did not cite this literature.
-
-**Definition 2 (generator map).** Let $Q \in \mathbb{R}^{N \times k}$ be
-the orthonormal basis of swept directions, with
-$\operatorname{span}(Q) \subseteq \mathcal{A}$ by Proposition 3. For each
-column $Q[\,\cdot\,, m]$ Proposition 1 supplies a witness $d$; write it as
-$-\Gamma e_m$, so that
-
-$$X_i\,(\Gamma e_m) \;=\; Q[\,\cdot\,, m]_i\, z_i \quad \text{for every } i,
-\qquad
-x_i(t)^{\top}(\Gamma e_m) \;=\; Q[\,\cdot\,, m]_i\, g(t; c_i)
-\quad \text{for every } t, \tag{G}$$
-
-the second identity holding under (S). Extending linearly gives
-$\Gamma: \mathbb{R}^{k} \to \mathbb{R}^{p}$ with
-$X_i(\Gamma c) = (Qc)_i z_i$ and
-$x_i(t)^{\top}(\Gamma c) = (Qc)_i\, g(t; c_i)$ for every $c \in
-\mathbb{R}^{k}$.
-
-(The sign is a convention: Definition 1 pairs a shift $+v$ in $b$ with a
-witness $d$ satisfying $X_i d = -v_i z_i$, whereas $\Gamma$ is defined so
-that $X_i \Gamma c = +(Qc)_i z_i$, which is the form the implementation
-uses. The two differ by a sign only.)
-
-$\Gamma$ need not be unique: if $\ker\mathcal{T} \neq \{0\}$ - that is, if
-some $d \neq 0$ has $X_i d = 0$ for every $i$ - then $\Gamma$ may be
-modified by any map into $\ker\mathcal{T}$. This is harmless, because
-$\ker\mathcal{T}$ is exactly the set of directions along which the
-likelihood is flat in $\beta$, so two choices of $\Gamma$ produce
-corrected draws differing only within a subspace in which $\beta$ is
-itself unidentified. When $X$ has full column rank across subjects - the
-generic case, and one already required for $\beta$ to be estimable -
-$\ker\mathcal{T} = \{0\}$ and $\Gamma$ is unique.
-
-**Proposition 6 (the correction is an exact reparameterization).** Fix
-$\Gamma$ satisfying (G) and define
-
-$$\Phi:\; (\beta,\, b_{\mathrm{raw}}) \;\longmapsto\;
-(\tilde\beta,\, b_{\mathrm{raw}}),
-\qquad
-\tilde\beta \;=\; \beta \;-\; \Gamma\big(Q^{\top}
-b_{\mathrm{raw}}[\,\cdot\,, q_\ast]\big).$$
-
-Then, writing $b^{\mathrm{orth}}$ for the swept random effects
-$b_{\mathrm{raw}} - QQ^{\top}b_{\mathrm{raw}}$ on column $q_\ast$:
-
-(i) $\Phi$ is an affine bijection with unit Jacobian determinant;
-
-(ii) the orthogonalized model's linear predictors at
-$(\beta, b_{\mathrm{raw}})$ coincide with the *unconstrained* model's at
-$\Phi(\beta, b_{\mathrm{raw}})$, for every observation and every $t$:
-
-$$\mu_{ij}\big(\beta,\, b^{\mathrm{orth}}\big)
-= \mu_{ij}\big(\tilde\beta,\, b_{\mathrm{raw}}\big),
-\qquad
-m_i\big(t;\, \beta,\, b^{\mathrm{orth}}\big)
-= m_i\big(t;\, \tilde\beta,\, b_{\mathrm{raw}}\big);$$
-
-(iii) consequently the two likelihoods agree exactly,
-$L^{\mathrm{orth}}(\beta, b_{\mathrm{raw}}, \theta) =
-L(\tilde\beta, b_{\mathrm{raw}}, \theta)$ for all remaining parameters
-$\theta$.
-
-*Proof.* Write $c = Q^{\top} b_{\mathrm{raw}}[\,\cdot\,, q_\ast]$, so the
-removed component is $QQ^{\top}b_{\mathrm{raw}}[\,\cdot\,, q_\ast] = Qc$.
-Only column $q_\ast$ is altered, so
-
-$$\mu_{ij}\big(\beta, b^{\mathrm{orth}}\big)
-= x_{ij}^{\top}\beta + z_{ij}^{\top}b_i - (Qc)_i\, z_{ij,q_\ast}.$$
-
-By the first identity in (G), $(Qc)_i z_i = X_i(\Gamma c)$, which read
-componentwise is $(Qc)_i z_{ij,q_\ast} = x_{ij}^{\top}\Gamma c$.
-Substituting,
-
-$$\mu_{ij}\big(\beta, b^{\mathrm{orth}}\big)
-= x_{ij}^{\top}\big(\beta - \Gamma c\big) + z_{ij}^{\top}b_i
-= x_{ij}^{\top}\tilde\beta + z_{ij}^{\top}b_i
-= \mu_{ij}\big(\tilde\beta, b_{\mathrm{raw}}\big).$$
-
-The same computation with the second identity in (G) gives the trajectory
-statement for every $t \in [0,\tau]$; this is the step that requires (S),
-and it is the only place the survival submodel enters. Since the joint
-likelihood depends on $(\beta, b)$ only through $\mu$ and $m$, (iii)
-follows. For (i), $\Phi$ is the identity in $b_{\mathrm{raw}}$ and a
-$b_{\mathrm{raw}}$-dependent translation in $\beta$, hence block-triangular
-with identity diagonal blocks. $\square$
-
-When several columns are swept at once (`orthogonalize_b`), the shifts add:
-$\tilde\beta = \beta - \sum_{q} \Gamma_q\big(Q_q^{\top}
-b_{\mathrm{raw}}[\,\cdot\,, q]\big)$, each term justified by Proposition 6
-applied to its own column.
-
-Proposition 6 is a statement about the likelihood. The question that
-matters for reporting is what happens to the *posterior*, and the answer
-is exact enough to be worth stating as an identity rather than an
-approximation.
-
-**Proposition 7 (posterior push-forward).** Suppose the orthogonalized and
-unconstrained models are given the same priors $\pi(\beta)$,
-$\pi(b_{\mathrm{std}})$, $\pi(\theta)$ - as they are, since the
-reparameterization alters only how $b$ enters the likelihood, never any
-prior. Let $p^{\mathrm{orth}}$ and $p$ denote the two posteriors. Then
-
-$$\big(\Phi_{\#}\, p^{\mathrm{orth}}\big)
-\big(\tilde\beta,\, b_{\mathrm{raw}},\, \theta \mid y\big)
-\;\propto\;
-\underbrace{\frac{\pi\big(\tilde\beta + s\big)}{\pi\big(\tilde\beta\big)}}
-_{\textstyle w(\tilde\beta,\, b_{\mathrm{raw}})}
-\;\cdot\;
-p\big(\tilde\beta,\, b_{\mathrm{raw}},\, \theta \mid y\big),
-\qquad
-s \;=\; \Gamma\big(Q^{\top}b_{\mathrm{raw}}[\,\cdot\,, q_\ast]\big).$$
-
-In particular:
-
-(i) if $\pi(\beta)$ is invariant under translation by
-$\operatorname{range}\Gamma$ - a flat prior on that subspace, for instance
-- then $w \equiv 1$ and the corrected draws are *exact* draws from the
-unconstrained model's posterior;
-
-(ii) for $\pi(\beta) = \mathcal{N}(0, \sigma_\beta^{2} I_p)$, which is what
-`jmjax` uses,
-
-$$\log w
-= -\,\frac{2\,\tilde\beta^{\top} s + \lVert s \rVert^{2}}
-{2\,\sigma_\beta^{2}}.$$
-
-*Proof.* The orthogonalized posterior is
-$p^{\mathrm{orth}} \propto \pi(\beta)\,\pi(b_{\mathrm{raw}} \mid \theta)\,
-\pi(\theta)\, L^{\mathrm{orth}}(\beta, b_{\mathrm{raw}}, \theta)$. For
-fixed $(b_{\mathrm{raw}}, \theta)$ the quantity $s$ is constant and
-$\beta \mapsto \tilde\beta = \beta - s$ is a translation with unit
-Jacobian, so the density of $\tilde\beta$ is obtained by substituting
-$\beta = \tilde\beta + s$:
-
-$$\Phi_{\#}\,p^{\mathrm{orth}}
-\;\propto\;
-\pi\big(\tilde\beta + s\big)\,\pi(b_{\mathrm{raw}} \mid \theta)\,\pi(\theta)\,
-L^{\mathrm{orth}}\big(\tilde\beta + s,\, b_{\mathrm{raw}},\, \theta\big).$$
-
-By Proposition 6(iii), $L^{\mathrm{orth}}(\tilde\beta + s, b_{\mathrm{raw}},
-\theta) = L(\tilde\beta, b_{\mathrm{raw}}, \theta)$. Comparing with
-$p \propto \pi(\tilde\beta)\,\pi(b_{\mathrm{raw}} \mid \theta)\,\pi(\theta)\,
-L(\tilde\beta, b_{\mathrm{raw}}, \theta)$ gives the stated ratio; (i) and
-(ii) are immediate. $\square$
-
-Two consequences are worth drawing out, because together they explain both
-why the correction works and where it would stop working.
-
-**Corollary 2 (scale of the restored variance, and of the residual
-weight).** In the canonical case $q_\ast = 0$ with $z_i = \mathbf{1}$ and
-$Q = \mathbf{1}/\sqrt{N}$, the generator is
-$\Gamma e_1 = e_{\mathrm{int}}/\sqrt{N}$ and the shift is
-$s = \bar b_0\, e_{\mathrm{int}}$ - precisely the mean random intercept.
-Since $\bar b_0 = O_p\big(\sigma_{b_0}/\sqrt{N}\big)$, the correction
-restores exactly the $\sigma_b/\sqrt{N}$ of location uncertainty that
-Section 3.2 identifies as the width of the degeneracy and that Section 9.1
-measures as missing. The residual prior weight is then
-$\log w = O_p\big(\lVert\beta\rVert\,\sigma_b / (\sigma_\beta^{2}
-\sqrt{N})\big)$, which is negligible whenever the prior on $\beta$ is
-diffuse relative to $\sigma_b/\sqrt{N}$: at $\sigma_\beta = 5$,
-$\sigma_{b_0} = 0.8$ and $N = 300$, $\lVert s \rVert \approx 0.046$ and
-the log-weight varies across draws by order $10^{-2}$.
-
-So the corrected draws are not merely approximately right; they are exact
-draws from the unconstrained posterior up to a reweighting whose magnitude
-is known in closed form and is, under any diffuse prior on $\beta$,
-numerically irrelevant. This is a sharper statement than a coverage study
-can produce, and it also supplies a per-fit diagnostic rather than a
-general assurance: $w$ is computable draw by draw from quantities already
-stored, so the effective sample size of $\{w\}$ measures directly whether
-the reweighting matters for a given fit. Implementing that diagnostic is
-listed in Section 9.3.
-
-**Where the correction fails.** Three conditions, each already visible in
-the statements above:
-
-1. **Condition (S) must hold.** Proposition 6(ii) uses the second identity
-   in (G) for all $t$, so a design that fails (S) breaks the correction
-   for exactly the same reason it breaks the sweep. The existing (S) check
-   therefore guards both. Verified directly for the design of Example 1:
-   the residual is $3 \times 10^{-16}$ on the survival and quadrature
-   grids, so the correction is valid precisely where the completeness
-   repair is most needed.
-2. **The prior on $\beta$ must be diffuse relative to
-   $\sigma_b/\sqrt{N}$.** Otherwise $w$ departs from 1 and the corrected
-   draws require the weight to be applied, not merely noted. Corollary 2
-   bounds when this arises; a genuinely informative prior on a swept
-   coefficient is the case to watch.
-3. **$\Gamma$ must be computable from the same generators as $Q$.** The
-   implementation obtains it by applying to the witnesses the same linear
-   combination that QR applies to the directions, and verifies the
-   resulting identity before use; `dev/verify_beta_correction.py` checks
-   this independently of any MCMC run.
-
-### 4.10 Why the corrected estimand mixed slowly, and an exact rotation that fixes it
-
-Section 9.1.1 measures that `beta_corrected` inherits almost none of the
-swept coefficient's efficiency gain, and Section 9.1.2 measures that
-rotating `b_std[:, 0]` recovers most of it. This subsection explains both
-measurements, states when the recovery is guaranteed and when it is not,
-and derives two changes to the construction that the theory predicts will
-carry it to the slope column and to strongly correlated random effects.
-The results come in three grades, kept separate on purpose. Lemma 1 and
-Propositions 8 and 9 are exact for the full joint model. Proposition 10 is
-exact for the model with the variance components held fixed, under the
-oracle diagonal metric that NUTS's adaptation estimates; with the variance
-components sampled, it describes the conditional geometry that sampling
-averages over. The step from
-that geometry to effective sample size is a stylised model of NUTS, and is
-labelled as one.
-
-**Setting.** The random effects are sampled non-centred:
-$b_{\mathrm{raw}} = b_{\mathrm{std}} L^{\top}$, with the entries of
-$b_{\mathrm{std}} \in \mathbb{R}^{N \times q}$ independent
-$\mathcal{N}(0, 1)$ a priori and $L = \operatorname{diag}(\sigma_b)\,
-L_{\mathrm{corr}}$ lower-triangular. For $q = 2$,
-
-$$L = \begin{pmatrix} \sigma_0 & 0 \\ \rho\,\sigma_1 & s\,\sigma_1
-\end{pmatrix}, \qquad s = \sqrt{1 - \rho^{2}}.$$
-
-Let $\mathcal{S}$ be the set of swept columns ($\{0\}$ for
-`orthogonalize_b0`; every column with a non-empty basis for
-`orthogonalize_b`), $Q_j \in \mathbb{R}^{N \times k_j}$ the orthonormal
-basis swept from column $j$, and $Q_{\cup} \in \mathbb{R}^{N \times k}$ an
-orthonormal basis of $\operatorname{span}\bigcup_{j \in \mathcal{S}} Q_j$.
-The swept random effects are $b = \operatorname{sw}(b_{\mathrm{raw}})$,
-where $\operatorname{sw}(W)[\,\cdot\,, j] = (I - Q_j Q_j^{\top})\,
-W[\,\cdot\,, j]$ for $j \in \mathcal{S}$ and $W[\,\cdot\,, j]$ otherwise,
-and the orthogonalized likelihood $L^{\mathrm{orth}}$ depends on
-$b_{\mathrm{std}}$ only through $b$. Write $\theta$ for every other
-parameter, including $\beta$, $\sigma_b$ and $L_{\mathrm{corr}}$.
-
-**Definition 3 (flat subspace).** For fixed $\theta$,
-$\mathcal{F}(\theta) = \{\Delta \in \mathbb{R}^{N \times q} :
-\operatorname{sw}(\Delta L^{\top}) = 0\}$.
-
-Because $\operatorname{sw}$ is linear, $L^{\mathrm{orth}}$ is unchanged by
-$b_{\mathrm{std}} \mapsto b_{\mathrm{std}} + \Delta$ for every
-$\Delta \in \mathcal{F}(\theta)$. These are exactly the directions that,
-in Section 9.1's words, "simply sample their prior".
-
-**Lemma 1 (where the flat subspace lives).** $\Delta \in
-\mathcal{F}(\theta)$ if and only if $\Delta = W (L^{\top})^{-1}$ for some
-$W$ with $W[\,\cdot\,, j] \in \operatorname{span}(Q_j)$ for
-$j \in \mathcal{S}$ and $W[\,\cdot\,, j] = 0$ otherwise. Hence
-$\dim \mathcal{F}(\theta) = \sum_{j \in \mathcal{S}} k_j$, and every
-column of every $\Delta \in \mathcal{F}(\theta)$ lies in
-$\operatorname{span}(Q_{\cup})$ - for every value of $\theta$, even though
-$\mathcal{F}(\theta)$ itself moves with $L$.
-
-*Proof.* Put $W = \Delta L^{\top}$; $L$ is invertible. $\operatorname{sw}
-(W) = 0$ holds exactly when every swept column satisfies
-$(I - Q_j Q_j^{\top}) W[\,\cdot\,, j] = 0$, that is
-$W[\,\cdot\,, j] \in \operatorname{span}(Q_j)$, and every unswept column is
-zero. $W \mapsto W (L^{\top})^{-1}$ is a bijection, which gives the
-dimension, and each column of $W (L^{\top})^{-1}$ is a linear combination
-of columns of $W$, all of which lie in $\operatorname{span}(Q_{\cup})$.
-$\square$
-
-For the case every pilot in this document used ($q = 2$,
-$\mathcal{S} = \{0\}$, $Q_{\cup} = Q_0$), Lemma 1 gives the flat subspace
-explicitly. With $W = [\,Q_0 c,\; 0\,]$ and
-$(L^{\top})^{-1} = \begin{pmatrix} 1/\sigma_0 & -\rho/(s\sigma_0) \\
-0 & 1/(s\sigma_1) \end{pmatrix}$,
-
-$$\Delta = \frac{1}{s\,\sigma_0}\,\big[\; s\,Q_0 c,\;\; -\rho\,Q_0 c
-\;\big]:$$
-
-each flat direction is $s$ parts intercept column and $-\rho$ parts slope
-column, both along $\operatorname{span}(Q_0)$. Only at $\rho = 0$ does it
-lie entirely in the intercept column.
-
-**Proposition 8 (fixed rotations are exact).** Let
+**Proposition 6 (fixed rotations are exact).** Let
 $R = [\,Q_{\cup} \mid Q_{\perp}\,]$ be any fixed $N \times N$ orthogonal
 matrix, and $\mathcal{C} \subseteq \{0, \dots, q-1\}$ any set of columns.
 Reparameterize $b_{\mathrm{std}}[\,\cdot\,, j] = Q_{\cup} U[\,\cdot\,, j]
@@ -1151,8 +697,7 @@ $V \in \mathbb{R}^{(N-k) \times \lvert\mathcal{C}\rvert}$.
 Then (i) the map $(U, V) \mapsto b_{\mathrm{std}}$ is linear with
 $\lvert\det\rvert = 1$; (ii) the prior it induces on $b_{\mathrm{std}}$ is
 exactly the original one; (iii) consequently the posterior of every model
-quantity - $\beta$, $b_{\mathrm{raw}}$, $b$, $\theta$ and `beta_corrected`
-- is identical to the unrotated parameterization's, and so is every
+quantity - $\beta$, $b$ and $\theta$ - is identical to the unrotated parameterization's, and so is every
 calibration property of every estimand, up to Monte Carlo error; and (iv)
 $U[\,\cdot\,, j] = Q_{\cup}^{\top} b_{\mathrm{std}}[\,\cdot\,, j]$.
 
@@ -1164,490 +709,179 @@ and $\theta$, whose joint prior is unchanged, so the posterior pushed
 forward to the original coordinates is unchanged: (iii). (iv) follows from
 $Q_{\cup}^{\top} Q_{\perp} = 0$. $\square$
 
-`orthogonalize_b0_rotate` as implemented is the case
-$\mathcal{C} = \{0\}$, $Q_{\cup} = Q_0$, with $Q_{\perp}$ a seeded random
-completion. Proposition 8(iii) is why Section 9.1.2's $R = 100$
-calibration comparison came out as it did: equality between `D` and
-`D_rot` was predicted exactly, so that study tested the *implementation* -
-a bug would have shown up as a difference - rather than the construction.
+`control$rotate_absorbable` is the case $\mathcal{C}$ = all columns: the
+sampled coordinates are $U = Q_{\cup}^{\top} b_{\mathrm{std}}$ (the
+`[k, q]` site `b_gen_U`) and $V = Q_{\perp}^{\top} b_{\mathrm{std}}$ (the
+`[N - k, q]` site `b_gen_V`). `b_std` is recovered deterministically, and
+everything downstream of it is untouched. Because the rotation acts on the
+standardized draws, Proposition 6 makes the calibration of every estimand
+identical to the default fit's; Section 6.3 confirms this empirically.
 
 *Remark (what is rotated, and on which side).* Two choices in
-Proposition 8 are what make it safe, and both are easy to get wrong.
+Proposition 6 are what make it safe, and both are easy to get wrong.
 First, the rotation acts on the *sampled*, standardized coordinates
 $b_{\mathrm{std}}$. Computing a rotated quantity from the draws after
 sampling, as a deterministic transform, would leave the sampler's geometry
 unchanged and could not affect mixing. Rotating the centered effects
-$b_{\mathrm{raw}}$ instead would make the rotated prior covariance depend
+$b$ instead would make the rotated prior covariance depend
 on $\sigma_b$ and $\rho$, which reintroduces the funnel-type coupling that
 the non-centred parameterization exists to remove. Second, the rotation
 acts on the *subject* index, with the same $R$ for every column:
 $\operatorname{vec}(b_{\mathrm{std}}) \mapsto (I_q \otimes R)\,
 \operatorname{vec}(b_{\mathrm{std}})$. Because $L$ acts on the column
-index, the two commute, $R^{\top} b_{\mathrm{raw}} = (R^{\top}
+index, the two commute, $R^{\top} b = (R^{\top}
 b_{\mathrm{std}})\, L^{\top}$. So the variance components enter exactly as
 before, and the prior on the rotated coordinates is still independent
 standard normal, $(I_q \otimes R)^{\top}(I_q \otimes R) = I$, for every
 value of $\sigma_b$ and $\rho$. A generic rotation of the concatenated
-$Nq$-vector, built to align the corrections' loading vectors with the
-first coordinate axes, is also exact when applied to $b_{\mathrm{std}}$.
-But those loading vectors, expressed in $b_{\mathrm{std}}$ coordinates,
-depend on $L$, so a fixed rotation of that kind aligns them only at one
-value of $\rho$. Lemma 1 is what shows that the subject-side rotation by
-$Q_{\cup}$ does not have this problem.
+$Nq$-vector, built to align particular combinations of intercept and slope
+directions with the first coordinate axes, is also exact when applied to
+$b_{\mathrm{std}}$. But such combinations, expressed in $b_{\mathrm{std}}$
+coordinates, depend on $L$, so a fixed rotation of that kind aligns them
+only at one value of $\rho$. Rotating each column by the same $Q_{\cup}$
+aligns the whole span, which does not depend on $L$ (Section 5.2).
 
-**Proposition 9 (the flat coordinates are a posteriori exactly their
-prior).** Fix $\theta$, let $B_{\theta}$ be an orthonormal basis of
-$\mathcal{F}(\theta)$ (Frobenius inner product), and let $\xi$ and $\zeta$
-be the coordinates of $b_{\mathrm{std}}$ along $\mathcal{F}(\theta)$ and
-along its orthogonal complement. Then, under the full joint model,
+### 5.2 Where the degeneracy goes, and the dense block
 
-$$p(\xi \mid \zeta, \theta, y) \;=\; \mathcal{N}\big(\xi;\, 0,\,
-I_{\dim\mathcal{F}}\big).$$
+> **Draft note.** To be written (next step). Planned content: along an
+absorbable direction, the likelihood is flat in the paired shift of
+$(\beta, U)$ (Corollary 1). Under the rotation, every such pair lies in
+the small block of `beta` and `b_gen_U`, for every value of $\sigma_b$
+and $\rho$, not spread across the $N$ per-subject coordinates. A
+diagonal mass matrix cannot represent the ridge between `beta` and
+`b_gen_U`, and a dense block over just those coordinates can. The ridge's
+orientation depends on $\sigma_b$, so a fixed metric can only fit it on
+average; the proposition should bound what that costs. The closed-form
+check `dev/theory_rotation_toy.py` found the pairing competitive in an
+earlier version of this analysis, and Section 6 found it so in real
+fits.
 
-Because the right-hand side does not involve $(\zeta, \theta)$, $\xi$ is a
-posteriori exactly standard normal and independent of $(\zeta, \theta)$,
-even though the subspace it is measured along moves with $\theta$.
 
-*Proof.* The prior on $b_{\mathrm{std}}$ is rotation-invariant, so
-$(\xi, \zeta) \mid \theta$ are independent standard normal.
-$L^{\mathrm{orth}}$ depends on $b_{\mathrm{std}}$ only through
-$\operatorname{sw}(b_{\mathrm{std}} L^{\top})$, which by construction
-depends on $\zeta$ alone. Hence
-$p(\xi, \zeta, \theta \mid y) \propto \pi(\theta)\,
-\mathcal{N}(\xi; 0, I)\, \mathcal{N}(\zeta; 0, I)\,
-L^{\mathrm{orth}}(\zeta, \theta)$, which factorizes in $\xi$. (Only the
-fact that the likelihood sees the swept $b$ is used; Condition (S) is
-what gives `beta_corrected` its meaning, not what makes $\xi$ flat.)
-$\square$
+### 5.3 Using it
 
-This is the standard fact that data carry no information about
-non-identified parameters beyond what the identified ones carry (Dawid
-1979; Poirier 1998; Gustafson 2015). What Proposition 9 adds is the
-location of those parameters in `jmjax`'s own coordinates, and the
-observation that they carry most of `beta_corrected`'s uncertainty: by
-Proposition 6, `beta_corrected` $= \tilde\beta = \beta - \Gamma\,\sigma_0\,
-Q_0^{\top} b_{\mathrm{std}}[\,\cdot\,, 0]$ with $\beta$ the sampled, swept
-coefficient, and in the closed-form check below the flat coordinates carry
-87-96% of its posterior variance at $\lvert\rho\rvert \le 0.3$, falling to
-about 27% at $\rho = 0.9$.
+`control = list(rotate_absorbable = TRUE, dense_mass_generator_beta =
+TRUE)`. It requires `q >= 2`, `random_effects_corr = TRUE` and the default
+`random_effects_method = "nuts"`. What was rotated is reported in
+`fit$convergence$orthogonalize$rotation` (`mode`, `applied`, `k`). The
+option is experimental and off by default until the real-data checks of
+Section 7 are complete.
 
-**Corollary 3 (the intercept-only case).** Take $q = 2$,
-$\mathcal{S} = \{0\}$, and write $u = Q_0^{\top} b_{\mathrm{std}}
-[\,\cdot\,, 0]$ and $w = Q_0^{\top} b_{\mathrm{std}}[\,\cdot\,, 1]$ for the
-intercept and slope columns' generator coordinates. The flat coordinates
-are $\xi = s\,u - \rho\,w$, and the identified coordinates in the same
-plane are $\eta = \rho\,u + s\,w$; equivalently $u = s\,\xi + \rho\,\eta$
-and $w = -\rho\,\xi + s\,\eta$. Consequently:
-
-(i) if $\rho = 0$, $u$ is a posteriori exactly $\mathcal{N}(0, I_k)$ and
-independent of everything else, so the covariance a dense mass block on
-$u$ would try to learn is the identity. $\rho = 0$ has probability zero
-under a sampled correlation, and the pilots generated data at
-$\rho = 0.3$; but Proposition 10(b) below shows that once $u$ is its own
-coordinate, what remains slow lies along $w$, in the slope column, which a
-dense block on $u$ alone cannot reach. Either way, the pilots' finding
-that `dense_mass_b0_generator` adds nothing (Section 9.1.2) is what the
-theory predicts;
-
-(ii) if $\rho \neq 0$, a fraction $\rho^{2}$ of each flat direction lies
-along $w$ - outside the rotated block, spread across the slope column's
-per-subject coordinates. The current rotation therefore captures the flat
-subspace completely only at $\rho = 0$.
-
-*Proof.* Normalize the direction given after Lemma 1. $\square$
-
-**Proposition 10 (what a diagonal metric sees, with the variance
-components fixed).** Hold the variance components
-$\psi = (\sigma_b, \rho, \sigma_e)$ fixed. Let $\Sigma$ be the posterior
-covariance of the sampled coordinates and $M = \operatorname{diag}(\Sigma)$
-the oracle diagonal metric - the inverse mass matrix (NumPyro's
-`inverse_mass_matrix`) that windowed adaptation estimates. For a direction
-$\delta$ write $\mathcal{R}(\delta) = \delta^{\top}\Sigma\,\delta \big/
-\delta^{\top} M \delta$ for its variance after whitening by $M$; by
-Courant-Fischer $M^{-1/2}\Sigma M^{-1/2}$ has an eigenvalue at least
-$\mathcal{R}(\delta)$, so a large $\mathcal{R}$ certifies a slow direction.
-Take $q = 2$, $\mathcal{S} = \{0\}$, a column $g = Q_0[\,\cdot\,, m]$, the
-generator coordinates $u_m = g^{\top} b_{\mathrm{std}}[\,\cdot\,, 0]$ and
-$w_m = g^{\top} b_{\mathrm{std}}[\,\cdot\,, 1]$ of Corollary 3, the
-posterior variance $\lambda_m \ge 0$ of the identified combination
-$\eta_m = \rho u_m + s w_m$, and the marginal posterior variances $m_{j,i}$
-of $b_{\mathrm{std}}[i, j]$, with $\bar m_j = \sum_i g_i^{2} m_{j,i}$.
-Then
-
-$$\operatorname{Var}(u_m) = s^{2} + \rho^{2}\lambda_m, \quad
-\operatorname{Var}(w_m) = \rho^{2} + s^{2}\lambda_m, \quad
-\operatorname{Cov}(u_m, w_m) = -\rho s\,(1 - \lambda_m),$$
-
-and:
-
-(a) *plain `orthogonalize_b0`*: $\mathcal{R}(u_m) = (s^{2} +
-\rho^{2}\lambda_m)/\bar m_0$, $\mathcal{R}(w_m) = (\rho^{2} +
-s^{2}\lambda_m)/\bar m_1$, and for the flat direction itself
-$\mathcal{R}(\xi_m) = 1/(s^{2}\bar m_0 + \rho^{2}\bar m_1)$;
-
-(b) *column 0 rotated, as implemented*: $\mathcal{R}(u_m) = 1$ and
-$\mathcal{R}(\xi_m) \le 1/s^{4}$, but $\mathcal{R}(w_m)$ is exactly as in
-(a);
-
-(c) *every column rotated by $Q_0$*: $u_m$ and $w_m$ are both coordinates,
-and the whitened covariance restricted to them is their correlation
-matrix, so every direction in their plane has
-$\mathcal{R} \in [1 - \lvert r_m\rvert,\, 1 + \lvert r_m\rvert] \subseteq
-[0, 2]$, where
-$r_m = -\rho s (1 - \lambda_m) \big/ \sqrt{(s^{2} + \rho^{2}\lambda_m)
-(\rho^{2} + s^{2}\lambda_m)}$. With $q$ random-effect columns the same
-argument gives $[0, q]$.
-
-*Proof.* By Proposition 9 with $\psi$ fixed, $\xi_m = s u_m - \rho w_m$ has
-unit variance and is uncorrelated with $\eta_m$; inverting,
-$u_m = s\xi_m + \rho\eta_m$ and $w_m = -\rho\xi_m + s\eta_m$, which gives
-the three moments. In the unrotated coordinates $u_m$ is the direction
-$(g, 0)$ and $w_m$ the direction $(0, g)$, so their denominators are
-$\bar m_0$ and $\bar m_1$; the flat direction is $(s g, -\rho g)$, giving
-(a). In (b), $u_m$ is a coordinate, whose diagonal metric entry is its own
-variance, so $\mathcal{R}(u_m) = 1$; for the flat direction
-$\delta^{\top} M \delta = s^{2}\operatorname{Var}(u_m) + \rho^{2}\bar m_1
-\ge s^{4}$; and column 1 is untouched, so $\mathcal{R}(w_m)$ is unchanged.
-In (c) the restriction of $M^{-1/2}\Sigma M^{-1/2}$ to the two coordinates
-is their correlation matrix, whose eigenvalues are $1 \pm \lvert r_m\rvert$,
-and every Rayleigh quotient lies between them; a $q \times q$ correlation
-matrix has eigenvalues in $[0, q]$. $\square$
-
-*Reading Proposition 10.* The $m_{j,i}$ are per-subject shrinkage factors,
-small when each subject's own data pin down its own random effects: many
-visits, small $\sigma_e$ relative to $\sigma_b$. (In a random-intercept-
-only Gaussian model $m_{0,i} = (1 + n_i\sigma_0^{2}/\sigma_e^{2})^{-1}$
-exactly; a random slope enlarges them through within-subject
-intercept-slope confounding, but the dependence runs the same way.) They
-are $g$-weighted averages, so they do not shrink with $N$. Part (a) says
-both generator coordinates are slow under the plain sweep: at the pilots'
-design `dev/theory_rotation_toy.py` gives $\mathcal{R}(u_m) \approx 14$,
-rising to 22-31 with 8-20 visits per subject. Part (b) says that under the
-current rotation $u$ is no longer certified slow (every coordinate has
-$\mathcal{R} = 1$ under an oracle diagonal metric), but $w$ still is, and
-its variance contains a $\rho^{2}$ share of the flat direction.
-`beta_corrected` for the intercept depends on $u$ alone, but $u$ and $w$
-are correlated ($\lvert r_m\rvert$ from 0.59 to 0.99 in the toy at
-$\sigma_e = 0.3$ with 2-11 or 8-20 visits and $\rho \ge 0.3$; 0.29-0.46
-with 2-4 visits), so a slow $w$ drags $u$ with it. The drag needs both a
-large $\mathcal{R}(w)$, which falls as $\lvert\rho\rvert$ grows, and a
-large $\lvert r_m\rvert$, which rises with it, so it peaks at intermediate
-$\rho$ and grows with the information about individual slopes. Part (c)
-says that rotating every column makes each generator row's plane
-coordinate-aligned: within a row no direction is slower than $q$ times the
-scale of its own coordinates, whatever the data, $N$ or $\rho$. Across
-rows the coordinates can still be correlated through the identified
-combinations $\eta$, so the only general bound for the whole
-$k \times q$ block is $kq$; in the toy the whole block stays below 2 in
-all 24 designs, for both `D` and `E`. What (c)
-does not bound is the fast side: when $\lvert r_m\rvert$ is near 1 the
-plane also contains a narrow direction ($1 - \lvert r_m\rvert$), which can
-shrink NUTS's step size. A dense mass block on the $k \times q$ generator
-block, or the $\theta$-dependent rotation of Corollary 4, removes it.
-
-**From geometry to effective sample size (a model, not a theorem).** HMC's
-step size is limited by the narrowest whitened direction, and NUTS's
-trajectory length is set largely by the bulk of the whitened spectrum
-(Neal 2011, Sections 4.1-4.4; Hoffman & Gelman 2014) - the second half
-of that sentence is the modelling assumption. A direction whose
-whitened variance $\Lambda$ exceeds the bulk's is then crossed
-diffusively, with an integrated autocorrelation time (IAT) growing roughly
-linearly in $\Lambda$. That diagonal preconditioning need not remove a
-poorly scaled direction oblique to the coordinate axes - and can even make
-conditioning worse - is shown by example in Hird & Livingstone (2025); the regression-level instance of the same problem is what Stan's
-QR reparameterization addresses (Stan Development Team, *User's Guide*,
-"The QR reparameterization"). What is specific here is where the direction
-is (Lemma 1), that its whitened variance grows with per-subject
-information (Proposition 10(a)), and that a fixed rotation aligns it with
-the axes without changing the model (Proposition 8). In a stylised model -
-exact Hamiltonian dynamics, integration time uniform on $[0, 2T_0]$ with
-$T_0$ set by the bulk - a direction of whitened variance $\Lambda$ has
-IAT $(1 + r)/(1 - r)$ with $r = \sin(\pi/\sqrt{\Lambda})\big/
-(\pi/\sqrt{\Lambda})$, $\Lambda$ measured relative to the bulk (the
-median whitened eigenvalue, 0.97-1.17 in the toy): 1 at $\Lambda = 1$,
-about $1.2\,\Lambda$ for large $\Lambda$.
-
-This also revises Section 9.1.1's diagnosis. There, the slow mixing was
-attributed to the `b` block's own funnel-type conditioning under
-`sigma_b`. The closed-form check below holds every variance component
-fixed - so no funnel can arise - and still produces slow mixing of the
-corrected estimands under the plain sweep (IAT 13-34 iterations for the
-intercept) and its repair by rotation (IAT 1-5 with the current rotation, 1-2
-rotating every column). Misalignment of the
-generator directions with the coordinate axes is therefore sufficient; the
-funnel is not needed to explain the pattern, though with sampled variance
-components it may still contribute.
-
-**A closed-form check.** `dev/theory_rotation_toy.py` (NumPy only; 10-20
-s) computes the exact posterior of the longitudinal submodel with the
-variance components fixed at `dev/sim_joint.R`'s generating values and
-$N = 300$. It verifies Proposition 9 (the flat coordinates' covariance
-equals $I$, and their covariance with every other coordinate is zero, to
-below $5 \times 10^{-13}$, for $\rho \in \{0, 0.3, 0.6, 0.9\}$), and
-matches every closed form in Proposition 10 - the three moments,
-$\mathcal{R}$ of $u$, $w$ and $\xi$ in (a) and (b), and the plane's
-eigenvalues in (c) - to within $2 \times 10^{-12}$ across 24 designs. Under the stylised NUTS model it gives these
-IATs, in iterations (1 means effectively independent draws; `rot0` is the
-current column-0 rotation, `rot-all` rotates every column by $Q_0$):
-
-| visits per subject | $\rho$ | intercept: `D` | `D` + rot0 | `E` + rot0 | `E` + rot-all | slope: `E` | `E` + rot0 | `E` + rot-all |
-|---|---:|---:|---:|---:|---:|---:|---:|---:|
-| 2-11 | 0.0 | 13.0 | 1.1 | 1.1 | 1.2 | 34.9 | 43.3 | 1.9 |
-| 2-11 | 0.3 | 13.9 | 1.8 | 1.8 | 1.4 | 17.1 | 20.8 | 1.6 |
-| 2-11 | 0.6 | 14.8 | 2.2 | 2.3 | 1.6 | 10.9 | 7.1 | 1.3 |
-| 2-11 | 0.9 | 20.3 | 1.7 | 1.5 | 1.4 | 19.8 | 1.3 | 1.1 |
-| 8-20 | 0.0 | 34.0 | 1.0 | 1.1 | 1.1 | 207.2 | 160.6 | 1.0 |
-| 8-20 | 0.3 | 28.5 | 3.7 | 3.8 | 1.6 | 64.3 | 66.3 | 1.1 |
-| 8-20 | 0.6 | 26.4 | 4.1 | 4.5 | 1.6 | 25.4 | 17.7 | 1.1 |
-| 8-20 | 0.9 | 28.1 | 2.0 | 1.8 | 1.3 | 27.1 | 1.9 | 1.1 |
-
-Three features of this table are predictions the simulations can test.
-First, the current rotation's advantage is reduced at intermediate
-$\rho$ when individual slopes are well identified (8-20 visits,
-$\rho = 0.3$-$0.6$, IAT 3.7-4.5 against about 1 at $\rho = 0$): Proposition
-10(b)'s unrotated $w$, correlated with $u$. Rotating every column removes
-the reduction. Second, the current construction leaves the slope's
-corrected estimand slow except at large $\lvert\rho\rvert$, while rotating
-every column repairs it at every $\rho$. Proposition 10 is stated for
-`orthogonalize_b0`, so this second prediction goes slightly beyond it.
-Under `orthogonalize_b` the slope's correction depends on the slope
-column's generator coordinate along $Q_1$, $\rho\,u + s\,w$ in Corollary
-3's notation, where both columns are swept and both combinations are
-flat. The current rotation makes only $u$ a coordinate, so a share $s^{2}$
-of that quantity stays along the misaligned $w$. That share is large at
-small $\rho$ and small at $\rho = 0.9$, which matches the table: `E` +
-rot0 slope IAT 20.8-160.6 for $\rho \le 0.3$ against 1.3-1.9 at
-$\rho = 0.9$. Extending Proposition 10's statement to both columns swept
-is routine along rows where both are swept, since both coordinates are
-then exactly flat, but it is not written out here. Third, the
-gain does not depend on $N$: for the current rotation (random completion,
-as implemented) at the pilots' design, the model predicts 8.5x ESS per
-gradient over `D` at $N = 150$, 300 and 600.
-
-Against the pilots the agreement is partial, and should be read that way.
-The pilots measured the rotation at 5.8x-7.6x ESS per second over arm `A`,
-with `D` itself at 0.91x-1.05x of `A` - roughly 6x-8x over `D`, close to
-the model's 8.5x (the rotated arm also took about 35% longer per fit,
-which the model does not predict). But the model puts `D` at about 2x `A`
-for the intercept, and `E` at 3x-4x `A` for both the intercept and the
-slope, where the pilots measured about 1x and 1.3x. So the model shows
-that misalignment is sufficient to make the corrected estimands mix
-slowly, and it predicts the rotation's gain well; it does not reproduce
-the pilots' finding that the plain sweep gains almost nothing over a
-default fit. Whatever else contributes to that - sampled variance
-components, the survival submodel, adaptation error - is outside it.
-
-**Corollary 4 (two changes the theory recommends; not yet implemented).**
-
-1. *Rotate every column by the same fixed $Q_{\cup}$* (Proposition 8 with
-   $\mathcal{C}$ = all columns). By Lemma 1 this contains the flat
-   subspace, for every value of $\rho$, inside an explicit $k \times q$
-   block, and by Proposition 10(c) no direction within any one generator row
-   is then slower, after whitening, than 2 (or $q$ with $q$ random-effect
-   columns; the whole block is bounded only by $kq$ in general, though it
-   stays below 2 in the toy). This removes the obstacle `_orthogonal_complement()`'s docstring and
-   Section 9.1.2 give for not extending the rotation to the slope column:
-   the $\rho$-dependence is real, but it now lives inside a small, fixed
-   block instead of across the per-subject coordinates. The remaining
-   factor of at most 2 can be removed either by a dense mass block on
-   that $k \times q$ block, or exactly, by rotating each row of $U$ by the
-   $\theta$-dependent orthogonal matrix that maps it to $(\xi, \eta)$.
-   That map is orthogonal in $U$ for fixed $\theta$, so its full Jacobian
-   is block-triangular with unit determinant, and by Proposition 9 it
-   makes $\xi$ exactly standard normal and a posteriori independent of
-   everything else for every $\theta$. $\xi$ could then even be drawn
-   outside NUTS altogether.
-2. *Replace the seeded random completion $Q_{\perp}$ by the Householder
-   completion.* Both are exact (Proposition 8) and mix identically in the
-   closed-form check (within 1% at $N = 150$-600). The random completion
-   is a dense $N \times (N - k)$ matrix: $O(N^{2})$ memory and
-   $O(N^{2})$ work per gradient evaluation, 0.25-0.5 GB at
-   $N = 8000$ depending on precision. The Householder form ($k$ reflectors) needs $O(Nk)$ for
-   both, and needs no seed.
-
-**What this establishes and what it does not.** Exact for the full joint
-model: Lemma 1, Proposition 8 (including calibration invariance) and
-Proposition 9. Exact conditional on the variance components: Proposition
-10. Not established: that NUTS follows the stylised IAT model once the
-variance components are sampled (where a genuine funnel and a
-$\sigma_b$-dependent mass matrix can add difficulty), with the survival
-submodel present, and with an estimated rather than oracle mass matrix;
-and whether the per-iteration overhead stays small. Those are what the
-simulation plan in Section 9.3 is designed to test. On that evidence, the
-case for making the rotation a default rests on Proposition 8 (it cannot
-change any answer) and Proposition 10(c) (after rotating every column, no
-direction within a generator row is slower than $q$ times its
-coordinates' own scale, whatever the data). The remaining questions are
-about cost - including the narrow direction noted after Proposition 10 -
-and robustness, not about correctness.
-
-## 5. Correctness validation
-
-Because the reparameterization cannot change the set of achievable fitted
-values (Section 3.4, proved as Corollary 1 in Section 4.7), `beta`, `alpha`, and fitted values must agree between
-the default fit ("arm A") and the orthogonalized fits ("arm D" =
-`orthogonalize_b0` only, "arm E" = `orthogonalize_b`, full) up to Monte
-Carlo error. This was checked directly in the replicated covariate-count
-sweep (Section 6): comparing `alpha`'s posterior mean between arms A and D
-across every `k` tested,
-
-| k | truth | A | D |
-|---:|---:|---:|---:|
-| 1 | 0.500 | 0.5075 | 0.5077 |
-| 4 | 0.500 | 0.4854 | 0.4855 |
-| 8 | 0.500 | 0.4914 | 0.4916 |
-| 12 | 0.500 | 0.5164 | 0.5163 |
-
-and `beta_1`'s posterior mean across arms A, D, and E:
-
-| k | truth | A | D | E |
-|---:|---:|---:|---:|---:|
-| 1 | 0.500 | 0.4940 | 0.4940 | 0.4944 |
-| 4 | 0.500 | 0.4886 | 0.4886 | 0.4882 |
-| 8 | 0.500 | 0.4953 | 0.4953 | 0.4956 |
-| 12 | 0.500 | 0.4991 | 0.4991 | 0.4992 |
-
-agree to within Monte Carlo noise at every `k`, as the construction
-requires. This is complemented by the study's built-in negative control,
-"arm A2" - a second default-configuration fit at an independent seed, used
-to build a null distribution for how much two fits of the *same* model
-should differ by chance alone, so that an apparent "A vs D" difference can
-be judged against genuine sampling variability rather than eyeballed.
-
-The algebra underneath these agreements is separately machine-checked,
-independently of any MCMC run, so that a future change breaking the
-construction fails a test rather than quietly shifting a posterior mean.
-`dev/verify_absorbable_basis.py` (34 checks) covers soundness, the
-completeness repair, the consensus imputation of Section 4.6, Condition (S)
-on a design built to violate it, and a randomized sweep confirming the
-exact construction never loses a direction the column-wise search found.
-`dev/verify_beta_correction.py` (34 checks) covers Section 4.9: that
-$\Gamma$ satisfies identity (G), and that the resulting $\tilde\beta$
-reproduces the unconstrained model's fitted values exactly - on
-coordinate-aligned designs, on the spline/orthogonal-polynomial design of
-Example 1, and with several random-effect columns swept at once. Residuals
-across all cases are at machine precision ($\le 3 \times 10^{-15}$).
-`tests/testthat/test-orthogonalize.R` carries the corresponding
-integration tests against real fits.
-
-## 6. Efficiency: simulated covariate-count sweep
+## 6. Simulation results
 
 ### 6.1 Design
 
-`dev/sim_joint.R` was generalized this session to support an arbitrary
-number of extra covariates `k_extra` (previously capped at 3): baseline
-covariates are `age` (re-centered at mean 0 this session, removing a
-covariate-scale confound - see Section 6.1.1), `sex`, `trt`, and, beyond
-those three, independent standard-normal covariates `x4, x5, ...` with
-geometrically decaying true coefficients. `dev/study_orth_vs_jmbayes2.R`
-runs arms `A` (default), `D` (`orthogonalize_b0`), `E` (`orthogonalize_b`),
-and `J` (`JMbayes2::jm()`) across a `k` x `n` grid, resumable via a cached
-CSV keyed by `(k, n, seed, arm)`.
+`dev/pilot_rotate_grid.R` simulates from `dev/sim_joint.R`: a random
+intercept and slope, with `y ~ time + age + sex`, `Surv(time, event) ~ trt`,
+`sigma_b = (0.8, 0.3)`, `sigma_e = 0.3` and a spline baseline hazard. It
+crosses visits per subject (about 9 against about 17), the generating
+intercept-slope correlation $\rho \in \{0, 0.3, 0.6, 0.9\}$ and, at
+$\rho = 0.3$, $n \in \{150, 300, 600\}$: 10 cells, 3 seeds each, 500
+warmup and 1000 draws on each of 2 chains. It compares a default fit (`A`)
+with the rotation plus its dense block (`A_rotdense`) on the same
+simulated data. Both report the ordinary `beta`.
 
-The sweep reported here is `k in {1, 4, 8, 12}` at `n = 1000`, 3 seeds
-(matching JMbayes2 across 3 independent MCMC seeds as well), with
-`JMbayes2` run at 16,000 iterations / 4,000 burn-in per chain - well above
-its own package default of 3,500/500 - specifically so that any
-`JMbayes2` under-performance cannot be attributed to giving it fewer draws
-than it needed.
+### 6.2 Efficiency
 
-#### 6.1.1 A covariate-scale confound removed before this sweep
+ESS/sec, averaged over seeds, for the two regression coefficients the
+degeneracy affects most. The ratio is the geometric mean of the three
+paired per-seed ratios.
 
-`age` was originally simulated as `N(50, 10)` (a realistic clinical scale).
-As documented separately (`vignette("jmjax-validation")`, "Covariate scale:
-now handled automatically"), an uncentered covariate on that scale induces a
-strong `corr(beta_0, beta_age) ~= -0.98` posterior correlation that is
-*itself* expensive for NUTS, entirely independently of the random-effects
-degeneracy this document is about. `jmjax`'s automatic `standardize_covariates`
-already corrects for this internally, but leaving `age` uncentered in the
-*simulator* would have confounded "does the random-effects degeneracy scale
-with k" with "does an unrelated fixed-effects scale issue scale with k."
-`age` was re-centered to `N(0, 10)` in `sim_joint.R` before this sweep was
-run, isolating the effect this document is actually about.
+| visits/subject | $\rho$ | $n$ | intercept: default | rotated | ratio | time slope: default | rotated | ratio | `alpha` ratio |
+|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|
+| ~9 | 0.0 | 300 | 25.9 | 354.4 | 14.2x | 9.1 | 304.9 | 36.4x | 0.85x |
+| ~17 | 0.0 | 300 | 12.1 | 229.4 | 19.3x | 4.0 | 234.9 | 59.2x | 1.32x |
+| ~9 | 0.3 | 300 | 30.0 | 253.3 | 8.6x | 19.0 | 251.1 | 13.4x | 0.72x |
+| ~17 | 0.3 | 300 | 11.3 | 248.5 | 22.2x | 6.4 | 262.5 | 41.9x | 1.33x |
+| ~9 | 0.6 | 300 | 26.1 | 245.7 | 9.4x | 29.9 | 229.3 | 7.7x | 1.00x |
+| ~17 | 0.6 | 300 | 9.6 | 231.6 | 24.0x | 10.0 | 251.2 | 24.9x | 1.59x |
+| ~9 | 0.9 | 300 | 20.4 | 220.7 | 11.1x | 20.3 | 250.3 | 12.8x | 0.90x |
+| ~17 | 0.9 | 300 | 8.9 | 218.9 | 24.9x | 8.6 | 217.7 | 25.6x | 1.59x |
+| ~9 | 0.3 | 150 | 41.8 | 323.7 | 7.6x | 32.6 | 420.4 | 13.1x | 0.76x |
+| ~9 | 0.3 | 600 | 15.9 | 132.0 | 8.2x | 8.8 | 151.7 | 17.7x | 0.77x |
 
-### 6.2 Why two R-hat gates are needed
+Across all 30 paired fits the geometric-mean gain is 13.5x for the
+intercept (per-seed range 4.5x-31.6x) and 21.1x for the time slope
+(5.1x-70.9x). Wall time is essentially unchanged (1.03x; 0.83x-1.10x), so
+the gain is almost entirely ESS per draw. The median ESS over 2000 draws is
+about 3,450 for both coefficients under the rotation - more than the
+number of draws, the anti-correlated sampling NUTS achieves on a
+well-conditioned target - against 180-230 for the default fit. The
+association parameter `alpha`, which the degeneracy does not involve, is
+unchanged on balance (geometric mean 1.04x, range 0.51x-2.19x per seed). There
+were no divergences, and the worst R-hat on a reported coefficient was
+1.002 under the rotation, against 1.044 for the default fit.
 
-`JMbayes2`'s random-effects covariance parameters degrade sharply with `k`
-(Section 6.4), which fails an all-parameters R-hat convergence gate well
-before `k = 8` - but this says nothing about whether the *regression*
-parameters being compared are themselves trustworthy. Mirroring the pattern
-already used in the real-data study (`dev/study_realdata_aids.R`), the
-sweep checks R-hat separately on (a) every sampled parameter and (b) only
-`beta`, `alpha`, and `gamma` - the parameters a user would actually report.
-At every `k` in this sweep, the regression-only gate **passes for every
-arm, including `J`**, even where the all-parameters gate fails by several
-orders of magnitude - meaning the regression-parameter comparisons below
-can be trusted even in the cells where the headline "ESS/sec, all
-parameters" comparison cannot.
+The pattern follows the mechanism. The gain is largest where each subject
+carries the most information about its own random effects (the
+dense-visit cells: 19x-25x and 25x-59x). There the prior pins the split
+between `beta` and the absorbable directions least, relative to how
+tightly the data pin each subject. The gain does not grow with $n$ (8.2x
+at $n = 600$ against 7.6x at $n = 150$), as expected: the degeneracy's
+geometry is set by per-subject information, not by the number of
+subjects.
 
-### 6.3 Results
+### 6.3 Calibration
 
-Regression-only figures are `min(ESS/sec)` over `{beta, alpha, gamma}` only
-("the REPORTING view"); all-parameters figures are `min(ESS/sec)` over
-every sampled parameter ("the CONVERGENCE view"). `beta_0` ESS is reported
-separately because it is the parameter Section 3.2's degeneracy targets
-directly.
+The rotation cannot change the posterior (Proposition 6), so this checks
+the implementation. `dev/study_calibration.R`, `linear` design,
+$n = 300$, $R = 100$ replicates, gated on regression-parameter
+R-hat $\le 1.05$ (all 100 kept):
 
-| k | beta_0 ESS: A | D (x) | E (x) | E vs A, all-params ESS/sec | E vs A, regression-only ESS/sec | regression-only p-value [95% CI] |
-|---:|---:|---:|---:|---:|---:|---|
-| 1  | 492.7 | 5207.2 (10.6x) | 6592.5 (13.4x) | 1.12x | 14.3x | (single seed at k=1; see note) |
-| 4  | 551.2 | 7503.7 (13.6x) | 6727.9 (12.2x) | 1.26x | 14.7x | (single seed at k=4; see note) |
-| 8  | 624.2 | 7268.5 (11.7x) | 6514.0 (10.4x) | 1.18x (p=0.09, CI [0.94x, 1.49x]) | 13.3x | **p = 0.0064, CI [5.46x, 32.52x]** |
-| 12 | 628.6 | 7121.3 (11.3x) | 7334.8 (11.7x) | 1.14x (p=0.07, CI [0.97x, 1.34x]) | 14.2x | **p = 0.0003, CI [11.79x, 17.08x]** |
+| estimand | default: cov95 | sd_ratio | bias/se | rotated: cov95 | sd_ratio | bias/se |
+|---|---:|---:|---:|---:|---:|---:|
+| `beta_0` | 0.99 | 1.164 | 1.68 | 0.99 | 1.150 | 1.55 |
+| `beta_slope` | 0.97 | 1.027 | -0.30 | 0.96 | 1.038 | -0.32 |
+| `alpha` | 0.93 | 0.922 | 2.97 | 0.93 | 0.917 | 2.97 |
+| `sigma_b0` | 0.94 | 0.914 | 0.63 | 0.95 | 0.906 | 0.68 |
 
-*Note: p-values require >= 2 seeds; k=1 and k=4 draw on this sweep's
-seed-1 (cached) plus seeds 2-3 for the point estimates shown, but the
-formal significance test was run specifically at k=8 and k=12, the two
-most extreme, most decisively informative cells, as the targeted
-replication (see Section 6.1). The point estimates at k=1 and k=4 are
-consistent with the same pattern.*
+Coverage agrees to within 0.01 everywhere (the Monte Carlo SE on 95%
+coverage is about 0.011), and so does the ratio of mean posterior SD to
+the SD of posterior means. The two effects visible in *both* columns -
+slightly wide intervals for `beta_0`, and an upward bias in `alpha` of
+about 3 Monte Carlo SEs - belong to the model and this design, not to the
+rotation; Section 9 records them.
 
-Two things stand out, both consistent with the mechanism in Section 3.3.
-First, **the regression-only advantage is essentially flat across k = 1 to
-12** (13.3x-14.7x point estimates; both significance tests, at the two
-extremes tested, agree closely: 95% CIs of roughly [5x-33x] and [12x-17x]).
-This directly falsifies the initial hypothesis that this advantage should
-grow with covariate count - and is exactly what Section 3.3's mechanism
-predicts, since the binding regression parameter throughout is `beta_1`,
-whose degeneracy with `mean(b_i1)` does not depend on `k` at all.
+The retired sweep, with its correction, reached the same efficiency and the
+same calibration when combined with the same rotation. The side-by-side
+numbers are in the development record's Epilogue.
 
-Second, **the all-parameters comparison is statistically indistinguishable
-from 1x at both tested points** (both 95% CIs include 1x), while the
-regression-only comparison is highly significant at both. This is the
-formal version of the R-hat-gate finding in 6.2: once nuisance parameters
-(dominated by `rho`, which orthogonalization does not touch - see Section
-8.1) are allowed to set the pace, the *aggregate* comparison is noisy and
-not clearly different from parity; the real, replicated, large effect is
-specific to the regression parameters the reparameterization actually
-targets.
+## 7. Real data
 
-**A parameter-specific breakdown, and why it changes the reading above.**
-"Regression-only" in the table above is `min(ESS/sec)` over
-`{beta, alpha, gamma}`, and in every cell of this sweep the parameter
-setting that minimum (`min_who_reg` in `dev/study_orth_vs_jmbayes2.R`'s own
-output) is a `beta` coefficient, never `alpha`. That means the
-13.3x-14.7x figure above is, in effect, a comparison of the swept `beta`
-coordinate's ESS/sec between arms - exactly the coordinate Sections 9.1 and
-9.1.1 show does not survive the calibration correction. Pulling `alpha`'s
-own ESS/sec out of the same runs (`alpha_ess` is stored as its own column,
-independently of the `min`-based composite) gives a materially different,
-and materially more important, picture:
+> **Draft note.** Pending: the `aids` (Guo & Carlin 2004) and PBC2 comparisons of
+a default fit against `rotate_absorbable` + `dense_mass_generator_beta`,
+as in `dev/study_realdata_aids.R`.
 
-| k | A vs J (alpha) | E vs A (alpha) |
-|---:|---:|---:|
-| 1  | 5.72x | 1.02x |
-| 4  | 8.07x | 0.91x |
-| 8  | 6.22x | 1.07x |
-| 12 | 6.25x | 1.15x |
+## 8. The comparison with JMbayes2
 
-`jmjax`'s *default*, non-orthogonalized fit already beats `JMbayes2` on
-`alpha`'s own ESS/sec by 5.7x-8.1x, flat across k, with no involvement of
-`orthogonalize_b` at all - `E vs A` for `alpha` sits close to 1x throughout
-(0.91x-1.15x), unlike the 11x+ effect the same ratio produces for `beta_0`
-on this same sweep. Section 8 returns to what this means for how the
-overall claim should be attributed.
+### 8.1 The association parameter: a generic NUTS advantage
 
-### 6.4 JMbayes2's own degradation with k
+The quantity a joint-model analysis is usually run to estimate is the
+association parameter `alpha`. The degeneracy of Section 3 does not
+involve it, and neither does the rotation (Section 6.2: 1.04x). Measured
+directly against `JMbayes2`, `jmjax`'s *default* fit mixes `alpha` much
+faster. In a replicated covariate-count sweep (`dev/study_orth_vs_jmbayes2.R`:
+$n = 1000$, 3 seeds, `JMbayes2` at 16,000 iterations with 4,000 burn-in per
+chain, well above its own defaults):
+
+| k | default `jmjax` vs `JMbayes2`, `alpha` ESS/sec |
+|---:|---:|
+| 1 | 5.72x |
+| 4 | 8.07x |
+| 8 | 6.22x |
+| 12 | 6.25x |
+
+On the `aids` data (4 seeds; 2 with a matched `JMbayes2` run) the default
+fit's `alpha` ESS/sec was 147.2 against `JMbayes2`'s 60.3, a ratio of
+2.44x. This is the generic NUTS/HMC-versus-block-Gibbs distinction of
+Sections 2.2 and 2.4 (Hoffman & Gelman 2014; Roberts & Sahu 1997; Betancourt
+2017). A gradient-based sampler moves the whole parameter vector jointly.
+It has no equivalent of "conditional on the other blocks' current values",
+so growing inter-parameter correlation has no specific mechanism by which
+to degrade one block's own updates. It is not a `jmjax`-specific
+achievement, but it is the part of the comparison that needs no caveat,
+and it is present with no option enabled.
+
+### 8.2 JMbayes2's own degradation with k
 
 Independently of anything about `jmjax`, `JMbayes2`'s random-effects
 covariance parameter (`D.D[...]`, a fixed 2x2 block regardless of `k`)
@@ -1669,482 +903,23 @@ Gibbs step has to move through grows as more absorbable fixed-effects
 directions are added to the design - exactly the setting that literature
 predicts degrades block/conditional samplers specifically. This is also
 precisely why the naive "all-parameters ESS/sec, jmjax vs JMbayes2" ratio
-would look enormous at k=12 (hundreds-fold, driven by `J`'s R-hat of
-11,000+) without being an honest measurement of anything `jmjax`'s own
-reparameterization did - which is the reason this document reports the
-regression-only comparison as the trustworthy one, not the larger raw
+would look enormous at k=12 (hundreds-fold, driven by `JMbayes2`'s R-hat of
+11,000+) without being an honest measurement of anything - which is why
+this document compares parameters a user reports, not the larger raw
 number.
-
-## 7. Efficiency: real data
-
-### 7.1 AIDS clinical trial data - an independent generalization check
-
-The `aids` dataset bundled with `JMbayes2` (n = 467 patients, CD4 count
-over time modeled as `sqrt(CD4) ~ obstime + drug + ...`, `Surv(Time, death)
-~ drug`; Guo & Carlin, 2004, *The American Statistician*, 58(1), 16-24) was
-deliberately chosen for the real-data check in preference to `pbc2`, for a
-reason worth stating explicitly: `pbc2` is the *only* real dataset every
-degeneracy diagnostic and every "measured motivation" number quoted in
-`jmjax`'s own source code (Section 3.5) has ever touched. A result that only
-ever appears on the dataset used to discover it is not yet evidence the
-effect generalizes. `aids` is untouched by any of this project's diagnostic
-history and is itself a standard, independently-cited benchmark in the
-joint-modeling literature (e.g. Rizopoulos, 2010, "JM: An R Package for the
-Joint Modelling of Longitudinal and Time-to-Event Data," *Journal of
-Statistical Software*, 35(9)), which also makes the result legible to a
-reader unfamiliar with this package's own development history.
-
-Across 4 independent seeds (`aids_full.csv`), regression-only ESS/second
-ratios against the default fit:
-
-| arm | mean regression-only ESS/sec | mean all-params R-hat | mean regression-only R-hat | per-seed ratio vs A (range) |
-|---|---:|---:|---:|---|
-| A (default) | 23.1 | 1.009 | 1.008 | - |
-| D (orth. intercept) | 180.6 | 1.008 | 1.002 | 5.16x - 11.91x |
-| E (orth. all) | 209.8 | 1.008 | 1.001 | 5.17x - 13.43x |
-| J (JMbayes2, 2 of 4 seeds) | 56.6 | 2.333 | 1.023 | (E vs J: 4.11x, 4.53x, the 2 seeds with a matched J run) |
-
-The pattern replicates the simulated study closely: `jmjax`'s regression
-parameters converge cleanly regardless of arm (mean regression-only R-hat
-1.001-1.008 across A/D/E), while `JMbayes2`'s all-parameters R-hat is
-unstable across seeds (mean 2.33, driven by its covariance block) even
-though its own regression-only R-hat (1.023) is reasonable - the same
-regression-vs-nuisance split seen throughout this document, now confirmed
-on a dataset that played no role in developing any of the diagnostics that
-found it.
-
-**The same `alpha`-specific breakdown on real data.** As in the simulated
-sweep, pulling `alpha`'s own ESS/sec (also stored per-seed in
-`aids_full.csv`, independently of the `min`-based regression-only column)
-rather than the composite gives:
-
-| arm | mean alpha ESS/sec | vs A | vs J |
-|---|---:|---:|---:|
-| A (default) | 147.2 | - | 2.44x |
-| D (orth. intercept) | 206.7 | 1.40x | 3.43x |
-| E (orth. all) | 219.2 | 1.49x | 3.64x |
-| J (JMbayes2, 2 seeds) | 60.3 | - | - |
-
-`jmjax`'s default fit is already 2.44x faster than `JMbayes2` on `alpha`'s
-own mixing, with no reparameterization involved; `orthogonalize_b` adds a
-further, real but modest, 1.49x on top (larger than the simulated sweep's
-~1.0x for this quantity, though from only 2-4 seeds per arm here - a
-difference worth another look, but not one that changes the main
-conclusion). Contrast the swept `beta_0`: its own `A`-vs-`E` ESS/sec ratio
-on this same dataset is 7.41x - an order of magnitude larger effect,
-specific to the coordinate Section 9.1.1's measurement shows is not the one
-a user reports.
-
-### 7.2 PBC2
-
-The pre-existing PBC2 benchmark in `vignette("jmjax-validation")`
-("Benchmark: jmjax vs JMbayes2" and "Performance tuning") reports a
-combined (not orthogonalization-specific) ~4.8x sampling-efficiency
-advantage on real, covariate-laden PBC2 data, using the recommended
-combination of options documented there. The `orthogonalize_b0`-specific
-PBC2 numbers in Section 3.5 (6.6x/>7.6x recoverable ESS on the two affected
-coefficients alone) are a different, narrower measurement - the marginal
-effect of the location-degeneracy fix specifically, isolated from the other
-tuning options in that combined figure. Both are accurately described as
-"previously validated," not new results of this document; they are
-included here for completeness, and because Section 3.5's numbers are the
-direct empirical basis for the mechanism explained in Section 3.
-
-## 8. Mechanism: two architectural layers, not one
-
-A natural reading of the results above is that `jmjax`'s NUTS/HMC sampler is
-simply, generally superior to `JMbayes2`'s block sampler - including on
-parameters (like `rho`, the random-effects correlation) that no targeted
-reparameterization in this package touches at all. That reading is half
-right and worth separating into its two actual components, because they
-have different degrees of novelty and different literature backing.
-
-### 8.1 Layer 1: generic gradient-based robustness (well-established, not jmjax-specific, and now directly demonstrated)
-
-This layer no longer needs to be inferred indirectly from `rho`'s stability
-under growing `k` (though that evidence, kept below, still corroborates
-it). Sections 6.3 and 7.1 now report `alpha`'s own ESS/sec, isolated from
-any orthogonalization, directly against `JMbayes2`: 5.7x-8.1x in
-simulation, 2.44x on real `aids` data, with `orthogonalize_b` contributing
-little to nothing further (0.91x-1.15x in simulation; a real but secondary
-1.49x on the real dataset). This is exactly the generic NUTS/HMC-vs-block-
-Gibbs distinction in Sections 2.2 and 2.4 (Hoffman & Gelman 2014; Roberts &
-Sahu 1997; Betancourt 2017): a gradient-based sampler that jointly explores
-the full parameter vector via Hamiltonian dynamics has no equivalent of
-"conditional on the other blocks' current values," and so has no
-equivalent mechanism by which growing inter-parameter correlation
-specifically degrades one block's own updates.
-
-The corroborating, indirect evidence: `rho`'s own mixing under `jmjax` is,
-on its own terms, unremarkable - its ESS/draw bounces in a narrow band
-(roughly 0.06-0.12 across the k-sweep) with no trend as `k` grows, since
-neither `orthogonalize_b0` nor `orthogonalize_b` touches `rho` at all. What
-is notable is that it is stable rather than degrading - which, given
-Section 6.4's finding, is mostly a statement about `JMbayes2` degrading on
-its comparable parameter (the covariance block `rho` is derived from), not
-about `jmjax` doing anything specifically clever for `rho`.
-
-Taken together, this is real, well-documented, general MCMC theory, now
-backed by a direct, reparameterization-free measurement on the parameter
-that matters most to a joint-model analysis - not a `jmjax`-specific
-architectural achievement, but the part of the comparison that should
-carry the paper's headline claim, precisely because it needs no caveat
-about which coordinate is being measured.
-
-### 8.2 Layer 2: the targeted reparameterization (a real, verified, but more modest contribution than first measured)
-
-The large, k-independent, highly statistically significant *swept-beta*
-advantage (Section 6.3) is real and is not explained by Layer 1 alone -
-`beta_1` degrades under the *default* `jmjax` fit too, and orthogonalizing
-it removes a genuine, source-verified degeneracy (Section 3), proved not
-to change the model (Section 4) and verified so empirically (Section 5).
-What Sections 9.1 and 9.1.1 add is that this large effect is specific to
-the *swept* coordinate, not to the identified quantity a user reports:
-measured on `beta_corrected`, the reportable estimand, the gain is a
-pilot-measured 1.25x-1.31x (Section 9.1.1), not 13x-15x. The option's
-honest efficiency contribution is therefore modest - closer in size to
-Layer 1's own secondary effect on `alpha` (Section 7.1's 1.49x) than to
-the headline number this document originally reported for it. Its more
-durable contribution is the one Section 9.1 documents at length:
-diagnosing and correcting a real posterior-calibration bug that silently
-miscalibrates credible intervals for swept coefficients, in exactly the
-way an earlier, retracted attempt at the same problem did. A follow-up
-construction (Section 9.1.2), not yet validated to the same standard as
-the rest of this document, suggests the 1.25x-1.31x figure above is not
-the end of the story - see that section before treating it as a ceiling.
 
 ### 8.3 Synthesis
 
-The evidence now supports a different apportionment than the first draft's:
-the large, robust, statistically significant, twice-replicated (simulated
-and real-data) advantage over `JMbayes2` on the parameter a joint-model
-analysis is usually run to estimate - `alpha` - is Layer 1, present in
-`jmjax`'s default fit with no option enabled, and is well-established,
-generic HMC/NUTS-vs-block-Gibbs theory rather than a novel architectural
-claim of this package. `orthogonalize_b0`/`orthogonalize_b` (Layer 2) is a
-genuine, source-verified, formally proved fix for a real identifiability
-bug that recurs for any random slope on time - worth reporting on its own,
-narrower terms - but its own efficiency contribution, honestly measured on
-the coordinates it is safe to report, is modest, not the order-of-magnitude
-figure it appeared to be before Section 9.1.1's measurement. Framed this
-way, the claim that `jmjax` reflects "elegant parameterization and problem
-formulation" is well supported for the calibration-bug diagnosis and fix
-specifically; the claim that it explains most of `jmjax`'s speed advantage
-over `JMbayes2` is not, and should not be made in the paper's headline.
+Two effects should be reported separately. The comparison with `JMbayes2`
+on `alpha` (Section 8.1) is large and generic, and needs no
+reparameterization. The rotation (Sections 5-6) is specific to this model
+class. It removes a cost that `jmjax`'s own default fit pays on the
+regression coefficients, and it does so without changing any reported
+quantity. How the rotated fit compares with `JMbayes2` on those
+coefficients has not yet been measured directly; it is part of the
+remaining work (Section 9).
 
-## 9. Limitations and open questions
-
-### 9.1 Posterior calibration: a negative result, and its correction
-
-The first draft of this document listed posterior calibration as the
-single most important unchecked item, with no evidence either way. It has
-now been checked (`dev/study_calibration.R`), and the answer for the
-reported parameterization is negative.
-
-The study simulates $R$ replicates at $N = 300$, fits each under three
-arms - **A** (unmodified), **D** (`orthogonalize_b0`), **E**
-(`orthogonalize_b`) - and reports, per arm and estimand, coverage of the
-central credible intervals together with
-$\mathrm{sd\_ratio} = \overline{\mathrm{SD}(\beta \mid y)} \big/
-\mathrm{SD}\big(\mathbb{E}[\beta \mid y]\big)$, the average posterior SD
-divided by the across-replicate spread of the posterior means. A
-calibrated posterior reports, on average, the spread its point estimates
-actually have, so $\mathrm{sd\_ratio}$ sits at 1; below 1 means intervals
-too narrow. It is a far sharper instrument than coverage at any
-affordable replicate count, because it uses the whole interval rather
-than a binary hit - and it is the exact shape of the
-`wishart_gibbs_centered` failure.
-
-At $R = 100$ replicates on the `linear` design, $N = 300$, 500 warmup +
-1000 draws over 2 chains, gated at regression-only
-$\widehat{R} \le 1.05$ (95% coverage carries a Monte Carlo SE of about
-$0.011$ at this count):
-
-| estimand | arm A | arm D | arm E |
-|---|---|---|---|
-| `beta_0` sd_ratio | 1.164 | **0.262** | **0.264** |
-| `beta_0` cov95 | 0.990 | **0.323** | **0.320** |
-| `beta_slope` sd_ratio | 1.027 | 1.032 | **0.223** |
-| `beta_slope` cov95 | 0.970 | 0.960 | **0.250** |
-| `alpha` sd_ratio | 0.922 | 0.920 | 0.921 |
-| `alpha` cov95 | 0.930 | 0.929 | 0.920 |
-| `sigma_b0` sd_ratio | 0.914 | 0.906 | 0.910 |
-
-Put in absolute terms, against the across-replicate spread of the
-posterior means - the quantity a calibrated posterior SD should be
-estimating:
-
-| | empirical SD | mean posterior SD | intervals too narrow by |
-|---|---|---|---|
-| `beta_0`, arm A | 0.0587 | 0.0660 | - (1.16x, mildly conservative) |
-| `beta_0`, arm D / E | 0.0587 | **0.0154** | **3.8x** |
-| `beta_slope`, arm A / D | 0.0172 | 0.0178 | - (1.03x) |
-| `beta_slope`, arm E | 0.0172 | **0.0038** | **4.5x** |
-
-Point estimates are unbiased throughout: the largest relative bias in any
-arm or estimand among $\beta_0$, $\beta_{\text{slope}}$ and
-$\sigma_{b_0}$ is $0.5\%$.
-
-The pattern is a clean dose-response and leaves little room for an
-alternative reading. Arm D sweeps only the intercept column and damages
-only `beta_0`; arm E sweeps both and damages both; `beta_slope` under D is
-untouched, as it must be, since D never touches that column. The
-unmodified fit is itself well calibrated on `beta_slope` (1.027) and
-mildly conservative on `beta_0` (1.164), so arm A rather than nominal
-$0.95$ is the target a correction should be matching.
-
-`alpha` is carried deliberately as a **negative control**: it lives in the
-survival submodel and never meets the subject-constant column space, so no
-arm should move it. None does - and the agreement is far tighter than the
-table can show. Paired replicate by replicate, the mean difference in
-`alpha`'s posterior mean is $+2 \times 10^{-5}$ between arms D and A and
-$+1 \times 10^{-4}$ between E and A, i.e. $0.04\%$ and $0.2\%$ of a single
-posterior standard deviation. `sigma_b0` behaves the same way, which also
-settles an open question posed in `mcmc_model.py`'s own source comment:
-sweeping does **not** shift `sigma_b0`'s posterior.
-
-That the damage is invisible to a point-estimate check is the whole
-difficulty. It is exactly why `wishart_gibbs_centered` survived inspection
-for as long as it did, and exactly why this study reports interval width
-rather than agreement of means.
-
-**The correction restores calibration.** Applying $\tilde\beta$ of
-Section 4.9 - post-processing each arm's own draws, with no refit - at
-$R = 16$ replicates under the same settings (the 100-replicate
-confirmation is in progress):
-
-| estimand | arm A | arm D | arm E | D corrected | E corrected |
-|---|---|---|---|---|---|
-| `beta_0` sd_ratio | 1.177 | 0.283 | 0.283 | **1.181** | **1.193** |
-| `beta_slope` sd_ratio | 1.184 | 1.183 | 0.267 | **1.183** | **1.195** |
-
-with 95% coverage restored to $1.00$ in every corrected cell. The
-agreement is stronger than the table shows, because it holds **per
-replicate** and not merely in aggregate: arm D's corrected `beta_0` tracks
-arm A's `beta_0` across replicates at $r = 0.9999$, with a mean absolute
-gap of $0.0007$ against $0.0082$ for the uncorrected comparison - an order
-of magnitude tighter. That is the signature Proposition 6 predicts, since
-the correction reconstructs what the unmodified parameterization would
-have reported *given the same* `b_raw` draw, rather than merely landing on
-a similar variance.
-
-The practical reading, pending the larger run: `beta` from an
-orthogonalized fit is a *constrained* estimand and its interval should not
-be reported for a swept parameter; `beta_corrected` is the identified one
-and is what a user should report. The sampler still works in the
-well-conditioned geometry - that is the entire point - and the reporting
-is done in the identified coordinates afterwards.
-
-### 9.1.1 A second negative result: the correction's own effective sample size
-
-Restoring calibration is not the same as restoring efficiency, and this
-mattered enough to check before the corrected estimand's efficiency was
-assumed rather than measured. `dev/pilot_ess_corrected.R` computes
-`beta_corrected`'s own R-hat/ESS via the package's own estimator
-(`recompute_site_diagnostics()`, the same routine `jm_fit()` uses for the
-standardize_covariates back-transform), applied post hoc to an
-orthogonalized fit's stored draws - no backend change, no refit.
-
-At 2 seeds (`n = 300`, 500 warmup + 1000 samples x 2 chains, the `linear`
-design), `E vs A` ESS/sec:
-
-| parameter | `beta` (swept) | `beta_corrected` (reportable) |
-|---|---:|---:|
-| `beta_0` | 9.08x-9.11x | 1.25x-1.29x |
-| `beta_slope` | 15.02x | 1.28x-1.31x |
-
-The swept coordinate's own gain replicates the k-sweep and `aids` findings
-closely (Sections 6.3, 7.1); the reportable estimand's does not. This
-document had earlier predicted the opposite here - that `beta_corrected`
-would mix close to `beta`'s own rate, because the swept component "is
-unconstrained by the likelihood and therefore mixes at essentially the
-prior's rate." That prediction is falsified by this measurement, and the
-reason is instructive rather than merely disappointing.
-
-**Why the prediction failed.** Section 2.7 (Geyer, 1992) is the general
-point: ESS belongs to a specific scalar functional of the chain, not to
-"the sampler." The sampled `beta` in an orthogonalized fit is $\beta$
-in Section 4.9's notation, and `beta_corrected` is $\tilde\beta$, obtained
-by applying $\Phi$ to the stored draws - a different linear functional of
-$(\beta, b_{\mathrm{raw}})$ than $\beta$ alone, with no general guarantee
-of inheriting its mixing rate. (An earlier version of this paragraph used
-the two symbols the other way round.) The specific mechanism: the location
-degeneracy this document diagnoses was always a trade-off, in the
-unconstrained model, between its coefficient - $\tilde\beta$ - and the
-linear combination $Q^{\top}b_{\mathrm{raw}}[\cdot, q_\ast]$ that
-Proposition 6 subtracts. Sampling in the orthogonalized parameterization
-and recovering $\tilde\beta$ afterwards does not remove that trade-off
-($\Phi$ has unit Jacobian and preserves the likelihood; Proposition 6(i)-(iii) show it cannot), it
-*relocates* which coordinate carries it: the sampled $\beta$ becomes the
-well-identified combination (fast-mixing, as Sections 6.3/7.1
-confirm), and the degeneracy is now expressed entirely through
-$Q^{\top}b_{\mathrm{raw}}[\cdot, q_\ast]$ - the very quantity the recovery
-step adds back in. That quantity is not an isolated, prior-dominated
-scalar the way this document's original hypothesis assumed; it lives
-inside a hierarchical random-effects block with its own, separate,
-already-documented curvature pathology (Neal's funnel, correctly
-distinguished from this document's location problem in Section 2.2),
-governed by `sigma_b`/`L_corr` and by the single global step size and mass
-matrix NUTS must use across every direction in `b` simultaneously.
-`orthogonalize_b`/`_b0` was designed against the location problem, not
-against the b-block's own internal conditioning, so the relocated
-direction inherits whatever mixing rate that block already had - which
-this measurement puts close to a default fit's, not close to the prior's.
-
-**Correction (Section 4.10).** The mechanism proposed in the paragraph
-above - that the relocated direction inherits the `b` block's funnel-type
-conditioning under `sigma_b` - is not needed to explain this measurement,
-and is kept only as a record of what was believed when it was made.
-Section 4.10 shows, in a closed-form check with every variance component
-held fixed (so no funnel can arise), that misalignment is sufficient: the
-generator coordinate $u = Q_0^{\top} b_{\mathrm{std}}[\cdot, 0]$ that the
-correction adds back is dominated by an exactly flat component (all of it
-when $\rho = 0$) with unit variance given the variance components, lying
-oblique to the per-subject coordinates, so a diagonal mass matrix cannot
-rescale it; its whitened variance grows with the information each subject
-carries about its own random effects (Proposition 10(a)). Whether the
-funnel adds to this once the variance components are sampled is not
-settled by that check. The first half of the paragraph - that ESS belongs
-to the functional, and that the correction relocates the trade-off rather
-than removing it - stands.
-
-**What this does and does not affect.** It changes the efficiency claim
-for the swept coefficients specifically: `beta`'s large ESS/sec gain is
-real but not reportable, and `beta_corrected`'s reportable gain is modest.
-It does not touch `alpha`, `gamma`, or any parameter outside the swept
-subspace - `alpha`'s own ESS/sec advantage over `JMbayes2` (Sections 6.3,
-7.1) is a different functional entirely, unaffected by any of this
-machinery, which is exactly why it survives as the paper's central claim
-(Section 8).
-
-**Caveat.** This is a 2-seed pilot for one design (`linear`, `N = 300`).
-The direction is corroborated independently - the `aids` table's own
-`beta_0` numbers (Section 7.1) reproduce a comparable `E`-vs-`A` figure to
-the one this pilot finds for the swept coordinate - which is reassuring
-about the machinery, but the exact 1.25x-1.31x figure for
-`beta_corrected` should be treated as a preliminary estimate, not a final
-number, until more seeds are run.
-
-### 9.1.2 A follow-up: isolating the relocated degeneracy recovers most of the missing efficiency
-
-Section 9.1.1 traced the corrected estimand's disappointing ESS/sec to a
-specific mechanism: the relocated degeneracy lands inside `b_std[:, 0]`, a
-several-hundred-dimensional per-subject block, and inherits whatever
-mixing rate NUTS's single global mass matrix gives that block as a whole -
-not the near-prior rate this document's original hypothesis assumed. That
-diagnosis suggests a fix: give the specific direction the degeneracy
-occupies its own, small, separately-adapted coordinate, rather than
-leaving it buried inside a large block tuned for everything else in it.
-
-**The construction.** `b_raw[:, 0] = sigma_b[0] * b_std[:, 0]` always - a
-valid Cholesky factor of a correlation matrix has first row
-$[1, 0, \ldots, 0]$ - so `b_std[:, 0]` can be split, with no
-approximation, into a component along the orthonormal basis $Q$ that
-`orthogonalize_b0`/`orthogonalize_b` already computes (the absorbable
-directions) and a component along its orthogonal complement $Q_\perp$:
-`b_std[:, 0]` $= Qu + Q_\perp v$, with $u$, $v$ independent standard
-normal of dimension $k$ (typically 1-4) and $N_{\mathrm{sub}} - k$
-respectively. Because this is a rotation of a spherical Gaussian, it is
-exact: `b_std[:, 0]` marginally, and jointly with every other parameter,
-has precisely the same distribution as before, and
-$u = Q^{\top}$`b_std[:, 0]` recovers exactly the generator coordinate the
-degeneracy lives in (verified in pure NumPy to machine precision,
-independently of the model). $u$ is then sampled as its own, explicitly
-small NUTS site (`control$orthogonalize_b0_rotate = TRUE`), optionally
-given its own dense mass-matrix block via NumPyro's existing
-block-diagonal mechanism (`control$dense_mass_b0_generator = TRUE`) - the
-same mechanism `dense_mass_beta`/`dense_mass_spline` already use elsewhere
-in this package. No other part of the model changes: the sweep, the
-survival submodel, and the `beta_corrected` post-processing of Section 4.9
-read `b_std`/`L_corr`/`sigma_b` exactly as before and do not know whether
-`b_std` was rotated. The construction is currently scoped to the
-intercept column only - the slope column's analogous direction depends on
-the sampled correlation $\rho$, so a fixed, precomputed rotation cannot
-isolate it the same way. Section 4.10 (Lemma 1, Corollary 4) shows that this obstacle is
-avoidable: rotating every column by the same fixed basis contains the
-$\rho$-dependent direction inside a small explicit block for every value
-of $\rho$.
-
-**Efficiency.** `beta_corrected`'s own ESS/sec, relative to a default
-fit's `beta_0` (the closest available like-for-like reference, since a
-default fit never reports a corrected estimand):
-
-| pilot | baseline hazard | seeds | `orthogonalize_b0` alone | `+ orthogonalize_b0_rotate` | `+ dense_mass_b0_generator` |
-|---|---|---:|---:|---:|---:|
-| 1 | spline | 2 | 0.91x | 7.61x | 5.23x |
-| 2 | spline | 6 | 0.93x | 5.77x | 5.81x |
-| 3 | weibull | 2 | 1.05x | 6.52x | 5.64x |
-
-(all three on the `linear` design, `N = 300`). The rotation alone
-recovers most of the gap between the plain option's 1.25x-1.31x
-(Section 9.1.1) and the swept, unreportable coordinate's own 9x-15x,
-consistently across two baseline-hazard forms and both seed counts tried.
-The additional dense mass-matrix block does not reliably help on top of
-the rotation - it trails it in two of three pilots and ties it in the
-third - unlike the rotation itself, which improved on the plain option in
-every pilot run. Section 4.10 predicts this: once $u$ is its own coordinate, what remains
-slow lies along the slope column's generator coordinate, which a dense
-block on $u$ alone cannot reach (Corollary 3(i), Proposition 10(b)). A correctness check accompanies every pilot:
-`beta_corrected`'s posterior mean agrees between the rotated and
-unrotated fit at the same seed to within Monte Carlo noise (mean absolute
-difference $0.0009$-$0.0018$ across the three pilots, against posterior
-means of order $2$), consistent with the rotation being exact rather than
-merely well-behaved.
-
-**Calibration.** An exact reparameterization of the sampling coordinates
-cannot change the target posterior, but "provably exact" and "confirmed
-by this document's own calibration instrument" are different claims - and
-the instrument exists precisely because an earlier reparameterization
-(`wishart_gibbs_centered`) was likelihood-invariant and unbiased
-throughout, and was retracted only because its intervals turned out too
-narrow (Section 9.1). `dev/study_calibration.R` was extended with a
-`D_rot` arm (`orthogonalize_b0` + `orthogonalize_b0_rotate`) and run at
-$R = 100$ on the `linear` design, gated identically to Section 9.1:
-
-| estimand | arm A (`beta_0`, plain - A is never orthogonalized) | arm D `beta_0_corrected` | arm D_rot `beta_0_corrected` |
-|---|---|---|---|
-| cov95 | 0.990 | 0.990 | 0.990 |
-| sd_ratio | 1.164 | 1.164 | 1.156 |
-| bias/se | 1.68 | 1.52 | 1.55 |
-| `alpha` cov95 (negative control) | 0.930 | 0.929 | 0.930 |
-
-Arm A's row is its own plain `beta_0` - the target a correction should be
-matching, per Section 9.1 - not a corrected quantity, since nothing is
-swept for an unmodified fit. `D_rot`'s coverage matches `D`'s exactly and
-its sd_ratio differs by
-$0.008$ - noise at this replicate count (Monte Carlo SE on 95% coverage is
-about $0.011$ here), nowhere near the fourfold narrowing
-`wishart_gibbs_centered` produced. The negative control does not move
-either. Proposition 8 (Section 4.10) has since shown the equality is exact,
-so this comparison is best read as a check that the implementation is
-correct, not as evidence about the construction. This is also, incidentally, the $R = 100$ confirmation Section 9.1
-flagged as "in progress" for arm D's own correction: the plain option's
-calibration fix is now confirmed at full replicate count, not only the
-$R = 16$ pilot reported there; arm E's equivalent confirmation remains
-open.
-
-**Status.** This is a promising, internally consistent result, but it
-should not be read as validated to the standard the rest of this document
-uses. It has been checked on one design (`linear`), one baseline hazard
-beyond the initial spline pilot (Weibull), a handful of seeds per
-configuration (not the covariate-count sweep of Section 6 or the
-independent real-data check of Section 7), and only for the intercept
-column (`orthogonalize_b0`, not `orthogonalize_b`'s slope sweep). It is
-also new code, implemented and reviewed but not traced by its authoring
-session (no JAX/NumPyro environment was available during implementation -
-see `dev/pilot_b0_rotate.R`'s header), so its first executions are the
-ones reported here rather than the product of independent pre-release
-testing. It ships as two opt-in `control` arguments, off by default,
-alongside the existing `orthogonalize_b0`/`orthogonalize_b` options; it
-does not change either option's own behaviour when left at its default
-(`FALSE`). A known interaction: a warm-started fit's initial value for
-`b_std` is silently not applied to the rotated columns, since `b_std`
-becomes a derived quantity rather than a sampled one under the rotation
-(a soft degradation - NUTS still starts from a valid point - not a
-correctness issue). Section 9.3 lists what remains before this could be
-reported with the same confidence as Sections 6-8.
-
-### 9.2 Remaining limitations
+## 9. Limitations and next steps
 
 - **An unrelated finding the same study surfaced, recorded here rather than
   dropped.** The negative control `alpha` is arm-invariant to a remarkable
@@ -2155,8 +930,7 @@ reported with the same confidence as Sections 6-8.
   $\mathrm{sd\_ratio}$ $0.92$ and 95% coverage $0.93$. `sigma_b0` shows a
   milder version of the same pattern ($\mathrm{sd\_ratio}$ $0.91$, coverage
   $0.94$, bias $0.3\%$). Because the effect is identical across arms it
-  says nothing whatever about the reparameterization, which is the claim
-  this document makes; it is a property of the joint model, this
+  says nothing about the rotation; it is a property of the joint model, this
   simulation design, or this sample size, and it appeared only because
   this is the first time these fits were replicated 100 times and examined
   for *coverage* rather than point agreement. It is reported because a
@@ -2166,235 +940,58 @@ reported with the same confidence as Sections 6-8.
   sample bias in the association parameter is a plausible and
   well-precedented candidate - is separate work, and it should be
   understood before this table is put in front of a referee.
-- **The reparameterization's own efficiency contribution, once correctly
-  measured, is modest as shipped.** Section 9.1.1: a 2-seed pilot puts
-  `beta_corrected`'s ESS/sec gain over a default fit at roughly
-  1.25x-1.31x, not the 9x-15x measured for the swept, unreportable `beta`.
-  This does not undermine the calibration fix itself (Section 9.1) or the
-  option's value as a bug fix, but it does mean the option should not be
-  marketed on efficiency grounds alone; Section 8 gives the reattributed
-  picture, with `alpha`'s own advantage over `JMbayes2` (Sections 6.3, 7.1)
-  now carrying the paper's central efficiency claim instead. A follow-up
-  construction (Section 9.1.2) recovers most of this gap in pilot testing
-  while preserving calibration, but is not yet validated broadly enough
-  to revise this bullet's headline number for the package as shipped.
-- The option currently requires `q >= 2`, `random_effects_corr = TRUE`, and
-  `random_effects_method = "nuts"` (the default); other combinations raise
-  an informative error rather than silently no-op'ing, but the option's
-  coverage of `jmjax`'s other random-effects code paths (e.g.
-  `wishart_gibbs`, uncorrelated random effects) is simply untested, not
-  ruled out.
-- It remains an opt-in, experimental option, not the default.
-- The sample-size (`n`) dimension of this study is incomplete: only `n =
-  500` at `k in {1, 3}` was run before the covariate-count question took
-  priority (per an explicit, deliberate scope decision - see project
-  history); a proper `n`-scaling characterization, orthogonal to the
-  `k`-sweep reported here, remains open.
-- **The completeness gap is closed** (was: "`_absorbable_basis` is sound
-  but not complete"). Section 4 supplies the formal treatment, and the
-  result is two-sided. Soundness always held: every direction removed is
-  genuinely absorbable by `beta` (Propositions 2 and 3), so Corollary 1's
-  model-invariance claim - which underwrites every number in Sections 5
-  to 8 - is established rather than assumed. Completeness did *not* hold
-  for the column-wise search (Proposition 4 and Example 1), and the
-  failure was silent: with a spline or orthogonal-polynomial longitudinal
-  mean plus a random slope, the dominant degeneracy was left untreated
-  while the intercept column still produced a basis, so no warning fired.
-  The basis-independent null-space construction of Section 4.5 now ships
-  as `_absorbable_basis_exact()` and is authoritative (Section 4.8). What
-  remains open is narrower: behaviour under *near*-collinearity, where the
-  rank decision is a tolerance judgement rather than a clean split.
-- **Condition (S) is checked, not argued.** `_structural_extension_residual()`
-  evaluates the proportionality on the event and quadrature grids at every
-  fit and warns when it fails (Section 4.8). The residual is reported, so
-  a design that satisfies the grid test by coincidence is now visible
-  rather than silently accepted.
-- The simulation design here uses a Weibull survival submodel and a
-  specific covariate structure (three named covariates plus independent
-  Gaussian extras). Generalization to the spline-baseline hazard, to
-  covariates with their own structure (e.g. correlated covariates, or
-  covariate-by-time interactions, which `_absorbable_basis`'s own docstring
-  notes it would also pick up), and to designs without a random slope at
-  all, is plausible by construction but not separately re-verified by the
-  study in this document.
-
-### 9.3 Next validation steps, in priority order
-
-1. **Implement Corollary 4, then test Section 4.10's predictions by
-   simulation.** Section 4.10 proves the rotation exact and predicts when,
-   and by roughly how much, it helps, which turns "broader validation"
-   into specific checks that could fail. In order: (a) implement the
-   all-column rotation with a Householder completion as a new opt-in
-   setting alongside the current one, so the two can be compared on the
-   same seeds, including under `orthogonalize_b`; (b) a pilot grid
-   crossing visits per subject (sparse against dense follow-up),
-   $\sigma_e$, and the generating $\rho \in \{0, 0.3, 0.6, 0.9\}$,
-   recording `beta_corrected` ESS/sec for both the intercept and the slope
-   and checking the three predictions stated under Section 4.10's table
-   (the current rotation's dependence on $\rho$, the slope's
-   recovery under the all-column rotation, and invariance in
-   $N \in \{150, 300, 600\}$), together with per-fit wall time and tree
-   depth, since overhead is the one thing the theory does not predict;
-   (c) the $R = 100$ calibration study for the new arm on the `linear`
-   and `mixing` designs - Proposition 8 predicts equality, so this checks
-   the implementation; (d) the real-data check of Section 7 (`aids`,
-   PBC2); and (e) resolving the warm-start interaction noted in Section
-   9.1.2's "Status" paragraph. Only after (b)-(d) would there be grounds
-   to consider the rotation - together with `orthogonalize_b0`/`_b` and
-   reporting `beta_corrected` as the primary estimand - as a default, a
-   user-facing change that would need its own discussion.
-2. **More seeds for the plain correction's effective sample size -
-   corroborated, not yet closed.** Section 9.1.1's 2-seed figure
-   (1.25x-1.31x) has since been corroborated by two further pilots at 6
-   spline seeds and 2 Weibull seeds (Section 9.1.2's table; the plain-
-   option column there reads 0.91x-1.05x, consistent pilot-to-pilot noise
-   around the same modest figure). Computing the correction on by-chain
-   draws directly, rather than post hoc via `recompute_site_diagnostics()`
-   on pooled draws, remains open.
-3. **The prior-weight diagnostic of Proposition 7.** $w$ is computable draw
-   by draw from quantities already stored; reporting
-   $\mathrm{ESS}(\{w\})$, or simply $\mathrm{sd}(\log w)$, converts
-   Corollary 2's asymptotic argument into a per-fit check and would make
-   the correction self-validating on designs and priors not covered here.
-4. **The 100-replicate calibration run, extended to arm E and the
-   `mixing` design.** Arm D's correction is now confirmed at $R = 100$ on
-   the `linear` design (Section 9.1.2); arm E's remains at the original
-   $R = 16$ pilot scale, and the `mixing` design - where the per-column
-   search finds *nothing* for the slope column, exercising the full
-   sequence of defect, repair, and correction in one arm - has not yet
-   been run at either scale. Condition (S) has been verified to hold
-   there ($3 \times 10^{-16}$), so the correction is applicable.
-5. **Coverage of the other random-effects code paths**, per the second
-   bullet of Section 9.2.
+- **Scope.** The rotation is implemented for `q >= 2` with correlated
+  random effects under the default NUTS sampler; other random-effects code
+  paths raise an informative error. The simulation evidence is one design
+  family (Section 6.1), with a spline baseline hazard; the earlier sweep
+  pilots also covered a Weibull hazard.
+- **Near-collinearity.** The basis construction's rank decision is a
+  tolerance judgement when absorbable and identified directions are nearly
+  collinear (Section 4.8).
+- **Next steps, in order.**
+  1. The theory of Section 5.2.
+  2. Real data (Section 7).
+  3. The rotated fit against `JMbayes2` on the regression coefficients.
+  4. The broader design checks that would justify making the rotation the
+     default: more covariates, a non-linear time trend (Section 4.5's
+     Example 1) and the `mixing` design.
 
 ## 10. Related work summary
 
-Section 2 covers this in full; in brief, this document sits at the
-intersection of (a) general non-centered/centered reparameterization theory
-for hierarchical models (Papaspiliopoulos & Roberts 2003; Papaspiliopoulos,
-Roberts & Sköld 2007), (b) the specific geometric account of why this
-matters for Hamiltonian/NUTS samplers (Betancourt & Girolami 2013;
-Betancourt 2017; Hoffman & Gelman 2014; Neal 2003 for the related-but-
-distinct funnel case), (c) the complementary account of why block/Gibbs
-samplers are specifically vulnerable to the resulting growing correlation
-(Roberts & Sahu 1997), (d) applied precedent for this failure mode in
-hierarchical Bayesian models generally (Ogle et al. 2020), and (e) the
-classical fact that effective sample size is a property of the specific
-functional of the chain being monitored rather than of the sampler itself
-(Geyer 1992) - needed in Section 9.1.1 to explain why the swept coordinate
-and the identified estimand recovered from it can, and here do, have very
-different effective sample sizes. Two further literatures turned out to bear directly on the correction
-and its efficiency: restricted spatial regression (Reich, Hodges & Zadnik 2006; Hughes & Haran 2013;
-Hanks et al. 2015; Khan & Calder 2022; Bradley 2024), whose
-back-transformation Section 4.9 generalizes to joint models, and the
-analysis of linear preconditioning for HMC (Neal 2011; Hird & Livingstone
-2025), on which Section 4.10's account of the rotation rests, together
-with the standard characterization of non-identified parameters (Dawid
-1979; Poirier 1998; Gustafson 2015). Its contribution is the specific
-diagnosis, source-verified mechanism, and replicated empirical
-characterization of the location-degeneracy problem for joint
-longitudinal-survival models; the finding, on direct measurement, that
-`jmjax`'s efficiency advantage over `JMbayes2` on the parameters a user
-actually reports is predominantly a generic HMC/NUTS-vs-block-Gibbs effect
-(Section 8) rather than a product of this reparameterization; and a
-correction, proved exact, that restores calibration for the swept
-coefficients this document's fix affects.
+Section 2 covers this in full. In brief, this document sits at the
+intersection of:
+
+- general non-centered/centered reparameterization theory for hierarchical
+  models (Papaspiliopoulos & Roberts 2003; Papaspiliopoulos, Roberts &
+  Sköld 2007);
+- the geometric account of why this matters for Hamiltonian/NUTS samplers
+  (Betancourt & Girolami 2013; Betancourt 2017; Hoffman & Gelman 2014;
+  Neal 2003 for the related-but-distinct funnel case), and the analysis of
+  linear preconditioning for HMC (Neal 2011; Hird & Livingstone 2025);
+- the account of why block/Gibbs samplers are specifically vulnerable to
+  growing correlation (Roberts & Sahu 1997);
+- applied precedent for this failure mode (Ogle et al. 2020);
+- the fact that effective sample size belongs to a functional, not a
+  sampler (Geyer 1992).
+
+The closest structural relative of the retired sweep is restricted spatial
+regression (Reich, Hodges & Zadnik 2006; Hughes & Haran 2013; Hanks et
+al. 2015; Khan & Calder 2022; Bradley 2024). The rotation differs in kind:
+it restricts nothing.
 
 ## 11. Conclusion
 
-`jmjax`'s efficiency advantage over `JMbayes2` is real, large, statistically
-significant, and replicated across simulated and (for the `aids` dataset)
-genuinely independent real data - but it belongs mainly to `jmjax`'s
-generic NUTS/HMC engine, not to the reparameterization this document set
-out to validate. Measured directly and without any option enabled, a
-default `jmjax` fit already beats `JMbayes2` on `alpha`'s own ESS/second -
-the association parameter a joint-model analysis is usually run to
-estimate - by 5.7x-8.1x in simulation and 2.44x on real data (Sections 6.3,
-7.1). This is well-documented, general sampler-class theory (gradient-based
-HMC/NUTS versus block-Gibbs/Metropolis, Section 8.1), demonstrated here
-rather than only argued for, and it is the claim this paper should lead
-with.
+`jmjax`'s joint model has a location degeneracy between fixed effects and
+random effects. It recurs for the random slope whatever the covariate
+count, and it slows a default fit on exactly the coefficients a user
+reports. Rotating the random effects so the absorbable directions become a
+small explicit block, and giving that block and `beta` one dense mass
+block, removes most of that cost - roughly 14x and 21x on the intercept
+and time slope in simulation - without changing the model, the prior or
+any reported quantity. `jmjax`'s separate, larger advantage over `JMbayes2`
+on the association parameter is generic to NUTS and needs none of this.
 
-`orthogonalize_b0`/`orthogonalize_b` remains a genuine, worthwhile
-contribution, but on narrower terms than first drafted. The
-reparameterization diagnoses and fixes a real identifiability problem - a
-location degeneracy between subject-constant fixed effects and matching
-random effects, that recurs independently of covariate count for any
-random slope on time - down to the level of source code, and proves the
-fix does not change the model (Section 4). It also uncovers, and repairs,
-a real posterior-calibration bug: the swept coordinates it reports come
-back miscalibrated, exactly as an earlier, retracted attempt at the same
-problem was, and the correction of Section 4.9 restores both coverage and
-interval width in closed form, with no refit. What it does *not* deliver,
-on the evidence in Section 9.1.1, is a large efficiency gain for the
-coefficients it targets, once measured on the coordinates a user may
-actually report: a pilot puts that gain at roughly 1.25x-1.31x, an order
-of magnitude short of the swept coordinate's own, unreportable 9x-15x. The
-option is best described, honestly, as a correctness fix with a modest
-efficiency side benefit, not as an efficiency feature.
-
-The calibration question the first draft named as the blocker has been
-answered, and answering it is what surfaced the ESS question that, in
-turn, changed this document's central claim. Both findings share the same
-shape: a reparameterization can make a chosen coordinate look excellent -
-unbiased and fast-mixing - while the quantity a user actually needs is a
-different functional of the same draws, subject to no such guarantee
-(Section 2.7). The practical upshot for this package is a clean division
-of labor: report `alpha`, `gamma`, and other unswept parameters from a
-default fit and credit the sampler; use
-`orthogonalize_b0`/`orthogonalize_b` when a swept coefficient's calibration
-matters, report `beta_corrected` rather than `beta`, and expect a modest,
-not dramatic, efficiency dividend for doing so.
-
-A late addition complicates that last clause without overturning it: a
-follow-up construction (`orthogonalize_b0_rotate`, Section 9.1.2) recovers
-most of the missing efficiency for the intercept-swept coefficient in
-every pilot run so far - roughly 5x-8x over a default fit, against the
-1.25x-1.31x above - while leaving calibration unchanged within noise on
-the one design checked ($R = 100$). It is reported here because the
-evidence is consistent, not because it has earned the same confidence as
-the rest of this document: it needs the breadth of validation Section 9.3
-lists (more designs, real data, the slope column, more calibration
-replicates) before "modest, not dramatic" above should be revised for the
-package as shipped. Until then, the honest summary is: the correctness
-fix is proven and ships; a further efficiency fix on top of it looks
-promising in early testing but is not yet ready to promise. Section 4.10 has since narrowed what "not yet" means: the construction
-is proven exact, so what remains open is how much it helps and at what
-cost - questions the theory now answers in advance of the simulations that
-must confirm it.
-
-## 12. Note on publication venue
-
-For the record, and as requested: this material is suited to a package
-vignette regardless of any further venue (this document); beyond that, the
-combination of a general, citable methodological contribution (Sections 2-
-3, 8-9) with a software package it ships in and validates (Sections 5-7)
-fits the scope of the *Journal of Statistical Software* or *The R Journal*
-best (both have precedent for exactly this pairing - `JMbayes2` itself was
-introduced this way). A parallel arXiv preprint (`stat.CO` or `stat.ME`) is
-low-cost and would establish priority independently of review timelines.
-`Bayesian Analysis`, `Statistics in Medicine`, and `Computational Statistics
-& Data Analysis` are reasonable alternates if a narrower statistical-
-methodology framing (rather than software-paper framing) is preferred.
-Section 9's calibration gap, which an earlier draft flagged as the blocker
-here, is now closed in both directions: the negative result is measured and
-the correction is proved and validated (Sections 4.9 and 9.1). That
-strengthens rather than weakens the submission - a reviewer in this area
-would have asked for the coverage study, and the honest answer now comes
-with a remedy attached rather than a caveat. Following that check to its
-conclusion also moved the paper's own headline (Sections 8, 9.1.1, 11): the
-efficiency claim a reviewer should be shown first is now `alpha`'s
-reparameterization-independent advantage over `JMbayes2` (real and large on
-two datasets), not the reparameterization's own effect on swept
-coefficients (real but modest once measured on `beta_corrected`). The
-remaining items worth having in hand before submission are the broader
-validation of the rotation follow-up (Section 9.1.2; Section 9.3, item 1)
-if it is to be included as a package feature rather than a documented
-pilot result, and, more modestly, a few more seeds of the plain
-correction's ESS pilot (Section 9.3, item 2) to firm up the 1.25x-1.31x
-figure - neither changes the paper's central claim (Section 8), which
-rests on `alpha`'s reparameterization-independent advantage rather than on
-either of these items.
+> **Draft note.** To be revised once Sections 5.2 and 7 are complete.
 
 ## References
 
@@ -2405,15 +1002,11 @@ either of these items.
 - Bradley, J. R. (2024). Spatial Deconfounding is Reasonable Statistical
   Practice: Interpretations, Clarifications, and New Benefits.
   arXiv:2408.05106.
-- Dawid, A. P. (1979). Conditional Independence in Statistical Theory.
-  *Journal of the Royal Statistical Society, Series B*, 41(1), 1-31.
 - Geyer, C. J. (1992). Practical Markov Chain Monte Carlo. *Statistical
   Science*, 7(4), 473-483.
 - Guo, X. & Carlin, B. P. (2004). Separate and Joint Modeling of
   Longitudinal and Event Time Data Using Standard Computer Packages. *The
   American Statistician*, 58(1), 16-24.
-- Gustafson, P. (2015). *Bayesian Inference for Partially Identified
-  Models: Exploring the Limits of Limited Data*. Chapman & Hall/CRC.
 - Hanks, E. M., Schliep, E. M., Hooten, M. B. & Hoeting, J. A. (2015).
   Restricted Spatial Regression in Practice: Geostatistical Models,
   Confounding, and Robustness under Model Misspecification.
@@ -2444,14 +1037,9 @@ either of these items.
 - Papaspiliopoulos, O., Roberts, G. O. & Sköld, M. (2007). A General
   Framework for the Parametrization of Hierarchical Models. *Statistical
   Science*, 22(1), 59-73. Also arXiv:0708.3797.
-- Poirier, D. J. (1998). Revising Beliefs in Nonidentified Models.
-  *Econometric Theory*, 14(4), 483-509.
 - Reich, B. J., Hodges, J. S. & Zadnik, V. (2006). Effects of Residual
   Smoothing on the Posterior of the Fixed Effects in Disease-Mapping
   Models. *Biometrics*, 62(4), 1197-1206.
-- Rizopoulos, D. (2010). JM: An R Package for the Joint Modelling of
-  Longitudinal and Time-to-Event Data. *Journal of Statistical Software*,
-  35(9).
 - Roberts, G. O. & Sahu, S. K. (1997). Updating Schemes, Correlation
   Structure, Blocking and Parameterization for the Gibbs Sampler. *Journal
   of the Royal Statistical Society, Series B*, 59(2), 291-317.
