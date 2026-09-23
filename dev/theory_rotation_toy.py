@@ -1,6 +1,6 @@
 """Exact-Gaussian check of the rotation theory (vignette Section 4.10).
 
-Pure NumPy; no JAX, NumPyro or R needed. Runs in 10-40 s.
+Pure NumPy; no JAX, NumPyro or R needed. Runs in about a minute.
 
 WHAT THIS IS. The longitudinal submodel of jmjax's joint model with the
 variance components (sigma_b, rho, sigma_e) held FIXED, so that the
@@ -26,6 +26,10 @@ WHAT IT CHECKS.
           posterior variances - what NUTS's diagonal adaptation estimates),
           for plain orthogonalize_b0, the current column-0 rotation, and
           rotating every column; checked against the closed forms (a)-(c).
+  Part 5  The no-sweep rotation (current vignette Section 5.2; Parts 1-4
+          belong to the retired sweep's Section 4.10, now in
+          dev/notes/sweep-reparameterization.md): the (beta, U) ridge, and
+          what a dense block over it does and does not fix.
   Part 3  A stylised HMC model (exact dynamics, integration time
           T ~ U(0, 2 T0) with T0 set by the bulk of the whitened spectrum,
           step size set by its smallest eigenvalue): integrated
@@ -260,3 +264,40 @@ if __name__ == "__main__":
         for how in ("householder", "random"):
             _, _, eR = hmc_model(*posterior(d, 1, 0, "col0", completion=how)[:2])
             print(f"  N={Nn:4d} {how:12s}: {eR / eD:5.2f}x")
+
+    print("\nPART 5 - no-sweep rotation (vignette Section 5.2): the (beta, U) block")
+    print("  (a) exact 2-D check of Proposition 7(i): corr(beta, u) = -(1 + 1/(tau kappa^2))^(-1/2), diffuse beta prior")
+    for sb_, tau_, kap_ in [(100.0, 1e5, 0.01), (100.0, 2e3, 0.046), (100.0, 1e4, 0.05)]:
+        P_ = np.diag([1 / sb_ ** 2, 1.0]) + tau_ * np.outer([1, kap_], [1, kap_])
+        S_ = np.linalg.inv(P_)
+        r_ = S_[0, 1] / np.sqrt(S_[0, 0] * S_[1, 1])
+        print(f"    tau kappa^2 = {tau_ * kap_ ** 2:6.2f}: corr {r_:.6f}, formula {-1 / np.sqrt(1 + 1 / (tau_ * kap_ ** 2)):.6f}")
+
+    def _blk(Nn):
+        return list(range(4)) + list(range(4, 4 + k)) + list(range(4 + Nn, 4 + Nn + k))
+
+    print("  (b) whitened condition number, full posterior: diagonal metric vs dense block on (beta, U)")
+    for (nmin, nmax), se in itertools.product([(2, 4), (2, 11), (8, 20)], [0.3, 0.8]):
+        d = design(N=N, nmin=nmin, nmax=nmax)
+        Sig, _, _ = posterior(d, 0, 0, "all", rho=0.3, se=se)
+        idx = _blk(N); m = np.diag(Sig)
+        e_d = np.linalg.eigvalsh(Sig / np.sqrt(np.outer(m, m)))
+        Mm = np.diag(m).copy(); Mm[np.ix_(idx, idx)] = Sig[np.ix_(idx, idx)]
+        Li = np.linalg.inv(np.linalg.cholesky(Mm)); W = Li @ Sig @ Li.T
+        e_b = np.linalg.eigvalsh(0.5 * (W + W.T))
+        info = np.mean(d["n"]) * 0.8 ** 2 / se ** 2
+        print(f"    visits {nmin:2d}-{nmax:2d} se={se}: per-subject information {info:6.1f}   "
+              f"diagonal {e_d.max() / e_d.min():8.0f}   dense (beta, U) {e_b.max() / e_b.min():6.0f}")
+
+    print("  (c) Proposition 7(iv): a dense (beta, U) metric fitted at sigma_b0 = 0.8, used at 0.8 (1 +- delta),")
+    print("      delta = 1/sqrt(2N) (roughly the posterior CV of sigma_b0): worst condition number of the block")
+    for (nmin, nmax), Nn in itertools.product([(2, 11), (8, 20)], [150, 300, 600]):
+        d = design(N=Nn, nmin=nmin, nmax=nmax); idx = _blk(Nn)
+        dl = 1 / np.sqrt(2 * Nn)
+        Ss = [posterior(d, 0, 0, "all", rho=0.3, s0=0.8 * f)[0][np.ix_(idx, idx)] for f in (1 - dl, 1, 1 + dl)]
+        Li = np.linalg.inv(np.linalg.cholesky(Ss[1]))
+        def _c(S):
+            e = np.linalg.eigvalsh(Li @ S @ Li.T); return e.max() / e.min()
+        info = np.mean(d["n"]) * 0.8 ** 2 / 0.3 ** 2
+        print(f"    visits {nmin:2d}-{nmax:2d} N={Nn:4d}: delta*sqrt(information) {dl * np.sqrt(info):.2f}   "
+              f"worst block condition {max(_c(Ss[0]), _c(Ss[2])):.2f}")

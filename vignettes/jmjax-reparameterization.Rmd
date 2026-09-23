@@ -51,9 +51,7 @@ random effects instead of rotating them, is retired. It is documented in
 the package repository's development record
 (`dev/notes/sweep-reparameterization.md`).
 
-> **Draft note.** This vignette is being rewritten around the rotation.
-Section 5.2 (where the degeneracy goes under the rotation, and what the
-dense block can and cannot do) and Section 7 (real data) are pending.
+> **Draft note.** Section 7 (real data) is pending.
 
 ## 1. Motivation
 
@@ -743,19 +741,117 @@ aligns the whole span, which does not depend on $L$ (Section 5.2).
 
 ### 5.2 Where the degeneracy goes, and the dense block
 
-> **Draft note.** To be written (next step). Planned content: along an
-absorbable direction, the likelihood is flat in the paired shift of
-$(\beta, U)$ (Corollary 1). Under the rotation, every such pair lies in
-the small block of `beta` and `b_gen_U`, for every value of $\sigma_b$
-and $\rho$, not spread across the $N$ per-subject coordinates. A
-diagonal mass matrix cannot represent the ridge between `beta` and
-`b_gen_U`, and a dense block over just those coordinates can. The ridge's
-orientation depends on $\sigma_b$, so a fixed metric can only fit it on
-average; the proposition should bound what that costs. The closed-form
-check `dev/theory_rotation_toy.py` found the pairing competitive in an
-earlier version of this analysis, and Section 6 found it so in real
-fits.
+Proposition 6 says the rotation is harmless. This subsection says what it
+is for. The results come in two grades. Lemma 1 is exact for the full joint
+model. Proposition 7 analyses the geometry that results, in a reduced
+two-coordinate model with the variance components held fixed. Its
+predictions are then checked in the closed-form model of
+`dev/theory_rotation_toy.py` (Part 5) and against Section 6's fits.
 
+**Lemma 1 (localization).** Let $v \in \operatorname{span}(Q_j)$ be an
+absorbable direction for random-effect column $j$, with witness $d$
+(Corollary 1). In the sampled coordinates, the likelihood-invariant shift
+$(\beta, b[\,\cdot\,, j]) \mapsto (\beta + c\,d,\; b[\,\cdot\,, j] + c\,v)$ is
+
+$$\beta \mapsto \beta + c\,d, \qquad
+U \mapsto U + c\,(Q_{\cup}^{\top} v)\, e_j^{\top} (L^{\top})^{-1}, \qquad
+V \mapsto V,$$
+
+for every value of $\sigma_b$ and $L_{\mathrm{corr}}$. So every direction
+along which the likelihood is flat lies in the coordinate block
+$(\beta, U)$, of dimension $p + kq$. Without the rotation, the same
+directions have a component on every one of the $N$ subjects' coordinates.
+
+*Proof.* $b = b_{\mathrm{std}} L^{\top}$, so adding $c\,v$ to column $j$ of
+$b$ adds $\Delta = c\,v\, e_j^{\top} (L^{\top})^{-1}$ to $b_{\mathrm{std}}$.
+Every column of $\Delta$ is a multiple of $v \in \operatorname{span}(Q_{\cup})$,
+and $Q_{\perp}^{\top} Q_{\cup} = 0$, so $Q_{\perp}^{\top}\Delta = 0$ and
+$Q_{\cup}^{\top}\Delta = c\,(Q_{\cup}^{\top} v)\, e_j^{\top}(L^{\top})^{-1}$.
+Invariance of the likelihood is Corollary 1. $\square$
+
+Lemma 1 is why the rotation acts on every column with the same $Q_{\cup}$.
+The flat directions mix intercept and slope columns in proportions set by
+the *sampled* $L$ (the $(L^{\top})^{-1}$ factor), but they always stay inside
+the fixed block. A rotation of the intercept column alone captures them
+only when $\rho = 0$.
+
+Being flat in the likelihood is not the same as being flat in the
+posterior. Along each invariant direction the priors on `beta` and on
+`b_std` still pin the split, at scale $\sigma_b/\sqrt{N}$ on the `beta`
+side (Section 3.2). What the rotation does is make the resulting ridge
+between `beta` and $U$ a ridge between a *few named coordinates*, which a
+small dense mass block can then absorb.
+
+**Proposition 7 (the ridge, and what the dense block does).** Consider one
+invariant direction, in the reduced model that holds every other coordinate
+fixed. Let $\tilde\beta$ be the coordinate of `beta` along the witness $d$,
+with a diffuse prior, and $u$ the matching coordinate of $U$, with prior
+$\mathcal{N}(0,1)$. Suppose the likelihood informs only the combination
+$s = \tilde\beta + \kappa u$, with precision $\tau$. Then:
+
+(i) $\operatorname{corr}(\tilde\beta, u \mid y) = -\big(1 + 1/(\tau\kappa^{2})\big)^{-1/2}$;
+
+(ii) under a diagonal metric the plane's whitened covariance has
+eigenvalues $1 \pm \lvert r\rvert$. It is therefore never *slow* (at most 2),
+but it has a *narrow* direction of variance
+$1 - \lvert r\rvert \approx 1/(2\tau\kappa^{2})$, which caps NUTS's step size;
+
+(iii) with a dense block over $(\tilde\beta, u)$ the plane is exactly
+whitened (both eigenvalues 1);
+
+(iv) $\tau\kappa^{2}$ is a per-subject information ratio. For the random
+intercept's mean direction, $\kappa = \sigma_0/\sqrt{N}$ and
+$\tau = \sum_i n_i/\sigma_e^{2}$, so $\tau\kappa^{2} = \bar n\,\sigma_0^{2}/\sigma_e^{2}$.
+This does not depend on $N$.
+
+*Proof.* With a flat prior on $\tilde\beta$ the posterior precision of
+$(\tilde\beta, u)$ is $\tau\,(1, \kappa)^{\top}(1, \kappa) +
+\operatorname{diag}(0, 1)$. Its inverse is
+$\tau^{-1}\begin{pmatrix} 1 + \tau\kappa^{2} & -\tau\kappa \\ -\tau\kappa & \tau
+\end{pmatrix}$, which gives (i). (ii) holds because whitening a 2 x 2
+covariance by its diagonal gives its correlation matrix. (iii) is the
+definition of a dense metric block. For (iv), shifting the mean
+direction of the intercepts by $u$ moves every subject's level by
+$\sigma_0 u/\sqrt{N}$, and the data inform that common shift with
+precision $\sum_i n_i/\sigma_e^{2}$. $\square$
+
+So under a diagonal metric the rotation alone trades a slow direction for a
+narrow one, and the narrow one gets worse exactly where the degeneracy is
+worst: many visits per subject, or small noise. The dense block removes
+it. The block is small ($p + kq$ coordinates: 10 in Section 6's design),
+so it costs almost nothing per gradient. In the full closed-form posterior
+(`dev/theory_rotation_toy.py`, Part 5(b); variance components fixed), the dense block cuts the whitened condition number by factors of 5 to 70, for
+example from 12,037 to 174 with 8-20 visits per subject. What remains is
+conditioning any fit has, such as the within-subject correlation between
+intercept and slope. Part 5(a) checks (i) to six decimals.
+
+**What a fixed dense block cannot do.** The ridge's orientation depends on
+$\kappa \propto \sigma_0$, a *sampled* parameter, while NUTS adapts one
+fixed metric. Let $\delta$ be the posterior coefficient of variation of
+$\sigma_0$, roughly $1/\sqrt{2N}$. A metric that exactly whitens the plane
+at one value of $\sigma_0$ leaves a residual condition number of
+$1 + O\big(\delta\sqrt{\tau\kappa^{2}}\big)$ elsewhere in the posterior. In
+units of the design, that is $1 + O\big(\sqrt{\bar n\,\sigma_0^{2}/(\sigma_e^{2}N)}\big)$:
+small when there are many subjects relative to the information each one
+carries, which is the usual regime for joint-model data. Part 5(c)
+computes it directly:
+
+| visits per subject | $N = 150$ | $N = 300$ | $N = 600$ |
+|---|---:|---:|---:|
+| 2-11 | 1.76 | 1.50 | 1.31 |
+| 8-20 | 2.71 | 2.05 | 1.64 |
+
+The retired sweep has no such term. It removes the invariant directions
+from the likelihood's coordinates exactly, for every value of $\sigma_0$,
+at the price of a correction step (development record, Sections 4.9-4.10).
+The prediction, then, is that the no-sweep construction should lose ground
+to the swept-and-rotated one at small $N$ and with dense follow-up, and
+match it otherwise. Section 6's grid, which also ran the swept arms,
+agrees, noisily. The no-sweep construction's ESS/sec relative to the swept one was
+0.73x / 0.78x (intercept / slope) at $N = 150$, 1.05x / 1.02x at $N = 300$
+and 0.93x / 1.14x at $N = 600$ in the same cells. Across all $\rho$ at
+$N = 300$ it averaged about 0.88x with dense visits against about 1.0x
+with ordinary ones.
 
 ### 5.3 Using it
 
@@ -949,9 +1045,10 @@ remaining work (Section 9).
   tolerance judgement when absorbable and identified directions are nearly
   collinear (Section 4.8).
 - **Next steps, in order.**
-  1. The theory of Section 5.2.
-  2. Real data (Section 7).
-  3. The rotated fit against `JMbayes2` on the regression coefficients.
+  1. Real data (Section 7).
+  2. The rotated fit against `JMbayes2` on the regression coefficients.
+  3. Designs with few, densely observed subjects, where Proposition 7(iv)
+     predicts the no-sweep construction is weakest.
   4. The broader design checks that would justify making the rotation the
      default: more covariates, a non-linear time trend (Section 4.5's
      Example 1) and the `mixing` design.
@@ -991,7 +1088,7 @@ and time slope in simulation - without changing the model, the prior or
 any reported quantity. `jmjax`'s separate, larger advantage over `JMbayes2`
 on the association parameter is generic to NUTS and needs none of this.
 
-> **Draft note.** To be revised once Sections 5.2 and 7 are complete.
+> **Draft note.** To be revised once Section 7 is complete.
 
 ## References
 
