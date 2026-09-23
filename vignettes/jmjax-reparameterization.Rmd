@@ -947,9 +947,13 @@ not been tried.
 The rotation and its dense block are on by default for NUTS fits
 (`random_effects_method = "nuts"`) with either a random intercept only
 ($q = 1$), or $q \ge 2$ and `random_effects_corr = TRUE`, as long as no
-legacy sweep option is requested.
+legacy sweep option is requested. Elsewhere they are silently off.
+`control = list(rotate_absorbable = FALSE)` gives the unrotated fit.
+Setting `rotate_absorbable = TRUE` explicitly insists on the rotation and
+raises an error outside that scope. What was rotated is reported in
+`fit$convergence$orthogonalize$rotation` (`mode`, `applied`, `k`).
 
-For $q = 1$, `jmjax` samples $b$ directly, not non-centred, so the
+**Random intercept only ($q = 1$).** For $q = 1$, `jmjax` samples $b$ directly, not non-centred, so the
 rotation acts on $b$ itself. Its prior is iid $N(0, \sigma_b^{2})$, so the
 rotated coordinates have the same prior for every $\sigma_b$, and
 Proposition 6 holds unchanged. The ridge between `beta` and the rotated
@@ -987,12 +991,38 @@ ratios, rotated over unrotated), shows:
 - **The fit as a whole.** What sets the chain length a user needs is the
   slowest parameter. On that measure, per draw, the rotation is about 17x
   better on `aids` and 12x better on `pbc2`.
- Elsewhere they are
-silently off. `control = list(rotate_absorbable = FALSE)` gives the
-unrotated fit. Setting `rotate_absorbable = TRUE` explicitly insists on
-the rotation and raises an error outside that scope. What was rotated is
-reported in `fit$convergence$orthogonalize$rotation` (`mode`, `applied`,
-`k`).
+
+The simulation grid confirms this (`dev/pilot_rotate_grid.R` with
+`ROT_GRID=q1`: data with a random intercept only, 7 designs, 3 seeds,
+2 chains of 1000 draws).
+
+| visits/subject | $n$ | $\sigma_e$ | intercept | `age` | time slope | `alpha` |
+|---:|---:|---:|---:|---:|---:|---:|
+| 9 | 100 | 0.3 | 41x | 34x | 1.3x | 1.5x |
+| 9 | 300 | 0.3 | 129x | 98x | 1.5x | 3.3x |
+| 9 | 300 | 0.8 | 6.5x | 6.6x | 0.79x | 0.80x |
+| 17 | 100 | 0.3 | 55x | 58x | 2.1x | 2.4x |
+| 17 | 300 | 0.3 | 100x | 98x | 1.1x | 2.0x |
+| 34 | 100 | 0.3 | 92x | 68x | 3.4x | 3.7x |
+| 34 | 300 | 0.3 | 282x | 207x | 1.3x | 2.6x |
+
+(ESS/sec, rotated over unrotated, geometric mean over seeds; `age` is the
+subject-constant covariate.)
+
+- **The unrotated fit often had not converged.** In 17 of the 21
+  unrotated fits some parameter had R-hat above 1.05. The intercept's own
+  R-hat reached 1.27, and it mixed at 0.002-0.04 ESS per draw everywhere
+  except the noisy $\sigma_e = 0.8$ cell. Every rotated fit had R-hat at
+  most 1.004. The large ratios therefore compare a converged fit with one
+  that had not converged at this run length. Their exact size is not
+  meaningful, but the order of magnitude is.
+- **The pattern follows the theory.** The intercept and `age` gain
+  together, and most with dense follow-up and low noise, where each
+  subject pins its own level most tightly. The time slope has no
+  absorbable direction at $q = 1$, so it moves only through the step size
+  (0.79x-3.4x). `alpha` gains in six of the seven designs.
+- **Exactness.** Posterior means agreed with the unrotated fit's to a
+  median of 0.025 posterior SDs (maximum 0.175).
 
 ## 6. Simulation results
 
