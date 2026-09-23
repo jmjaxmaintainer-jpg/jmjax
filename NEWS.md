@@ -28,7 +28,7 @@
     every cell.
   - Against `JMbayes2`, `jmjax` now matches it on the coefficients it
     hierarchically centres, where it previously trailed 18x-30x.
-  - **The one cost.** `alpha`'s ESS/sec can fall to about 0.7x-1.0x the
+  - **A small cost, not a blocker.** `alpha`'s ESS/sec can fall to about 0.7x-1.0x the
     unrotated fit's in designs with about 9 visits per subject. It rises
     1.1x-2.4x with 17 or more visits, and on real data it was 2.0x (`aids`)
     and 0.95x (`pbc2`). See `vignette("jmjax-reparameterization")`.

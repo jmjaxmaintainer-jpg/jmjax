@@ -1358,20 +1358,22 @@ quantity.
 - **Near-collinearity.** The basis construction's rank decision is a
   tolerance judgement when absorbable and identified directions are nearly
   collinear (Section 4.8).
-- **`alpha` with sparse follow-up.** With about 9 visits per subject the
-  rotation costs `alpha` up to about 30% of its ESS/sec (Sections 6.2 and
-  6.4), and why is not understood. Since `alpha` is the primary target
-  (Section 8.1), this is the rotation's most important open question. It
-  still leaves `alpha` far ahead of `JMbayes2` (Section 8).
-- **Next steps, in order.**
-  1. Explain `alpha`'s split by visits. A first step is to measure how
-     much of `alpha`'s posterior variance is shared with `beta` and the
-     generator block in each regime.
-  2. A metric that follows the sampled $\sigma_0$, to recover the
-     difference from the retired sweep in the most information-dense
-     designs (Section 6.4).
-  3. The broader design checks: more covariates, a non-linear time trend
-     (Section 4.5's Example 1) and the `mixing` design.
+- **Known costs, left as they are.** Two small costs are recorded rather
+  than tuned away. Neither stops a fit or biases it, and both were
+  measured in simulation, not in real data.
+  - With about 9 visits per subject, the rotation gives `alpha` 0.72x-1.00x
+    of the default fit's ESS/sec (Sections 6.2 and 6.4). It gains with
+    denser follow-up, and on real data it was 2.0x (`aids`) and 0.95x
+    (`pbc2`). The mechanism is not established, and `alpha` remains far
+    ahead of `JMbayes2` either way (Section 8).
+  - In the most information-dense stress designs, the retired sweep is up
+    to about 2x more efficient than the rotation, as Section 5.2 predicts.
+    Both are 5x-30x ahead of the default fit there.
+
+  A metric that follows the sampled $\sigma_0$ could recover the second.
+  Both will be revisited if users meet them in real data.
+- **Next step.** The broader design checks: more covariates, a non-linear
+  time trend (Section 4.5's Example 1) and the `mixing` design.
 
 ## 10. Related work summary
 
