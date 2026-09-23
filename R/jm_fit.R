@@ -373,7 +373,16 @@
 #'       on the R side; \code{fit$convergence$orthogonalize} is the
 #'       reliable way to check programmatically what happened.}
 #'     \item{\code{rotate_absorbable}, \code{dense_mass_generator_beta}}{Both
-#'       logical, default \code{FALSE}. \strong{Experimental.} Addresses
+#'       logical, default \code{NULL} (automatic), which means \strong{on}
+#'       wherever the rotation applies: \code{q >= 2},
+#'       \code{random_effects_corr = TRUE}, \code{random_effects_method =
+#'       "nuts"} and no legacy sweep option requested. Elsewhere the
+#'       automatic default is silently off. \code{TRUE} insists and raises
+#'       an error outside that scope; \code{FALSE} opts out and gives the
+#'       unrotated fit. \code{dense_mass_generator_beta} likewise defaults
+#'       to on whenever the rotation is applied, unless
+#'       \code{dense_mass_generator} or \code{dense_mass_beta} already
+#'       claims one of its sites. Addresses
 #'       the same location degeneracy as \code{orthogonalize_b0}, but
 #'       without changing the model's coordinates for \code{b}: every
 #'       column of the standardized random effects is rotated by one fixed
@@ -385,13 +394,20 @@
 #'       the degeneracy now lives. The rotation is exact - the prior and
 #'       posterior of every model quantity are unchanged - and the
 #'       reported \code{beta} is the ordinary one, with no correction step.
-#'       Use the two together. In \code{dev/pilot_rotate_grid.R} this gave
-#'       roughly 8x-25x (intercept) and 8x-60x (time slope) the default
+#'       Use the two together, as the defaults do. In \code{dev/pilot_rotate_grid.R} this gave
+#'       roughly 8x-25x (intercept) and 8x-60x (time slope) the unrotated
 #'       fit's ESS/sec across 10 simulated designs (3 seeds each), with
-#'       wall time within about 10\% of the default fit's, and \code{dev/study_calibration.R} (100 replicates) found
-#'       its coverage identical to the default fit's. Requires \code{q >= 2},
-#'       \code{random_effects_corr = TRUE} and the default
-#'       \code{random_effects_method = "nuts"}; what was rotated is
+#'       wall time within about 10\% of the unrotated fit's, and \code{dev/study_calibration.R} (100 replicates) found
+#'       its coverage the same as the unrotated fit's. On the \code{aids}
+#'       and \code{pbc2} data the intercept and subject-constant covariates
+#'       gained 17x-28x and the time slope 2x-4x
+#'       (\code{dev/study_realdata_rotate.R}). A stress grid of the designs
+#'       the theory flags as weakest (\code{ROT_GRID=stress}) stayed above
+#'       5x on both in every cell (geometric mean over 3 seeds; no single
+#'       seed below 3x). The one parameter it can cost is
+#'       \code{alpha}: about 0.7x-1.0x the unrotated fit's ESS/sec in
+#'       simulated designs with about 9 visits per subject, against
+#'       1.1x-2.4x with 17 or more. What was rotated is
 #'       reported in \code{fit$convergence$orthogonalize$rotation}. See
 #'       \code{vignette("jmjax-reparameterization")}.}
 #'     \item{\code{dense_mass_beta}, \code{seed_mass_matrix}}{Both logical,

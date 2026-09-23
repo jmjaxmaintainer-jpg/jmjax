@@ -59,6 +59,12 @@ like $1/(1-R^2)$. HMC moves `alpha` jointly with the rest and pays only in
 integration steps, which grow like $1/\sqrt{1-R^2}$ at worst. This is a
 generic NUTS-versus-block-Gibbs effect and needs no reparameterization.
 
+A stress grid of the designs the theory predicts are hardest for the
+rotation keeps the gains at 5x-30x (Section 6.4). On the strength of these
+checks, the rotation is `jmjax`'s default wherever it applies. Throughout
+this document, "the default fit" means the unrotated parameterization it
+replaced, now requested with `rotate_absorbable = FALSE`.
+
 An earlier approach, which swept the absorbable directions out of the
 random effects instead of rotating them, is retired. It is documented in
 the package repository's development record
@@ -884,27 +890,44 @@ evidence is as follows.
 - *Visits per subject: supported.* At $N = 300$, the no-sweep
   construction's ESS/sec relative to the swept one averaged 0.88x
   (diagonal comparator) and 0.90x (dense comparator) with about 17 visits
-  per subject, against 0.99x and 1.18x with about 9.
-- *$N$: not established.* Against the diagonal comparator the ratios
-  rise from $N = 150$ to $N = 300$ (0.73x/0.78x to 1.05x/1.02x, intercept/
-  slope), but against the dense comparator they do not (0.94x/1.13x
-  at $N = 150$). $N = 600$ is not higher than $N = 300$ for the intercept
-  (0.93x against the diagonal comparator).
-- *Seed noise.* Per-seed ratios span 0.63x-1.85x, wider than any of these
-  effects, so three seeds cannot settle them.
+  per subject, against 0.99x and 1.18x with about 9. The stress grid
+  (Section 6.4) extends this to about 35 visits, where it falls to
+  0.51x-0.74x against the diagonal comparator.
+- *$N$: supported once the information per subject is high.* In the core
+  grid, with about 9 visits, the evidence was mixed. Against the diagonal
+  comparator the ratios rise from $N = 150$ to $N = 300$ (0.73x/0.78x to
+  1.05x/1.02x, intercept/slope), but against the dense comparator they do
+  not (0.94x/1.13x at $N = 150$). $N = 600$ is not higher than $N = 300$
+  for the intercept (0.93x against the diagonal comparator). With about 35
+  visits, all four stress-grid pairs move the predicted way from
+  $N = 50$ to $N = 100$: intercept 0.55x to 0.74x and slope 0.51x to 0.68x
+  at $\rho = 0.3$; intercept 0.62x to 0.66x and slope 0.56x to 0.69x at
+  $\rho = 0.95$.
+- *$\rho$: no loss detected.* The argument above does not cover $\rho$,
+  and the stress grid finds no consistent effect of raising it from 0.3
+  to 0.95 at fixed visits and $N$.
+- *Seed noise.* Per-seed ratios span 0.63x-1.85x in the core grid, wider
+  than its effects, so three seeds settle only the larger stress-grid
+  effects.
 
 In short, the construction is within noise of the swept one in the
-ordinary regime. A small cost with dense follow-up is visible, as
-predicted. Everything finer is untested.
+ordinary regime. It loses ground to the swept one as the information per
+subject rises relative to $N$, as predicted, and is about half as
+efficient in the most extreme stress cells. Against the default fit it
+is still 5x-30x ahead there (Section 6.4). A metric that follows the
+sampled $\sigma_0$ is the obvious way to recover the difference, and has
+not been tried.
 
 ### 5.3 Using it
 
-`control = list(rotate_absorbable = TRUE, dense_mass_generator_beta =
-TRUE)`. It requires `q >= 2`, `random_effects_corr = TRUE` and the default
-`random_effects_method = "nuts"`. What was rotated is reported in
-`fit$convergence$orthogonalize$rotation` (`mode`, `applied`, `k`). The
-option is off by default; Section 9 lists what remains before making it
-the default.
+The rotation and its dense block are on by default whenever
+`q >= 2`, `random_effects_corr = TRUE` and `random_effects_method =
+"nuts"`, with no legacy sweep option requested. Elsewhere they are
+silently off. `control = list(rotate_absorbable = FALSE)` gives the
+unrotated fit. Setting `rotate_absorbable = TRUE` explicitly insists on
+the rotation and raises an error outside that scope. What was rotated is
+reported in `fit$convergence$orthogonalize$rotation` (`mode`, `applied`,
+`k`).
 
 ## 6. Simulation results
 
@@ -989,6 +1012,61 @@ The retired sweep, with its correction and the same rotation, reached
 similar efficiency (the no-sweep construction averaged about 0.92x of it
 in the same grid; Section 5.2) and the same calibration. The side-by-side
 numbers are in the development record's Epilogue.
+
+### 6.4 Stress grid
+
+Section 5.2 names two regimes where the rotation should be weakest. One
+is few subjects, each carrying a lot of information, where a fixed metric
+cannot follow the ridge's dependence on the sampled $\sigma_0$. The other
+is strongly correlated random effects, which that argument does not
+cover. `dev/pilot_rotate_grid.R` with `ROT_GRID=stress` targets both. It
+runs six cells:
+
+- about 35 visits per subject, crossed with $N \in \{50, 100\}$ and
+  $\rho \in \{0.3, 0.95\}$;
+- $\rho = 0.95$ at about 9 visits ($N = 100$);
+- $\rho = 0.95$ at about 17 visits ($N = 300$).
+
+Each cell has 3 seeds, and each fit is compared with the default fit and
+with the retired sweep-and-rotation (diagonal metric) on the same data.
+
+The criterion fixed before the run was that the rotation must not fall
+below the default fit's ESS/sec on the reported coefficients in any
+cell. It did not. The lowest cell was 5.5x and the lowest single seed
+3.2x.
+
+| visits | $N$ | $\rho$ | intercept vs default | slope vs default | `alpha` vs default | intercept vs sweep | slope vs sweep |
+|---:|---:|---:|---:|---:|---:|---:|---:|
+| 35 | 50 | 0.30 | 5.5x | 10.3x | 1.60x | 0.55x | 0.51x |
+| 35 | 50 | 0.95 | 21.1x | 21.6x | 2.42x | 0.62x | 0.56x |
+| 35 | 100 | 0.30 | 14.5x | 27.1x | 1.58x | 0.74x | 0.68x |
+| 35 | 100 | 0.95 | 26.0x | 28.6x | 1.73x | 0.66x | 0.69x |
+| 9 | 100 | 0.95 | 7.0x | 7.5x | 0.74x | 1.02x | 0.88x |
+| 17 | 300 | 0.95 | 24.6x | 29.7x | 1.09x | 0.77x | 0.83x |
+
+(ESS/sec ratios, geometric means over 3 seeds.)
+
+The rotated fit's posterior means agreed with the default fit's to a
+median of 0.029 posterior SDs (maximum 0.166, 90 pairs). There were no
+divergences, and the worst R-hat over all monitored parameters was 1.046
+(1.043 for the default fit). Wall time was 0.86x-1.06x the default
+fit's.
+
+The table bears out three points.
+
+- **The weak spot is weak only against the retired sweep.** The
+  predicted weakness shows up as a loss relative to the sweep, not
+  relative to the default fit. The cell with the fewest subjects and
+  lowest $\rho$ gains least over the default fit (5.5x), and it is also
+  where the sweep leads by most (about 2x). This is Section 5.2's
+  $1 + O\big(\sqrt{\bar n\,\sigma_0^{2}/(\sigma_e^{2}N)}\big)$ residual in
+  action.
+- **Strong correlation between the random effects did not hurt.** At
+  $\rho = 0.95$ the gains over the default fit are as large as, or larger
+  than, at $\rho = 0.3$, because the default fit degrades faster.
+- **`alpha` repeats Section 6.2's split by visits.** It fell to 0.74x
+  with about 9 visits. It rose to 1.09x with about 17 and to 1.58x-2.42x
+  with about 35.
 
 ## 7. Real data
 
@@ -1272,20 +1350,27 @@ quantity.
   well-precedented candidate - is separate work, and it should be
   understood before this table is put in front of a referee.
 - **Scope.** The rotation is implemented for `q >= 2` with correlated
-  random effects under the default NUTS sampler; other random-effects code
-  paths raise an informative error. The simulation evidence is one design
+  random effects under the default NUTS sampler. Elsewhere the default
+  leaves it off, and an explicit `rotate_absorbable = TRUE` raises an
+  informative error. The simulation evidence is one design
   family (Section 6.1), with a spline baseline hazard; the earlier sweep
   pilots also covered a Weibull hazard.
 - **Near-collinearity.** The basis construction's rank decision is a
   tolerance judgement when absorbable and identified directions are nearly
   collinear (Section 4.8).
+- **`alpha` with sparse follow-up.** With about 9 visits per subject the
+  rotation costs `alpha` up to about 30% of its ESS/sec (Sections 6.2 and
+  6.4), and why is not understood. Since `alpha` is the primary target
+  (Section 8.1), this is the rotation's most important open question. It
+  still leaves `alpha` far ahead of `JMbayes2` (Section 8).
 - **Next steps, in order.**
-  1. Designs with few, densely observed subjects, where the argument after
-     Proposition 7 predicts the no-sweep construction is weakest, and
-     strongly correlated random effects ($\lvert\rho\rvert$ near 1), which
-     that argument does not cover (`dev/pilot_rotate_grid.R`,
-     `ROT_GRID=stress`).
-  2. The broader design checks: more covariates, a non-linear time trend
+  1. Explain `alpha`'s split by visits. A first step is to measure how
+     much of `alpha`'s posterior variance is shared with `beta` and the
+     generator block in each regime.
+  2. A metric that follows the sampled $\sigma_0$, to recover the
+     difference from the retired sweep in the most information-dense
+     designs (Section 6.4).
+  3. The broader design checks: more covariates, a non-linear time trend
      (Section 4.5's Example 1) and the `mixing` design.
 
 ## 10. Related work summary
@@ -1318,14 +1403,15 @@ random effects. It recurs for the random slope whatever the covariate
 count, and it slows a default fit on exactly the coefficients a user
 reports.
 
-`jmjax` addresses it with a rotation and a small dense mass block. The
+`jmjax` addresses it, by default, with a rotation and a small dense mass block. The
 random effects are rotated so the absorbable directions become a small
 explicit block, and that block and `beta` share one dense mass block. The
 model, the prior and every reported quantity are unchanged (Proposition 6),
 and calibration matches the default fit (Section 6.3). The cost of the
 degeneracy is removed: in simulation the intercept and time slope gain
 roughly 14x and 21x in ESS/sec, and on real data 17x-27x and 2x-4x, at
-similar or lower wall time.
+similar or lower wall time. A stress grid aimed at the theory's weak spots
+kept the gains at 5x-30x.
 
 The theory (Section 5.2) says where the approach is weakest: few subjects
 each carrying a lot of information, and strongly correlated random

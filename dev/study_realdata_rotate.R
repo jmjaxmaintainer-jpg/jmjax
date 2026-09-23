@@ -97,6 +97,9 @@ jx_control <- function(arm, seed) {
               num_warmup = WARMUP, num_samples = SAMPLES, num_chains = CHAINS,
               seed = seed, progress_bar = FALSE)
   if (arm == "R") { ctl$rotate_absorbable <- TRUE; ctl$dense_mass_generator_beta <- TRUE }
+  # A is the UNROTATED fit (the rotation is now the default; opt out so the
+  # arm stays what it was).
+  if (arm == "A") ctl$rotate_absorbable <- FALSE
   ctl
 }
 

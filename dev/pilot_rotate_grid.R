@@ -149,6 +149,9 @@ arm_control <- function(arm, seed) {
   if (arm == "E_rotall_dense") ctl$dense_mass_generator <- TRUE
   if (arm == "A_rotdense") { ctl$rotate_absorbable <- TRUE
                              ctl$dense_mass_generator_beta <- TRUE }
+  # A is the UNROTATED fit. The rotation became the default after this
+  # study, so A must opt out explicitly to stay the same arm.
+  if (arm == "A") ctl$rotate_absorbable <- FALSE
   ctl
 }
 

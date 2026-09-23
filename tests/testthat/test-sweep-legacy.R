@@ -1,4 +1,9 @@
 # ==============================================================================
+# The "default fit" baseline in these tests is the UNROTATED fit
+# (control$rotate_absorbable = FALSE): the no-sweep rotation is now the
+# default, and these tests compare the sweep against the parameterization
+# it was designed to improve on.
+#
 # LEGACY. The location sweep (control$orthogonalize_b0 / orthogonalize_b and
 # its rotations) is not part of jmjax's recommended path - see the backend
 # module sweep.py and dev/notes/sweep-reparameterization.md. These tests are
@@ -143,7 +148,8 @@ test_that("fit$convergence$orthogonalize reports which columns were actually con
   expect_true(isTRUE(orth_e$columns[[2]]$applied))
   expect_gte(orth_e$columns[[2]]$n_directions, 1)
 
-  # A default fit (neither option requested) must report NULL, not an
+  # An unrotated fit (rotate_absorbable = FALSE, the previous default; no
+  # sweep option requested) must report NULL, not an
   # empty/degenerate structure - callers use is.null() to check applicability.
   fit_a <- jm_fit(
     long_formula = y ~ time,
@@ -152,7 +158,7 @@ test_that("fit$convergence$orthogonalize reports which columns were actually con
     id_var = "id", time_var = "time",
     method = "spline-PH-mcmc", random_effects = "intercept_slope",
     control = list(num_warmup = 150, num_samples = 200, num_chains = 1,
-                   progress_bar = FALSE)
+                   progress_bar = FALSE, rotate_absorbable = FALSE)
   )
   expect_null(fit_a$convergence$orthogonalize)
 })
@@ -180,7 +186,7 @@ test_that("orthogonalize_b0/orthogonalize_b do not change fitted population esti
   )
   ctrl <- list(num_warmup = 500, num_samples = 800, num_chains = 1, progress_bar = FALSE)
 
-  fit_a <- do.call(jm_fit, c(common, list(control = ctrl)))
+  fit_a <- do.call(jm_fit, c(common, list(control = c(ctrl, list(rotate_absorbable = FALSE)))))
   fit_d <- do.call(jm_fit, c(common, list(control = c(ctrl, list(orthogonalize_b0 = TRUE)))))
   fit_e <- do.call(jm_fit, c(common, list(control = c(ctrl, list(orthogonalize_b = TRUE)))))
 
@@ -215,7 +221,7 @@ test_that("orthogonalize_b materially improves beta_1 mixing over the default fi
   )
   ctrl <- list(num_warmup = 500, num_samples = 1000, num_chains = 1, progress_bar = FALSE)
 
-  fit_a <- do.call(jm_fit, c(common, list(control = ctrl)))
+  fit_a <- do.call(jm_fit, c(common, list(control = c(ctrl, list(rotate_absorbable = FALSE)))))
   fit_e <- do.call(jm_fit, c(common, list(control = c(ctrl, list(orthogonalize_b = TRUE)))))
 
   ess_a <- fit_a$diagnostics$ess[["beta_1"]]
@@ -256,7 +262,7 @@ test_that("beta_corrected is present iff orthogonalize_b0/_b actually swept a di
   )
   ctrl <- list(num_warmup = 150, num_samples = 200, num_chains = 1, progress_bar = FALSE)
 
-  fit_a <- do.call(jm_fit, c(common, list(control = ctrl)))
+  fit_a <- do.call(jm_fit, c(common, list(control = c(ctrl, list(rotate_absorbable = FALSE)))))
   fit_d <- do.call(jm_fit, c(common, list(control = c(ctrl, list(orthogonalize_b0 = TRUE)))))
   fit_e <- do.call(jm_fit, c(common, list(control = c(ctrl, list(orthogonalize_b = TRUE)))))
 
@@ -295,7 +301,7 @@ test_that("beta_corrected materially restores the posterior spread orthogonalize
   )
   ctrl <- list(num_warmup = 500, num_samples = 800, num_chains = 1, progress_bar = FALSE)
 
-  fit_a <- do.call(jm_fit, c(common, list(control = ctrl)))
+  fit_a <- do.call(jm_fit, c(common, list(control = c(ctrl, list(rotate_absorbable = FALSE)))))
   fit_e <- do.call(jm_fit, c(common, list(control = c(ctrl, list(orthogonalize_b = TRUE)))))
 
   bc0 <- vapply(fit_e$posterior_samples$beta_corrected,

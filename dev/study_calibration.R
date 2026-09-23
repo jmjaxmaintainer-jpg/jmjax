@@ -279,6 +279,9 @@ fit_one <- function(design, arm, rep_id) {
   # over beta and b_gen_U). Reports the ordinary beta, like A, so its
   # calibration rows are directly comparable to A's.
   if (arm == "A_rotdense") { ctl$rotate_absorbable <- TRUE; ctl$dense_mass_generator_beta <- TRUE }
+  # A is the UNROTATED fit (the rotation is now the default; opt out so the
+  # arm stays what it was).
+  if (arm == "A") ctl$rotate_absorbable <- FALSE
   if (arm == "E_rotall_dense") { ctl$orthogonalize_b <- TRUE; ctl$orthogonalize_rotate_all <- TRUE
                                  ctl$dense_mass_generator <- TRUE }
 

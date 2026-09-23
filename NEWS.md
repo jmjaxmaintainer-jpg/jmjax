@@ -1,6 +1,55 @@
 # jmjax (development)
 
-## New: orthogonalize_b0 / orthogonalize_b (location-degeneracy reparameterization, experimental)
+## Changed default: the random effects are rotated for NUTS (`rotate_absorbable`)
+
+* **The random effects are now rotated by default wherever the rotation
+  applies**, which is any fit with `q >= 2`, `random_effects_corr = TRUE` and
+  `random_effects_method = "nuts"`.
+  - **The problem.** The likelihood identifies subject-constant fixed
+    effects and the matching random-effect directions only through their
+    sum. This "location degeneracy" recurs for the time slope in every
+    model with a random slope, and it slowed the reported regression
+    coefficients of a default fit.
+  - **The fix.** Every standardized random-effect column is rotated by one
+    fixed Householder matrix, so the absorbable directions become a small
+    explicit site `b_gen_U`. `beta` and `b_gen_U` then share one dense
+    mass-matrix block (`dense_mass_generator_beta`, also on by default).
+  - **What stays the same.** The rotation is exact: the prior, the
+    likelihood and every reported quantity, including `beta`, are
+    unchanged. What was rotated is recorded in
+    `fit$convergence$orthogonalize$rotation`.
+* **Measured.**
+  - Simulation (10 designs x 3 seeds): the intercept and time slope gain
+    roughly 14x and 21x ESS/sec at about the same wall time.
+  - Calibration (100 replicates): the same coverage as the unrotated fit.
+  - `aids` and `pbc2`: the intercept and subject-constant covariates gain
+    17x-28x, the time slope 2x-4x.
+  - A stress grid of the designs the theory flags as weakest: above 5x in
+    every cell.
+  - Against `JMbayes2`, `jmjax` now matches it on the coefficients it
+    hierarchically centres, where it previously trailed 18x-30x.
+  - **The one cost.** `alpha`'s ESS/sec can fall to about 0.7x-1.0x the
+    unrotated fit's in designs with about 9 visits per subject. It rises
+    1.1x-2.4x with 17 or more visits, and on real data it was 2.0x (`aids`)
+    and 0.95x (`pbc2`). See `vignette("jmjax-reparameterization")`.
+* **Opting out.** `control$rotate_absorbable = FALSE` gives the unrotated
+  fit. Explicit `TRUE` keeps the old strict behaviour, which is an error
+  outside the rotation's scope. Unset (the default), the rotation is
+  silently off where it does not apply, for example `q = 1` or when a
+  legacy sweep option (`orthogonalize_b0/_b`) is requested.
+* **Scripts that compare against "the default fit" now get the rotated
+  fit.** The rotation studies (`dev/pilot_rotate_grid.R`,
+  `dev/study_calibration.R`, `dev/study_realdata_rotate.R`) and the legacy
+  sweep tests now set `rotate_absorbable = FALSE` for their unrotated
+  baseline arm. Older benchmarking scripts do not, so to reproduce their
+  published numbers, add it.
+
+## Superseded: orthogonalize_b0 / orthogonalize_b (location-degeneracy sweep, now legacy)
+
+*The entry below records the sweep as it was introduced. It has been
+superseded by the rotation above and is kept, in `sweep.py`, only so the
+development studies stay reproducible; see
+`dev/notes/sweep-reparameterization.md`.*
 
 * **`control$orthogonalize_b0`** (intercept column only) and
   **`control$orthogonalize_b`** (every random-effect column, intercept and

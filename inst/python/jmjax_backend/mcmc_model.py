@@ -825,10 +825,27 @@ def fit_nuts(X_long, y_long, n_obs, X_time_surv, X_time_quad,
     # dev/pilot_rotate_grid.R (A_rotdense arm; 3 seeds x 10 designs) within
     # noise of sweep + rotation and 8-60x a default fit's ESS/sec on the
     # regression coefficients; dev/study_calibration.R (R = 100) coverage
-    # identical to a default fit's. Experimental and opt-in until the
-    # real-data checks are done.
-    _rot_nosweep = bool(control.get("rotate_absorbable", False))
-    if _rot_nosweep and (_orth_all or _orth_int or _rot_all or _orth_int_rotate):
+    # identical to a default fit's; real data (dev/study_realdata_rotate.R)
+    # 17-27x on the intercept, and the stress grid (ROT_GRID=stress) above
+    # 1x in every cell and seed.
+    #
+    # DEFAULT ON where it applies. control$rotate_absorbable = NULL (unset)
+    # means "auto": on when q >= 2, random_effects_corr = TRUE,
+    # random_effects_method = "nuts" and no legacy sweep option is
+    # requested, silently off otherwise. TRUE insists (and errors outside
+    # that scope); FALSE opts out. dense_mass_generator_beta follows the
+    # same pattern: unset means "on whenever the rotation is applied and no
+    # other dense block claims beta or b_gen_U".
+    _sweep_requested = bool(_orth_all or _orth_int or _rot_all or _orth_int_rotate)
+    _rot_opt = control.get("rotate_absorbable", None)
+    _rot_auto = _rot_opt is None
+    if _rot_auto:
+        _rot_nosweep = bool(q >= 2 and random_effects_corr
+                            and random_effects_method == "nuts"
+                            and not _sweep_requested)
+    else:
+        _rot_nosweep = bool(_rot_opt)
+    if _rot_nosweep and _sweep_requested:
         raise ValueError(
             "control$rotate_absorbable = TRUE is the no-sweep alternative; "
             "do not combine it with orthogonalize_b0/_b or their rotations.")
@@ -845,7 +862,7 @@ def fit_nuts(X_long, y_long, n_obs, X_time_surv, X_time_quad,
         _Qu = _union_basis(_nb)
         if _Qu is not None:
             _gen_reflectors = _householder_reflectors(_Qu)
-        if _gen_reflectors is None:
+        if _gen_reflectors is None and not _rot_auto:
             warnings.warn(
                 "control$rotate_absorbable = TRUE had no effect: no "
                 "absorbable direction was found (or the construction did not "
@@ -1018,7 +1035,16 @@ def fit_nuts(X_long, y_long, n_obs, X_time_surv, X_time_quad,
                 "control$orthogonalize_rotate_all or rotate_absorbable to "
                 "have created the b_gen_U site (it did not for this fit).")
         _blocks.append(("b_gen_U",))
-    if control.get("dense_mass_generator_beta", False):
+    _dmgb_opt = control.get("dense_mass_generator_beta", None)
+    if _dmgb_opt is None:
+        # auto: on with the no-sweep rotation, unless another dense block
+        # already claims beta or b_gen_U (a site may be in only one block)
+        _dmgb = bool(_rot_nosweep and _gen_reflectors is not None
+                     and not control.get("dense_mass_generator", False)
+                     and not (control.get("dense_mass_beta", False) and p >= 2))
+    else:
+        _dmgb = bool(_dmgb_opt)
+    if _dmgb:
         if _gen_reflectors is None:
             raise ValueError(
                 "control$dense_mass_generator_beta = TRUE requires "
