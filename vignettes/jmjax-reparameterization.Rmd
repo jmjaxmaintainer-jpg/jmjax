@@ -920,9 +920,29 @@ not been tried.
 
 ### 5.3 Using it
 
-The rotation and its dense block are on by default whenever
-`q >= 2`, `random_effects_corr = TRUE` and `random_effects_method =
-"nuts"`, with no legacy sweep option requested. Elsewhere they are
+The rotation and its dense block are on by default for NUTS fits
+(`random_effects_method = "nuts"`) with either a random intercept only
+($q = 1$), or $q \ge 2$ and `random_effects_corr = TRUE`, as long as no
+legacy sweep option is requested.
+
+For $q = 1$, `jmjax` samples $b$ directly, not non-centred, so the
+rotation acts on $b$ itself. Its prior is iid $N(0, \sigma_b^{2})$, so the
+rotated coordinates have the same prior for every $\sigma_b$, and
+Proposition 6 holds unchanged. The ridge between `beta` and the rotated
+block does not involve $\sigma_b$ in these centred coordinates. That removes
+the fixed-metric residual of Section 5.2 for this case.
+
+A random-intercept-only fit of `aids` and `pbc2` with the other settings
+of Section 7 (`dev/pilot_q1_intercept.R`, unrotated) shows the
+degeneracy clearly:
+
+- `beta_0` and the subject-constant coefficients mixed at 0.04-0.07 ESS
+  per draw, and 91%-95% of their posterior variance was explained by the
+  absorbable directions of $b$;
+- every other parameter was near 1 ESS per draw, with that share near 0.
+
+The rotated arm of the same script measures the gain.
+ Elsewhere they are
 silently off. `control = list(rotate_absorbable = FALSE)` gives the
 unrotated fit. Setting `rotate_absorbable = TRUE` explicitly insists on
 the rotation and raises an error outside that scope. What was rotated is
@@ -1377,8 +1397,8 @@ quantity.
   sample bias in the association parameter is a plausible and
   well-precedented candidate - is separate work, and it should be
   understood before this table is put in front of a referee.
-- **Scope.** The rotation is implemented for `q >= 2` with correlated
-  random effects under the default NUTS sampler. Elsewhere the default
+- **Scope.** The rotation is implemented under the default NUTS sampler
+  for $q = 1$, and for $q \ge 2$ with correlated random effects. Elsewhere the default
   leaves it off, and an explicit `rotate_absorbable = TRUE` raises an
   informative error. The simulation evidence is one design
   family (Section 6.1), with a spline baseline hazard; the earlier sweep

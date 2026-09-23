@@ -374,9 +374,10 @@
 #'       reliable way to check programmatically what happened.}
 #'     \item{\code{rotate_absorbable}, \code{dense_mass_generator_beta}}{Both
 #'       logical, default \code{NULL} (automatic), which means \strong{on}
-#'       wherever the rotation applies: \code{q >= 2},
-#'       \code{random_effects_corr = TRUE}, \code{random_effects_method =
-#'       "nuts"} and no legacy sweep option requested. Elsewhere the
+#'       wherever the rotation applies: \code{random_effects_method =
+#'       "nuts"}, \code{random_effects_corr = TRUE} when \code{q >= 2}
+#'       (any \code{q = 1} random-intercept model qualifies), and no legacy
+#'       sweep option requested. Elsewhere the
 #'       automatic default is silently off. \code{TRUE} insists and raises
 #'       an error outside that scope; \code{FALSE} opts out and gives the
 #'       unrotated fit. \code{dense_mass_generator_beta} likewise defaults

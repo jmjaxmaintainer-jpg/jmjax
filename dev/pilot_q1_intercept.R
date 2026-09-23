@@ -25,7 +25,13 @@
 # fit (0.03-0.06 on those coefficients). If they are already mixing well
 # (ESS per draw above about 0.5), the extension is not worth it.
 #
-#   caffeinate -i Rscript dev/pilot_q1_intercept.R      # ~5-10 min
+# RESULT (first run, unrotated only): degenerate on both datasets -
+# beta_0 and the subject-constant coefficients at 0.04-0.07 ESS per draw,
+# R^2 0.91-0.95; everything else near 1 ESS per draw, R^2 near 0. So the
+# rotation was extended to q = 1. Arm R (the default, now rotated) was then
+# added to measure the gain; arm A is the unrotated fit.
+#
+#   caffeinate -i Rscript dev/pilot_q1_intercept.R      # ~10-15 min
 # ==============================================================================
 
 suppressPackageStartupMessages({ library(jmjax); library(nlme); library(survival) })
@@ -92,16 +98,21 @@ for (ds in c("aids", "pbc2")) {
               ds, nrow(S), nrow(d$dl) / nrow(S), paste(colnames(X)[const], collapse = ", "),
               paste(sc_names, collapse = ", ")))
 
-  for (s in SEEDS) {
+  for (s in SEEDS) for (arm in c("A", "R")) {
+    ctl <- list(n_interior_knots = 5, spline_prior = "penalized",
+                rw2_implementation = "vectorized", dense_mass_spline = TRUE,
+                num_warmup = WARMUP, num_samples = SAMPLES,
+                num_chains = CHAINS, seed = s, progress_bar = FALSE)
+    if (arm == "A") ctl$rotate_absorbable <- FALSE
     f <- jm_fit_prefit(lme_fit, cox_fit, data_surv = d$ds, time_var = d$time_var,
-                       method = "spline-PH-mcmc",
-                       control = list(n_interior_knots = 5, spline_prior = "penalized",
-                                      rw2_implementation = "vectorized", dense_mass_spline = TRUE,
-                                      num_warmup = WARMUP, num_samples = SAMPLES,
-                                      num_chains = CHAINS, seed = s, progress_bar = FALSE))
+                       method = "spline-PH-mcmc", control = ctl)
     cv <- f$convergence
-    if (!is.null(cv$orthogonalize$rotation) && isTRUE(cv$orthogonalize$rotation$applied))
-      stop("q = 1 fit reports a rotation - this pilot expects none", call. = FALSE)
+    applied <- isTRUE(cv$orthogonalize$rotation$applied)
+    if (arm == "A" && applied)
+      stop("arm A reports a rotation - rotate_absorbable = FALSE was ignored", call. = FALSE)
+    if (arm == "R" && !applied)
+      stop("arm R: rotation not applied for q = 1 - reinstall the backend (bash dev/install_jmjax.sh)",
+           call. = FALSE)
     ps <- f$posterior_samples
     B  <- flat(ps$b)
     if (is.null(B) || ncol(B) != nrow(S))
@@ -118,14 +129,14 @@ for (ds in c("aids", "pbc2")) {
       x <- if (grepl("^beta_", p)) beta[, as.integer(sub("beta_", "", p)) + 1L]
            else { v <- flat(ps[[p]]); if (is.null(v)) NULL else v[, 1] }
       rows[[length(rows) + 1L]] <- data.frame(
-        dataset = ds, seed = s, param = p, subject_constant = p %in% sc_names,
+        dataset = ds, seed = s, arm = arm, param = p, subject_constant = p %in% sc_names,
         ess = as.numeric(ess[[p]]), ess_per_draw = as.numeric(ess[[p]]) / (CHAINS * SAMPLES),
         ess_per_sec = as.numeric(ess[[p]]) / sec,
         r2_absorbable = if (is.null(x)) NA_real_ else r2(x, U),
         sec = sec, mean_num_steps = as.numeric(cv$mean_num_steps %||% NA_real_),
         stringsAsFactors = FALSE)
     }
-    cat(sprintf("   seed %d: %.1fs sampling, %.0f leapfrog steps/iteration\n", s, sec,
+    cat(sprintf("   seed %d %s: %.1fs sampling, %.0f leapfrog steps/iteration\n", s, arm, sec,
                 as.numeric(cv$mean_num_steps %||% NA)))
   }
 }
@@ -133,25 +144,32 @@ R <- do.call(rbind, rows)
 utils::write.csv(R, CSV, row.names = FALSE)
 
 q2 <- if (file.exists(Q2CSV)) utils::read.csv(Q2CSV, stringsAsFactors = FALSE) else NULL
-cat("\nq = 1 default fit (mean over seeds). R^2 = share of the parameter's posterior\n")
-cat("variance explained by the absorbable directions of b (ridge signature: near 1).\n")
+gm <- function(x) { x <- x[is.finite(x) & x > 0]; if (length(x)) exp(mean(log(x))) else NA_real_ }
+cat("\nq = 1: A = unrotated, R = rotated (the default). Means over seeds; R/A is the\n")
+cat("geometric mean of per-seed ESS/sec ratios. R^2 (arm A) = share of the parameter's\n")
+cat("posterior variance explained by the absorbable directions of b.\n")
 for (ds in unique(R$dataset)) {
   X <- R[R$dataset == ds, ]
-  cat(sprintf("\n%-5s %-10s %6s %10s %9s %8s %16s\n", ds, "param", "subj-c",
-              "ESS/draw", "ESS/sec", "R^2", "q=2 A ESS/draw"))
+  cat(sprintf("\n%-5s %-10s %6s %10s %10s %9s %8s %14s\n", ds, "param", "subj-c",
+              "A ESS/drw", "R ESS/drw", "R/A ESS/s", "R^2(A)", "q=2 A ESS/drw"))
   for (p in unique(X$param)) {
-    Y <- X[X$param == p, ]
+    A <- X[X$param == p & X$arm == "A", ]; Rr <- X[X$param == p & X$arm == "R", ]
+    pr <- merge(A, Rr, by = "seed")
     q2v <- if (!is.null(q2)) { z <- q2[q2$dataset == ds & q2$arm == "A" & q2$param == p, ]
                                if (nrow(z)) sprintf("%.3f", mean(z$ess / z$n_draws)) else "-" } else "-"
-    cat(sprintf("      %-10s %6s %10.3f %9.1f %8.3f %16s\n", p,
-                if (Y$subject_constant[1]) "yes" else "", mean(Y$ess_per_draw),
-                mean(Y$ess_per_sec), mean(Y$r2_absorbable), q2v))
+    cat(sprintf("      %-10s %6s %10.3f %10.3f %8.2fx %8.3f %14s\n", p,
+                if (A$subject_constant[1]) "yes" else "", mean(A$ess_per_draw),
+                mean(Rr$ess_per_draw), gm(pr$ess_per_sec.y / pr$ess_per_sec.x),
+                mean(A$r2_absorbable), q2v))
   }
+  cat(sprintf("      sampling time R/A %.2fx | leapfrog steps A %.0f, R %.0f\n",
+              mean(X$sec[X$arm == "R"]) / mean(X$sec[X$arm == "A"]),
+              mean(X$mean_num_steps[X$arm == "A"]), mean(X$mean_num_steps[X$arm == "R"])))
 }
-sc <- R[R$subject_constant, ]
+sc <- R[R$subject_constant & R$arm == "A", ]
 worst <- tapply(sc$ess_per_draw, sc$dataset, min)
 hi_r2 <- tapply(sc$r2_absorbable, sc$dataset, max)
-cat("\nDecision rule: ESS/draw < 0.2 with R^2 > 0.9 on a subject-constant coefficient, both datasets\n")
+cat("\nDecision rule (arm A): ESS/draw < 0.2 with R^2 > 0.9 on a subject-constant coefficient\n")
 for (ds in names(worst))
   cat(sprintf("  %-5s worst ESS/draw %.3f, max R^2 %.3f -> %s\n", ds, worst[[ds]], hi_r2[[ds]],
               if (worst[[ds]] < 0.2 && hi_r2[[ds]] > 0.9) "degenerate (rotation would help)"

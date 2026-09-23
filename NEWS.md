@@ -3,8 +3,14 @@
 ## Changed default: the random effects are rotated for NUTS (`rotate_absorbable`)
 
 * **The random effects are now rotated by default wherever the rotation
-  applies**, which is any fit with `q >= 2`, `random_effects_corr = TRUE` and
-  `random_effects_method = "nuts"`.
+  applies**, which is any NUTS fit (`random_effects_method = "nuts"`) with
+  either a random intercept only (`q = 1`), or `q >= 2` and
+  `random_effects_corr = TRUE`. For `q = 1` the random effects are rotated
+  on their own (centred) scale. `dev/pilot_q1_intercept.R` found the same
+  degeneracy there: random-intercept-only fits of `aids` and `pbc2` mixed
+  `beta_0` and the subject-constant coefficients at 0.04-0.07 ESS per
+  draw, and 91-95% of their posterior variance was shared with the
+  absorbable directions of `b`.
   - **The problem.** The likelihood identifies subject-constant fixed
     effects and the matching random-effect directions only through their
     sum. This "location degeneracy" recurs for the time slope in every

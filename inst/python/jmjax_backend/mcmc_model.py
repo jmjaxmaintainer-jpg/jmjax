@@ -281,8 +281,35 @@ def build_model(p, q, n_splines, max_obs, alpha_prior_sd=2.0,
                 sigma_b = numpyro.sample("sigma_b", dist.Gamma(sigma_b_prior_shape, rate))
             else:
                 sigma_b = numpyro.sample("sigma_b", dist.HalfNormal(2.0))
-            with numpyro.plate("subjects", N_sub):
-                b = numpyro.sample("b", dist.Normal(0.0, sigma_b))
+            if gen_reflectors is not None:
+                # control$rotate_absorbable for q = 1 (the default where it
+                # applies). b is iid N(0, sigma_b^2) and H is orthogonal, so
+                # b = H [b_gen_U; b_gen_V] with the same iid prior on the
+                # rotated coordinates is exact for every sigma_b (Jacobian
+                # 1). b stays CENTRED (scale sigma_b), as in the unrotated
+                # q = 1 model, so the beta <-> b_gen_U ridge's orientation
+                # does not depend on sigma_b at all and a fixed dense block
+                # over (beta, b_gen_U) can whiten it everywhere. Measured
+                # need: dev/pilot_q1_intercept.R (aids/pbc2 beta_0 and
+                # subject-constant coefficients at 0.04-0.07 ESS per draw,
+                # R^2 on the absorbable directions 0.91-0.95).
+                if int(gen_reflectors.shape[0]) != int(N_sub):
+                    raise ValueError(
+                        "gen_reflectors has %d rows for %d subjects"
+                        % (int(gen_reflectors.shape[0]), int(N_sub)))
+                _Vh1 = jnp.asarray(gen_reflectors)
+                _kg1 = int(gen_reflectors.shape[1])
+                b_gen_U = numpyro.sample(
+                    "b_gen_U", dist.Normal(0.0, sigma_b).expand([_kg1, 1]).to_event(2))
+                b_gen_V = numpyro.sample(
+                    "b_gen_V", dist.Normal(0.0, sigma_b).expand(
+                        [int(gen_reflectors.shape[0]) - _kg1, 1]).to_event(2))
+                b = numpyro.deterministic(
+                    "b", _apply_reflectors(
+                        _Vh1, jnp.concatenate([b_gen_U, b_gen_V], axis=0))[:, 0])
+            else:
+                with numpyro.plate("subjects", N_sub):
+                    b = numpyro.sample("b", dist.Normal(0.0, sigma_b))
             b = b[:, None]
         else:
             if random_effects_method == "wishart_gibbs":
@@ -839,10 +866,12 @@ def fit_nuts(X_long, y_long, n_obs, X_time_surv, X_time_quad,
     _sweep_requested = bool(_orth_all or _orth_int or _rot_all or _orth_int_rotate)
     _rot_opt = control.get("rotate_absorbable", None)
     _rot_auto = _rot_opt is None
+    # q = 1 has no correlation to speak of, so random_effects_corr is not
+    # part of its scope; q >= 2 needs the correlated (b_std @ L.T) path.
+    _rot_scope = bool(random_effects_method == "nuts"
+                      and (q == 1 or (q >= 2 and random_effects_corr)))
     if _rot_auto:
-        _rot_nosweep = bool(q >= 2 and random_effects_corr
-                            and random_effects_method == "nuts"
-                            and not _sweep_requested)
+        _rot_nosweep = bool(_rot_scope and not _sweep_requested)
     else:
         _rot_nosweep = bool(_rot_opt)
     if _rot_nosweep and _sweep_requested:
@@ -851,12 +880,11 @@ def fit_nuts(X_long, y_long, n_obs, X_time_surv, X_time_quad,
             "do not combine it with orthogonalize_b0/_b or their rotations.")
 
     if _rot_nosweep:
-        if not (q >= 2 and random_effects_corr
-                and random_effects_method == "nuts"):
+        if not _rot_scope:
             raise ValueError(
-                "control$rotate_absorbable = TRUE currently requires q >= 2, "
-                "random_effects_corr = TRUE and random_effects_method = "
-                "'nuts', the same scope as orthogonalize_b/_b0.")
+                "control$rotate_absorbable = TRUE requires "
+                "random_effects_method = 'nuts' and, for q >= 2, "
+                "random_effects_corr = TRUE.")
         _nb = [_absorbable_basis_exact(X_long, Z_long, n_obs, _qq)[0]
                for _qq in range(q)]
         _Qu = _union_basis(_nb)
@@ -1244,6 +1272,20 @@ def fit_nuts(X_long, y_long, n_obs, X_time_surv, X_time_quad,
 
         _jit_scale = float(control.get("warm_start_jitter", 0.1))
         _vals = {str(k): jnp.asarray(v) for k, v in dict(_init_vals).items()}
+        if (q == 1 and "b" in _vals and _gen_reflectors is not None
+                and "b_std" not in _vals):
+            # q = 1 is seeded through "b" (the lme() BLUPs), not b_std.
+            try:
+                _b1 = np.asarray(_vals["b"], dtype=float).reshape(N_sub, 1)
+                _Zw = _apply_reflectors(_gen_reflectors, _b1, transpose=True)
+                _kw = int(_gen_reflectors.shape[1])
+                _vals["b_gen_U"] = jnp.asarray(_Zw[:_kw])
+                _vals["b_gen_V"] = jnp.asarray(_Zw[_kw:])
+            except Exception as _e:
+                warnings.warn("warm start: could not map b onto the rotated "
+                              "sites (%s); they start from the default "
+                              "initialization." % (_e,),
+                              RuntimeWarning, stacklevel=2)
         if "b_std" in _vals and (_gen_reflectors is not None
                                  or _b0_gen_perp is not None):
             try:
