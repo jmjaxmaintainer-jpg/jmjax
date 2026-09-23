@@ -206,8 +206,23 @@ NUTS) - see \code{method} below.
       \code{jm_fit()} verifies that \code{tcrossprod(L)} reproduces the
       covariance matrix and that \code{b_std} round-trips back to the
       BLUPs, and the backend then compares the log-density at the warm
-      start against a uniform one and \emph{discards the warm start if
-      it is not better}. A scale mismatch produces a warning and default
+      start against a CONSERVATIVE one and uses whichever scores better.
+      The conservative seed is JMbayes2's design - the longitudinal block
+      and the survival covariates from the pre-fits, the association
+      parameter at zero and a flat baseline hazard - which cannot blow up,
+      since with \code{alpha = 0} the trajectory never enters the hazard.
+      It is the floor: there is no fallback to a cold start.
+
+      This replaced a comparison against a \emph{uniform} start, which was
+      shown to be unusable: on \code{pbc2} with unstandardized covariates
+      the potential at the posterior mean - the centre of the distribution
+      being sampled - scored 1,465,425 against 118,098 for a uniform draw,
+      so the test ranked the best possible starting point below a random
+      one. The bar was also \code{min()} over three draws, an order
+      statistic rather than a typical value, and it moved 50,204 to 776,297
+      on identical data across configurations. The uniform potential is
+      still recorded in \code{fit$convergence$warm_start} (as a median) but
+      decides nothing.
       behaviour, never a silently worse fit. The outcome is recorded in
       \code{fit$convergence$warm_start}.}
     \item{\code{warm_start_jitter}}{Numeric, default \code{0.1}. SD of
@@ -286,6 +301,153 @@ NUTS) - see \code{method} below.
       \code{mass_matrix_investigation_negative_results.md}. Reasonable
       to enable when \code{alpha} is the parameter of primary interest,
       which is typical for joint models.}
+    \item{\code{orthogonalize_b0}}{Logical, default \code{FALSE}.
+      \strong{Legacy - not recommended.} Superseded by
+      \code{rotate_absorbable} (below), which removes the same
+      degeneracy's cost without changing what is reported. Kept, with
+      \code{orthogonalize_b}, \code{orthogonalize_b0_rotate} and
+      \code{orthogonalize_rotate_all}, only so the development studies
+      that compare against it stay reproducible; the code lives in the
+      backend module \code{sweep.py} and the development record in the
+      package repository's \code{dev/notes/sweep-reparameterization.md}.
+      The text below describes it as originally documented.
+
+      Sweeps the subject-constant columns of the
+      longitudinal design out of the random intercepts, replacing
+      \code{b_0} by its residual off that column space. With an
+      intercept and one baseline covariate this removes a
+      two-dimensional near-degeneracy; with an intercept alone it
+      reduces to the familiar sum-to-zero constraint.
+
+      \strong{Why.} The likelihood constrains only the SUM of a
+      subject-constant coefficient and the matching projection of the
+      random intercepts; the split between them is pinned by the prior
+      alone, at scale \code{sigma_b0/sqrt(N)}. Measured on \code{pbc2}
+      (n = 312, 4 chains x 1000, in the space NUTS actually samples):
+      \code{corr(beta_0, mean(b_i0)) = -0.9709} and
+      \code{corr(beta_2, age-slope(b_i0)) = -0.9715}, against
+      \code{+0.0543} for \code{beta_1}, a within-subject contrast. ESS
+      for the identified sums was 2893 and >4000 against 441 and 526
+      for the coefficients alone - a recoverable factor of 6.6x and
+      >7.6x. These figures are only meaningful in sampled space;
+      \code{posterior_samples$beta} is back-transformed when
+      \code{standardize_covariates = TRUE}, and correlations computed
+      on it measure the transform rather than the posterior.
+
+      \strong{Not the same as} \code{random_effects_method =
+      "wishart_gibbs_centered"}, which pins \code{mean(b_i0)} at zero
+      and so removes one direction of the degeneracy: that moved
+      \code{beta_0} 441 -> 1490 but \code{beta_2} 526 -> 291, making
+      the worst parameter worse.
+
+      \strong{The model is unchanged.} Every direction swept out of
+      \code{b_0} lies in a column space \code{beta} already spans, so
+      for any draw there is a shift of \code{beta} giving identical
+      fitted values - the set of achievable mean structures is the
+      same. Currently requires \code{q >= 2},
+      \code{random_effects_corr = TRUE} and the default
+      \code{random_effects_method = "nuts"}; other combinations raise
+      an error rather than silently doing nothing.
+
+      \strong{But the reported intervals are NOT unchanged - read this
+      before reporting a fit.} The implied prior on the constrained
+      \code{b_0} is singular while \code{sigma_b} still governs the
+      unconstrained draws, so the swept component is unidentified by
+      the likelihood and samples its prior, and that uncertainty is
+      absent from \code{beta}'s posterior. Measured (n = 300, 16
+      replicates): for the swept coefficients, mean posterior SD
+      divided by the across-replicate SD of posterior means falls to
+      \strong{0.28} against \strong{1.18} for an unmodified fit, and
+      95\% coverage to \strong{0.50} against \strong{1.00}. Point
+      estimates stay unbiased, so a bias check does not catch this.
+      \code{sigma_b0} and \code{alpha} are unaffected in every arm,
+      which settles the empirical question earlier versions of this
+      note left open: sweeping does not shift \code{sigma_b0}'s
+      posterior.
+
+      \strong{Use \code{beta_corrected}, not \code{beta}, for swept
+      parameters.} Because the sweep relocates the uncertainty rather
+      than destroying it, it is exactly invertible. When either option
+      actually sweeps a direction, the fit gains
+      \code{posterior_samples$beta_corrected}: the same draws expressed
+      in the identified parameterization, obtained by adding back the
+      \code{beta}-shift corresponding to the swept component of
+      \code{b_raw}. It is computed from draws the fit already produced
+      - no refit, no extra sampling - and is absent (\code{NULL}) for
+      fits where nothing was swept. Measured on the same replicates,
+      it restores the SD ratio to 1.18-1.19 and 95\% coverage to 1.00,
+      and tracks an unmodified fit's \code{beta_0} across replicates at
+      r = 0.9999. So: sample with the option for the mixing gain, then
+      report \code{beta_corrected}. \code{beta} itself is left
+      untouched and remains the constrained estimand.
+
+      Two caveats. The correction relies on the same off-grid
+      proportionality (Condition (S)) the sweep does, so a design where
+      the fit warns about (S) breaks both. And the corrected draws are
+      exact draws from the unmodified model's posterior only when the
+      prior on \code{beta} is flat over the swept directions; under
+      \code{jmjax}'s N(0, 5) prior they differ by a weight of order
+      \code{sigma_b/(sigma_beta^2 sqrt(N))}, negligible at any usual
+      sample size. See \code{vignette("jmjax-reparameterization")},
+      Sections 4.9 and 9.1, for the derivation and the study.
+
+      \code{orthogonalize_b} sweeps every random-effect column (not
+      just the intercept), which also removes a degeneracy between the
+      fixed slope on time and the mean random slope - present as soon
+      as there is any random slope on time, independently of how many
+      other covariates are in the model. See
+      \code{vignette("jmjax-reparameterization")} for the full
+      mechanism and a replicated covariate-count study.
+
+      Whichever of the two is requested, what was actually swept (per
+      column: whether a basis was found, how many directions, and
+      which fixed-effects columns it came from) is reported in
+      \code{fit$convergence$orthogonalize} - \code{NULL} unless one of
+      these options was requested - rather than only in a
+      \code{RuntimeWarning} at fit time. The warning is emitted by the
+      Python backend and arrives on stderr, not as an R condition, so
+      it is not visible to \code{tryCatch()}/\code{withCallingHandlers()}
+      on the R side; \code{fit$convergence$orthogonalize} is the
+      reliable way to check programmatically what happened.}
+    \item{\code{rotate_absorbable}, \code{dense_mass_generator_beta}}{Both
+      logical, default \code{NULL} (automatic), which means \strong{on}
+      wherever the rotation applies: \code{random_effects_method =
+      "nuts"}, \code{random_effects_corr = TRUE} when \code{q >= 2}
+      (any \code{q = 1} random-intercept model qualifies), and no legacy
+      sweep option requested. Elsewhere the
+      automatic default is silently off. \code{TRUE} insists and raises
+      an error outside that scope; \code{FALSE} opts out and gives the
+      unrotated fit. \code{dense_mass_generator_beta} likewise defaults
+      to on whenever the rotation is applied, unless
+      \code{dense_mass_generator} or \code{dense_mass_beta} already
+      claims one of its sites. Addresses
+      the same location degeneracy as \code{orthogonalize_b0}, but
+      without changing the model's coordinates for \code{b}: every
+      column of the standardized random effects is rotated by one fixed
+      orthogonal (Householder) matrix whose first \code{k} columns span
+      the directions the fixed effects can absorb, so those directions
+      become an explicit \code{[k, q]} sample site \code{b_gen_U}.
+      \code{dense_mass_generator_beta} then gives \code{beta} and
+      \code{b_gen_U} one small dense mass-matrix block, which is where
+      the degeneracy now lives. The rotation is exact - the prior and
+      posterior of every model quantity are unchanged - and the
+      reported \code{beta} is the ordinary one, with no correction step.
+      Use the two together, as the defaults do. In \code{dev/pilot_rotate_grid.R} this gave
+      roughly 8x-25x (intercept) and 8x-60x (time slope) the unrotated
+      fit's ESS/sec across 10 simulated designs (3 seeds each), with
+      wall time within about 10\% of the unrotated fit's, and \code{dev/study_calibration.R} (100 replicates) found
+      its coverage the same as the unrotated fit's. On the \code{aids}
+      and \code{pbc2} data the intercept and subject-constant covariates
+      gained 17x-28x and the time slope 2x-4x
+      (\code{dev/study_realdata_rotate.R}). A stress grid of the designs
+      the theory flags as weakest (\code{ROT_GRID=stress}) stayed above
+      5x on both in every cell (geometric mean over 3 seeds; no single
+      seed below 3x). The one parameter it can cost is
+      \code{alpha}: about 0.7x-1.0x the unrotated fit's ESS/sec in
+      simulated designs with about 9 visits per subject, against
+      1.1x-2.4x with 17 or more. What was rotated is
+      reported in \code{fit$convergence$orthogonalize$rotation}. See
+      \code{vignette("jmjax-reparameterization")}.}
     \item{\code{dense_mass_beta}, \code{seed_mass_matrix}}{Both logical,
       both default \code{FALSE}. \strong{Tested and not adopted} -
       retained only to document the negative results.
