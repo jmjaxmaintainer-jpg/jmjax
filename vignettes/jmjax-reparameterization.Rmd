@@ -43,9 +43,11 @@ per second of the regression coefficients a user reports to roughly 8x-25x
 with coverage in a 100-replicate calibration study agreeing with the
 default fit's within Monte Carlo error. On two real datasets (Section 7),
 the same coefficients gain 12x-34x (the intercept and subject-constant
-covariates) and 2x-5x (the time slope). Section 8 separates this from the larger comparison with
-`JMbayes2`. There, `jmjax`'s default fit already mixes the association
-parameter `alpha` 2.4x-8x faster, a generic NUTS-versus-block-Gibbs effect
+covariates) and 2x-5x (the time slope). Section 8 compares with `JMbayes2`. With the
+rotation, `jmjax` matches it on the coefficients `JMbayes2` hierarchically
+centres - where the default fit trailed by a factor of 18-30 - and leads
+on the rest. There, `jmjax`'s default fit already mixes the association
+parameter `alpha` 3x-8x faster, a generic NUTS-versus-block-Gibbs effect
 that needs no reparameterization.
 
 An earlier approach, which swept the absorbable directions out of the
@@ -1046,9 +1048,9 @@ chain, well above its own defaults):
 | 8 | 6.22x |
 | 12 | 6.25x |
 
-On the `aids` data (4 seeds; 2 with a matched `JMbayes2` run) the default
-fit's `alpha` ESS/sec was 147.2 against `JMbayes2`'s 60.3, a ratio of
-2.44x. This is the generic NUTS/HMC-versus-block-Gibbs distinction of
+On real data (`dev/study_realdata_rotate.R`, the designs of Section 7,
+3 seeds, `JMbayes2` at the same 16,000/4,000 iterations), the default fit's
+`alpha` ESS/sec was 3.2x `JMbayes2`'s on `aids` and 7.6x on `pbc2`. This is the generic NUTS/HMC-versus-block-Gibbs distinction of
 Sections 2.2 and 2.4 (Hoffman & Gelman 2014; Roberts & Sahu 1997; Betancourt
 2017). A gradient-based sampler moves the whole parameter vector jointly.
 It has no equivalent of "conditional on the other blocks' current values",
@@ -1084,16 +1086,43 @@ would look enormous at k=12 (hundreds-fold, driven by `JMbayes2`'s R-hat of
 this document compares parameters a user reports, not the larger raw
 number.
 
-### 8.3 Synthesis
+### 8.3 The regression coefficients: the rotation closes the one gap
+
+On the regression coefficients, the default fit was *behind* `JMbayes2`.
+The location degeneracy of Section 3 is exactly the problem that
+hierarchical centering - the centered parameterization of Section 2.1
+(Gelfand, Sahu & Carlin 1995) - solves. `JMbayes2` hierarchically centres
+the coefficients it can (its prior arguments distinguish "hierarchically
+centered" coefficients from the rest; `?JMbayes2::jm`). `jmjax` keeps the
+non-centred parameterization, which it needs for the random-effect
+variances (Section 2.2), and until now paid for it on these coefficients.
+The rotation removes that payment. Same fits as Section 7, ESS/sec,
+`JMbayes2`'s time being its whole `jm()` call:
+
+| parameter | `aids`: default / `JMbayes2` | rotated / `JMbayes2` | `pbc2`: default / `JMbayes2` | rotated / `JMbayes2` |
+|---|---:|---:|---:|---:|
+| intercept | 0.04x | 0.97x | 0.05x | 0.89x |
+| subject-constant covariates | 0.03x-0.04x | 0.89x-0.95x | 0.06x | 0.92x |
+| time slope | 2.8x | 6.5x | 0.42x | 1.8x |
+| `alpha` | 3.2x | 6.5x | 7.6x | 7.3x |
+| survival coefficient `gamma` | 1.1x | 2.7x | 2.1x | 1.8x |
+
+With the rotation, `jmjax` is at parity with `JMbayes2` (0.89x-0.97x) on
+exactly the coefficients hierarchical centering is designed for. It is
+ahead on everything else: the time slope (1.8x-6.5x), the survival
+coefficient (1.8x-2.7x), and the association parameter (6.5x-7.3x). Before
+the rotation, the default fit trailed by a factor of 18-30 on the first
+group.
+
+### 8.4 Synthesis
 
 Two effects should be reported separately. The comparison with `JMbayes2`
 on `alpha` (Section 8.1) is large and generic, and needs no
-reparameterization. The rotation (Sections 5-6) is specific to this model
-class. It removes a cost that `jmjax`'s own default fit pays on the
-regression coefficients, and it does so without changing any reported
-quantity. How the rotated fit compares with `JMbayes2` on those
-coefficients has not yet been measured directly; it is part of the
-remaining work (Section 9).
+reparameterization. The rotation (Sections 5-7) is specific to this model
+class. It removes a cost that `jmjax`'s non-centred default pays on the
+regression coefficients, which brings those coefficients from far behind
+`JMbayes2` to parity with it (Section 8.3), without changing any reported
+quantity.
 
 ## 9. Limitations and next steps
 
@@ -1125,14 +1154,13 @@ remaining work (Section 9).
   tolerance judgement when absorbable and identified directions are nearly
   collinear (Section 4.8).
 - **Next steps, in order.**
-    1. The rotated fit against `JMbayes2` on the regression coefficients.
-      2. Designs with few, densely observed subjects, where the argument after
+  1. Designs with few, densely observed subjects, where the argument after
      Proposition 7 predicts the no-sweep construction is weakest, and
      strongly correlated random effects ($\lvert\rho\rvert$ near 1), which
-     that argument does not cover.
-    3. The broader design checks that would justify making the rotation the
-     default: more covariates, a non-linear time trend (Section 4.5's
-     Example 1) and the `mixing` design.
+     that argument does not cover (`dev/pilot_rotate_grid.R`,
+     `ROT_GRID=stress`).
+  2. The broader design checks: more covariates, a non-linear time trend
+     (Section 4.5's Example 1) and the `mixing` design.
 
 ## 10. Related work summary
 
@@ -1178,8 +1206,11 @@ each carrying a lot of information, and strongly correlated random
 effects. It also says why - a fixed mass matrix can only average over the
 ridge's dependence on the sampled variance components.
 
-`jmjax`'s separate, larger advantage over `JMbayes2` on the association
-parameter is generic to NUTS and needs none of this.
+With the rotation, `jmjax` matches `JMbayes2` on the coefficients
+`JMbayes2` hierarchically centres, where the default fit trailed by a
+factor of 20-30. It is 1.8x-7x ahead on the rest (Section 8.3), including
+the association parameter, where its advantage is generic to NUTS and
+needs none of this.
 
 ## References
 
@@ -1190,6 +1221,9 @@ parameter is generic to NUTS and needs none of this.
 - Bradley, J. R. (2024). Spatial Deconfounding is Reasonable Statistical
   Practice: Interpretations, Clarifications, and New Benefits.
   arXiv:2408.05106.
+- Gelfand, A. E., Sahu, S. K. & Carlin, B. P. (1995). Efficient
+  Parametrisations for Normal Linear Mixed Models. *Biometrika*, 82(3),
+  479-488.
 - Geyer, C. J. (1992). Practical Markov Chain Monte Carlo. *Statistical
   Science*, 7(4), 473-483.
 - Guo, X. & Carlin, B. P. (2004). Separate and Joint Modeling of
