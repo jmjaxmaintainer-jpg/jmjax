@@ -14,13 +14,24 @@
 \value{
 A data frame with one row per parameter: \code{Estimate},
   \code{Std.Err}, \code{z.value}, \code{p.value} (Wald test against
-  zero), and \code{Group} (which submodel the parameter belongs to -
+  zero) and \code{Group} (which submodel the parameter belongs to -
   Association, Longitudinal, Survival (baseline hazard), Survival
-  (baseline covariates), or Variance components). For MCMC fits,
-  \code{Estimate}/\code{Std.Err} are the posterior mean/SD and the Wald
-  framing is an approximation - inspect the full posterior
-  (\code{object$posterior_samples}) for skewed parameters, or the alpha
-  credible interval \code{print()} reports up front. Carries class
+  (baseline covariates), or Variance components) - always present, for
+  both MLE and MCMC fits, so existing code reading these columns keeps
+  working unchanged. For the MCMC methods, four more columns are added
+  (not substituted): \code{CrI.lower}/\code{CrI.upper} (95\% credible
+  interval from the matching column of \code{object$posterior_samples}
+  - already on the original covariate scale there, so these line up
+  with \code{Estimate} above; \code{NA} for any parameter whose draws
+  can't be located, via the internal \code{.jmjax_param_draws()}) and
+  \code{Rhat}/\code{ESS} (per-parameter convergence diagnostics from
+  \code{object$diagnostics}, \code{NA} where not available).
+  \code{print()} (both \code{print.jmjax}'s
+  compact view and \code{print.summary.jmjax}) shows only one set per
+  fit - the credible-interval/Rhat/ESS columns for MCMC fits, the
+  z-test columns for MLE fits - since a z-test against zero is an
+  MLE-flavoured framing that doesn't fit a posterior distribution, but
+  both sets stay in the returned data frame either way. Carries class
   \code{c("summary.jmjax", "data.frame")}; the extra class only changes
   how it prints (grouped, via \code{print.summary.jmjax}) - every
   existing \code{data.frame} access (\code{summary(fit)$Estimate},

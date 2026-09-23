@@ -35,9 +35,13 @@ test_that("spline-PH-mcmc runs cleanly, separates population params from random 
   expect_true(all(rhat_vals > 0.8))  # sanity bound - real R-hat, not a stub value
 
   # loglik is deliberately NULL for MCMC (see mcmc_model.py comments) - this
-  # should not error, and print() should handle it gracefully.
+  # should not error, and print() should omit the Log-Likelihood line
+  # entirely for MCMC fits rather than printing a placeholder (see
+  # print.jmjax in R/summary.jmjax.R - the sampler/convergence lines just
+  # below already make clear this is an MCMC fit).
   expect_null(fit$loglik)
-  expect_output(print(fit), "not reported for method")
+  printed <- paste(capture.output(print(fit)), collapse = "\n")
+  expect_false(grepl("Log-Likelihood", printed))
 })
 
 test_that("spline-PH-mcmc recovers known simulation parameters", {

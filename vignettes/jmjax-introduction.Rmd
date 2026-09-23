@@ -130,9 +130,8 @@ fit_s <- jm_fit(
 )
 print(fit_s)
 #> Method: spline-PH-mcmc
-#> Log-Likelihood: not reported for method 'spline-PH-mcmc'
 #> Subjects: 500  | Longitudinal obs: 2483  | Events: 273 (54.6%)
-#> MCMC diagnostics: max R-hat = 1.0083, min ESS = 412
+#> Convergence: max R-hat = 1.0083, min ESS = 412, divergences = 0
 ```
 
 **Always check the printed diagnostics line before trusting point
