@@ -46,9 +46,18 @@ the same coefficients gain 12x-34x (the intercept and subject-constant
 covariates) and 2x-5x (the time slope). Section 8 compares with `JMbayes2`. With the
 rotation, `jmjax` matches it on the coefficients `JMbayes2` hierarchically
 centres - where the default fit trailed by a factor of 18-30 - and leads
-on the rest. There, `jmjax`'s default fit already mixes the association
-parameter `alpha` 3x-8x faster, a generic NUTS-versus-block-Gibbs effect
-that needs no reparameterization.
+on the rest. The most important of those is the association parameter
+`alpha`, which measures how the longitudinal marker relates to the hazard.
+Studying that association is the reason to fit a joint model at all, so
+`alpha` is the parameter a joint-model analysis is chiefly run to estimate
+and draw inferences about. `jmjax`'s default fit already mixes it 3x-8x
+faster than `JMbayes2`, and 6.5x-7.3x faster with the rotation on real data.
+Proposition 8 gives the reason. A sampler that updates `alpha` given the
+other parameters has a lag-1 autocorrelation equal to the fraction of
+`alpha`'s posterior variance those parameters explain, and the cost grows
+like $1/(1-R^2)$. HMC moves `alpha` jointly with the rest and pays only in
+integration steps, which grow like $1/\sqrt{1-R^2}$ at worst. This is a
+generic NUTS-versus-block-Gibbs effect and needs no reparameterization.
 
 An earlier approach, which swept the absorbable directions out of the
 random effects instead of rotating them, is retired. It is documented in
@@ -68,6 +77,16 @@ inter-block correlation the way a block-Gibbs sampler is (Sections 2.4,
 between fixed and random effects that slows *any* sampler on the
 regression coefficients, including `jmjax`'s own default fit, and that a
 targeted reparameterization can remove (Sections 3-6).
+
+One parameter deserves to be singled out from the start. A joint model
+exists to estimate the *association* between the longitudinal process and
+the event hazard: `alpha`, the log hazard ratio per unit of the current
+underlying marker value. Treatment effects on the marker, its trajectory
+over time and the baseline hazard matter, but they could be studied with
+separate models. The association cannot. So when this document compares
+samplers, the question that matters most is how well each one estimates
+`alpha`. That question comes back in Section 8.1, which also gives a
+theoretical account of why NUTS has the advantage there.
 
 This is worth writing up carefully rather than reporting only headline
 ratios. The mechanism is real, reproducible, and - as far as a literature
@@ -1033,8 +1052,10 @@ the latter, with no correction step.
 
 ### 8.1 The association parameter: a generic NUTS advantage
 
-The quantity a joint-model analysis is usually run to estimate is the
-association parameter `alpha`. The degeneracy of Section 3 does not
+The association parameter `alpha` is the primary inferential target of a
+joint model (Section 1). The association between the marker and the
+hazard is what the model is built to study; the other parameters are
+largely there so that `alpha` is estimated correctly. The degeneracy of Section 3 does not
 involve it; the rotation's effect on it is mixed (Section 6.2: 0.72x-1.59x by design, 1.04x overall). Measured
 directly against `JMbayes2`, `jmjax`'s *default* fit mixes `alpha` much
 faster. In a replicated covariate-count sweep (`dev/study_orth_vs_jmbayes2.R`:
@@ -1058,6 +1079,111 @@ so growing inter-parameter correlation has no specific mechanism by which
 to degrade one block's own updates. It is not a `jmjax`-specific
 achievement, but it is the part of the comparison that needs no caveat,
 and it is present with no option enabled.
+
+**Why: a theoretical account.** The argument can be made precise. Write
+$R$ for every parameter other than `alpha`: the random effects, `beta`,
+`gamma`, the baseline hazard and the variance components.
+
+> **Proposition 8 (blocked updates of `alpha`).** Consider the two-block
+> sampler that draws `alpha` exactly from $p(\alpha \mid R, y)$ and then $R$
+> exactly from $p(R \mid \alpha, y)$. At stationarity, the lag-1
+> autocorrelation of its `alpha` chain is
+> $$r \;=\; \frac{\operatorname{Var}(E[\alpha \mid R, y])}{\operatorname{Var}(\alpha \mid y)}
+> \;=\; 1 - \frac{E[\operatorname{Var}(\alpha \mid R, y)]}{\operatorname{Var}(\alpha \mid y)},$$
+> the fraction of `alpha`'s posterior variance explained by the other
+> parameters (its "fraction of missing information"). If the posterior is
+> Gaussian, $r$ is the squared multiple correlation $R^2$ of `alpha` on $R$.
+> The `alpha` chain is then exactly AR(1) with coefficient $R^2$, so its
+> integrated autocorrelation time is $(1+R^2)/(1-R^2)$ and its ESS per draw
+> is $(1-R^2)/(1+R^2)$.
+
+*Proof.* The `alpha` chain of a two-block sampler is a data-augmentation
+chain. Its lag-1 autocovariance is $\operatorname{Var}(E[\alpha \mid R])$
+(Liu, Wong & Kong 1994), which gives the first expression; the second
+follows from the law of total variance. In the Gaussian case,
+$E[\alpha \mid R]$ is linear in $R$ and $E[R \mid \alpha]$ is linear in
+$\alpha$. Composing the two regressions gives
+$\alpha_{t+1} = c + R^2 \alpha_t + \varepsilon_t$ with $\varepsilon_t$
+independent of the past, because the coefficient is
+$\operatorname{Cov}(\alpha,R)\Sigma_R^{-1}\operatorname{Cov}(R,\alpha)/\operatorname{Var}(\alpha) = R^2$. $\square$
+
+The two-block sampler is a benchmark, not a model of `JMbayes2`.
+`JMbayes2` splits $R$ into several blocks and updates `alpha` and the
+coefficients with adaptive random-walk Metropolis rather than exact
+conditional draws. Both changes can generally be expected to make it
+slower still (Liu, Wong & Kong 1994; Roberts & Sahu 1997), although
+neither is guaranteed to in every case.
+
+Two sources make $R^2$ large in a joint model. The first is errors in
+variables. Given the random effects, the marker trajectory
+$m_i(t) = x_i(t)^{\top}\beta + z_i(t)^{\top} b_i$ is known exactly, and
+`alpha` is just the coefficient on a known time-varying covariate in a
+survival model. That is sharp. Marginally, `alpha` also carries the
+uncertainty in every trajectory, and the better the other parameters
+predict it, the more of its variance is "missing" given them. The second
+is the hazard's own location. Changing the level of $m_i(t)$ across all
+subjects changes $\alpha\,m_i(t)$ by a constant that the log baseline
+hazard absorbs. So `alpha` is correlated with the baseline-hazard level
+unless the marker is centred. `dev/alpha_missing_information.R` estimates
+$R^2$ from a long rotated fit and splits it between these two sources.
+
+HMC is not a blocked sampler. It moves `alpha` and $R$ together along the
+gradient, so a correlation between them is simply part of the posterior's
+shape. Under a fixed metric, the cost of that shape is paid in leapfrog
+steps per iteration, which scale with the ratio of the longest to the
+shortest posterior scale, $\sqrt{\kappa}$ (Neal 2011). The
+autocorrelation per iteration is not affected. A single correlation of
+`alpha` with $R$ at $R^2$ contributes
+$\kappa = (1+\sqrt{R^2})/(1-\sqrt{R^2})$, so $\sqrt{\kappa}$ grows like
+$1/\sqrt{1-R^2}$, against $1/(1-R^2)$ for the blocked sampler. There is also
+a second, larger effect. In a joint model the step size is usually set
+already by some other narrow direction (the spline coefficients, the
+variance components, or the Section 3 ridge in a default fit). While
+`alpha`'s correlation is not the narrowest direction, it adds nothing
+to the step count at all. A blocked sampler pays $(1+R^2)/(1-R^2)$
+regardless.
+
+`dev/theory_alpha_toy.py` checks this on a Gaussian target, using the
+stylised exact-dynamics HMC model of `dev/theory_rotation_toy.py`. The
+simulated two-block Gibbs lag-1 autocorrelation equals $R^2$ to within
+0.004 at every value tried. Its integrated autocorrelation time goes
+3.0, 9.0, 27.6, 39.0 and 199 as $R^2$ goes 0.5, 0.8, 0.93, 0.95 and 0.99.
+The HMC model's `alpha` IAT stays between 1.6 and 2.1. The gradients it
+needs per independent draw go 4.8, 9.4, 17.1, 20.5 and 46.8. With an
+unrelated ridge at correlation 0.995 already in $R$, its step count is
+22.2 at every $R^2$ from 0 to 0.99.
+
+The real-data measurements have the shape Proposition 8 predicts.
+`JMbayes2` is the cheaper sampler per draw; the gap is in what each draw
+is worth.
+
+| | `aids` | `pbc2` |
+|---|---:|---:|
+| `JMbayes2`: draws/sec | 1721 | 2291 |
+| `JMbayes2`: `alpha` ESS per draw | 0.035 | 0.028 |
+| `jmjax` rotated: draws/sec | 370 | 322 |
+| `jmjax` rotated: `alpha` ESS per draw | 1.06 | 1.47 |
+| ESS-per-draw ratio x draws/sec ratio | 30.3 x 0.215 = 6.5 | 52.3 x 0.141 = 7.4 |
+
+(`dev/study_realdata_rotate.R`, 3 seeds; the last row reproduces the
+6.5x and 7.3x `alpha` ESS/sec of Section 8.3 up to rounding.) `JMbayes2`
+draws 4.7-7.1 times faster but keeps only one effective draw in 29-36.
+Under Proposition 8, an ESS per draw of 0.028-0.035 corresponds to
+$R^2 \approx 0.93$-$0.95$ for an ideal two-block sampler. `jmjax`'s ESS
+per draw on `alpha` is at or above 1 on both datasets, as the HMC argument
+predicts.
+
+What is not yet shown is that `alpha`'s $R^2$ on these data actually is
+that large. If it is, Proposition 8 accounts for the whole of
+`JMbayes2`'s `alpha` deficit. If it is well below 0.93, `JMbayes2`'s
+Metropolis steps and finer blocking are costing it more than the ideal
+benchmark would. The check is `Rscript dev/alpha_missing_information.R`,
+which is pending.
+
+Proposition 8 also explains one result in Section 7. On `aids`, the
+rotation raised `alpha`'s ESS/sec 2x without touching `alpha`'s
+geometry: it removed the ridge that set the step size (92-111 leapfrog
+steps down to 31), and `alpha` rides on whatever sets the step count.
 
 ### 8.2 JMbayes2's own degradation with k
 
@@ -1208,9 +1334,13 @@ ridge's dependence on the sampled variance components.
 
 With the rotation, `jmjax` matches `JMbayes2` on the coefficients
 `JMbayes2` hierarchically centres, where the default fit trailed by a
-factor of 20-30. It is 1.8x-7x ahead on the rest (Section 8.3), including
-the association parameter, where its advantage is generic to NUTS and
-needs none of this.
+factor of 20-30. It is 1.8x-7x ahead on the rest (Section 8.3). That includes the
+association parameter `alpha`, the quantity a joint model exists to
+estimate, where the lead is 6.5x-7.3x. That advantage is generic to NUTS
+and needs none of this. Proposition 8 accounts for it: a sampler that
+updates `alpha` given the other parameters pays for their correlation
+with `alpha` in autocorrelation, while HMC pays for it, if at all, in
+integration steps.
 
 ## References
 
@@ -1245,6 +1375,9 @@ needs none of this.
 - Khan, K. & Calder, C. A. (2022). Restricted Spatial Regression Methods:
   Implications for Inference. *Journal of the American Statistical
   Association*, 117(537). doi:10.1080/01621459.2020.1788949.
+- Liu, J. S., Wong, W. H. & Kong, A. (1994). Covariance Structure of the
+  Gibbs Sampler with Applications to the Comparisons of Estimators and
+  Augmentation Schemes. *Biometrika*, 81(1), 27-40.
 - Neal, R. M. (2003). Slice Sampling. *Annals of Statistics*, 31(3),
   705-767.
 - Neal, R. M. (2011). MCMC Using Hamiltonian Dynamics. In *Handbook of
