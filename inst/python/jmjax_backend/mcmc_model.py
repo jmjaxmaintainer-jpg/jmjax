@@ -1272,6 +1272,35 @@ def fit_nuts(X_long, y_long, n_obs, X_time_surv, X_time_quad,
 
         _jit_scale = float(control.get("warm_start_jitter", 0.1))
         _vals = {str(k): jnp.asarray(v) for k, v in dict(_init_vals).items()}
+
+        if rw2_implementation == "scan" and "z_step" in _vals:
+            # Under "scan", z_step is sampled INSIDE the scan body as a
+            # single scalar site (see build_model's rw2_step, called once
+            # per RW2 step via numpyro_scan/jax.lax.scan) - so the site's
+            # own fn.shape() is () rather than the full (n_splines - 2,)
+            # vector built here to match the "vectorized" branch's one
+            # expanded site (build_model, line ~252). _init_to_value_jittered
+            # has no per-iteration index to slice the right scalar out of
+            # one flat array for each scan step, so reshaping the whole
+            # vector into () fails: "cannot reshape array of shape (n,)
+            # into shape ()".
+            #
+            # That TypeError used to propagate up, get caught by the
+            # generic except Exception below, and discard the ENTIRE warm
+            # start - W01, tau_w, beta, sigma_e, sigma_b and b_std along
+            # with it, even though only z_step was ever unseedable this
+            # way. Dropping just z_step here (it falls back to
+            # init_to_uniform, same as any other unsupplied site) keeps
+            # the other thirteen-plus seeded values instead of throwing
+            # all of them away for one bad one - the same "one bad site
+            # should not discard the good ones" principle the conservative-
+            # seed fallback below already applies.
+            #
+            # Does not touch the default rw2_implementation="vectorized"
+            # path: there z_step is the one expanded site, val's shape
+            # already matches want, and this block is skipped entirely.
+            _vals = {k: v for k, v in _vals.items() if k != "z_step"}
+
         if (q == 1 and "b" in _vals and _gen_reflectors is not None
                 and "b_std" not in _vals):
             # q = 1 is seeded through "b" (the lme() BLUPs), not b_std.
@@ -1659,10 +1688,16 @@ def fit_nuts(X_long, y_long, n_obs, X_time_surv, X_time_quad,
             # A bug in THIS code, not a property of the model or the data.
             # Deliberately NARROW: TypeError/IndexError/KeyError are how a
             # seed reports that it does not fit this model configuration -
-            # rw2_implementation="scan" gives TypeError("cannot reshape array
-            # of shape (7,)") because z_step has a different shape there - and
-            # those must warn and fall back rather than abort a fit that would
-            # otherwise work.
+            # e.g. rw2_implementation="scan" giving TypeError("cannot
+            # reshape array of shape (n,) into shape ()") because z_step
+            # has a different per-iteration shape there. That specific
+            # case is now avoided proactively (z_step is dropped from
+            # _vals above when rw2_implementation="scan", rather than
+            # reaching this reshape at all), but the same class of "seed
+            # doesn't fit this configuration" TypeError/IndexError/KeyError
+            # remains a real possibility for any other site, present or
+            # future - those must still warn and fall back rather than
+            # abort a fit that would otherwise work.
             # It used to be folded into the generic message below, which reads
             # like a modelling judgement - so a NameError from a mis-ordered
             # variable silently disabled the warm start on every fit and was
