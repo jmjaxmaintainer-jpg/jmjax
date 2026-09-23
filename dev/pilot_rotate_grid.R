@@ -33,6 +33,9 @@
 # Default ("core") grid: visits in {base, dense} x sigma_e = 0.3 x all four
 # rho at n = 300, plus n in {150, 600} at base / 0.3 / rho = 0.3 - 10 cells.
 # ROT_GRID=full adds sparse visits and sigma_e = 0.8 (24 cells + 2).
+# ROT_GRID=stress: 6 cells aimed at the rotation's predicted weak spots -
+# very dense follow-up ("vdense", visit_gap 0.25, up to 41 visits) with
+# n = 50 or 100, and rho = 0.95. Use a separate ROT_OUT.
 #
 # PREDICTIONS BEING TESTED (Section 4.10, under its table):
 #   P1  beta_corrected[intercept]: D_rot and D_rotall >> D. D_rot's gain is
@@ -83,19 +86,35 @@ OUT     <- Sys.getenv("ROT_OUT", "dev/pilot_rotate_grid.csv")
 ARMS    <- .envc("ROT_ARMS", c("A", "D", "D_rot", "D_rotall", "E", "E_rot0",
                                 "E_rotall", "E_rotall_dense", "A_rotdense"))
 
-VISIT_GAP <- c(sparse = 2.0, base = 1.0, dense = 0.5)
+VISIT_GAP <- c(sparse = 2.0, base = 1.0, dense = 0.5, vdense = 0.25)
 
-cells <- if (identical(GRID, "full")) {
-  expand.grid(visits = c("sparse", "base", "dense"), sigma_e = c(0.3, 0.8),
-              rho = c(0, 0.3, 0.6, 0.9), n = 300L, stringsAsFactors = FALSE)
+if (identical(GRID, "stress")) {
+  # The two regimes vignette Section 5.2 says are hardest for the no-sweep
+  # rotation: few subjects each carrying a lot of information (the fixed
+  # dense block cannot follow the ridge's sigma_b-dependence, residual
+  # ~ sqrt(information / N)), and strongly correlated random effects (the
+  # ridge also moves with rho, which that argument does not cover).
+  cells <- rbind(
+    expand.grid(visits = "vdense", sigma_e = 0.3, rho = c(0.3, 0.95),
+                n = c(50L, 100L), stringsAsFactors = FALSE),
+    data.frame(visits = c("base", "dense"), sigma_e = 0.3, rho = 0.95,
+               n = c(100L, 300L), stringsAsFactors = FALSE))
 } else {
-  expand.grid(visits = c("base", "dense"), sigma_e = 0.3,
-              rho = c(0, 0.3, 0.6, 0.9), n = 300L, stringsAsFactors = FALSE)
+  cells <- if (identical(GRID, "full")) {
+    expand.grid(visits = c("sparse", "base", "dense"), sigma_e = c(0.3, 0.8),
+                rho = c(0, 0.3, 0.6, 0.9), n = 300L, stringsAsFactors = FALSE)
+  } else {
+    expand.grid(visits = c("base", "dense"), sigma_e = 0.3,
+                rho = c(0, 0.3, 0.6, 0.9), n = 300L, stringsAsFactors = FALSE)
+  }
+  cells <- rbind(cells, data.frame(visits = "base", sigma_e = 0.3, rho = 0.3,
+                                   n = c(150L, 600L), stringsAsFactors = FALSE))
 }
-cells <- rbind(cells, data.frame(visits = "base", sigma_e = 0.3, rho = 0.3,
-                                 n = c(150L, 600L), stringsAsFactors = FALSE))
-cells$cell <- sprintf("%s_se%.1f_rho%.1f_n%d", cells$visits, cells$sigma_e,
-                      cells$rho, cells$n)
+# Two decimals for rho in the stress grid (0.95); one elsewhere, so the
+# labels in existing core/full result files still match on resume.
+cells$cell <- sprintf(if (identical(GRID, "stress")) "%s_se%.1f_rho%.2f_n%d"
+                      else "%s_se%.1f_rho%.1f_n%d",
+                      cells$visits, cells$sigma_e, cells$rho, cells$n)
 
 COVS  <- c("age", "sex", "trt")[seq_len(K_EXTRA)]
 LFORM <- stats::as.formula(paste("y ~ time +", paste(COVS, collapse = " + ")))
