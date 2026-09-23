@@ -102,7 +102,8 @@ def load(name):
     import csv
     path = os.path.join(HERE, f"{name}.csv")
     if not os.path.exists(path):
-        sys.exit(f"{path} not found - run: Rscript dev/generality/export_data.R")
+        print(f"\n== {name}: {path} not found - run Rscript dev/generality/export_data.R; skipped")
+        return None
     with open(path) as fh:
         rows = list(csv.DictReader(fh))
     col = lambda c: np.array([float(r[c]) for r in rows])
@@ -213,8 +214,11 @@ def main():
     chains = int(os.environ.get("GEN_CHAINS", "4"))
     out_csv = os.path.join(HERE, "results.csv")
     rows = []
-    for name in ("orthodont", "toenail"):
+    names = os.environ.get("GEN_DATA", "orthodont,toenail").split(",")
+    for name in names:
         d = load(name)
+        if d is None:
+            continue
         Q, k, info = absorbable_basis(d["X"], d["Z"], d["sid"], d["N"])
         print(f"\n== {name}: N = {d['N']} subjects, {len(d['y'])} obs, q = {d['Z'].shape[1]}; "
               f"absorbable directions per RE column {info}, union k = {k}")
