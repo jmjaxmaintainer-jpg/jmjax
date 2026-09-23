@@ -1,4 +1,11 @@
 # ==============================================================================
+# LEGACY. The location sweep (control$orthogonalize_b0 / orthogonalize_b and
+# its rotations) is not part of jmjax's recommended path - see the backend
+# module sweep.py and dev/notes/sweep-reparameterization.md. These tests are
+# kept so that code, which the dev/ comparison studies still exercise, does
+# not silently break. The recommended construction is tested in
+# test-rotate-absorbable.R.
+#
 # Regression tests for control$orthogonalize_b0 / control$orthogonalize_b
 # (the location-degeneracy reparameterization; see ?jm_fit and
 # vignette("jmjax-reparameterization") for the full mechanism).
@@ -376,28 +383,4 @@ test_that("orthogonalize_rotate_all is exact: same fit as the unrotated sweep", 
   for (j in 1:2) {
     expect_lt(abs(bc(fit_e, j) - bc(fit_r, j)), 3 * max(bcs(fit_e, j), bcs(fit_r, j)))
   }
-})
-
-test_that("rotate_absorbable (no-sweep rotation) refuses to combine with the sweep", {
-  skip_if_no_backend()
-
-  sim <- simulate_joint_data_re2(n = 100, seed = 20)
-  common <- list(
-    long_formula = y ~ time,
-    surv_formula = survival::Surv(time, event) ~ 1,
-    data_long = sim$data_long, data_surv = sim$data_surv,
-    id_var = "id", time_var = "time",
-    method = "spline-PH-mcmc", random_effects = "intercept_slope"
-  )
-  ctrl <- list(num_warmup = 20, num_samples = 20, num_chains = 1, progress_bar = FALSE)
-  expect_error(
-    do.call(jm_fit, c(common, list(control = c(ctrl, list(
-      rotate_absorbable = TRUE, orthogonalize_b0 = TRUE))))),
-    "no-sweep alternative"
-  )
-  expect_error(
-    do.call(jm_fit, c(common, list(control = c(ctrl, list(
-      dense_mass_generator_beta = TRUE))))),
-    "requires orthogonalize_rotate_all or rotate_absorbable"
-  )
 })

@@ -265,7 +265,17 @@
 #'       to enable when \code{alpha} is the parameter of primary interest,
 #'       which is typical for joint models.}
 #'     \item{\code{orthogonalize_b0}}{Logical, default \code{FALSE}.
-#'       \strong{Experimental.} Sweeps the subject-constant columns of the
+#'       \strong{Legacy - not recommended.} Superseded by
+#'       \code{rotate_absorbable} (below), which removes the same
+#'       degeneracy's cost without changing what is reported. Kept, with
+#'       \code{orthogonalize_b}, \code{orthogonalize_b0_rotate} and
+#'       \code{orthogonalize_rotate_all}, only so the development studies
+#'       that compare against it stay reproducible; the code lives in the
+#'       backend module \code{sweep.py} and the development record in the
+#'       package repository's \code{dev/notes/sweep-reparameterization.md}.
+#'       The text below describes it as originally documented.
+#'
+#'       Sweeps the subject-constant columns of the
 #'       longitudinal design out of the random intercepts, replacing
 #'       \code{b_0} by its residual off that column space. With an
 #'       intercept and one baseline covariate this removes a
@@ -362,6 +372,28 @@
 #'       it is not visible to \code{tryCatch()}/\code{withCallingHandlers()}
 #'       on the R side; \code{fit$convergence$orthogonalize} is the
 #'       reliable way to check programmatically what happened.}
+#'     \item{\code{rotate_absorbable}, \code{dense_mass_generator_beta}}{Both
+#'       logical, default \code{FALSE}. \strong{Experimental.} Addresses
+#'       the same location degeneracy as \code{orthogonalize_b0}, but
+#'       without changing the model's coordinates for \code{b}: every
+#'       column of the standardized random effects is rotated by one fixed
+#'       orthogonal (Householder) matrix whose first \code{k} columns span
+#'       the directions the fixed effects can absorb, so those directions
+#'       become an explicit \code{[k, q]} sample site \code{b_gen_U}.
+#'       \code{dense_mass_generator_beta} then gives \code{beta} and
+#'       \code{b_gen_U} one small dense mass-matrix block, which is where
+#'       the degeneracy now lives. The rotation is exact - the prior and
+#'       posterior of every model quantity are unchanged - and the
+#'       reported \code{beta} is the ordinary one, with no correction step.
+#'       Use the two together. In \code{dev/pilot_rotate_grid.R} this gave
+#'       roughly 8x-25x (intercept) and 8x-60x (time slope) the default
+#'       fit's ESS/sec across 10 simulated designs (3 seeds each), with
+#'       wall time within about 10\% of the default fit's, and \code{dev/study_calibration.R} (100 replicates) found
+#'       its coverage identical to the default fit's. Requires \code{q >= 2},
+#'       \code{random_effects_corr = TRUE} and the default
+#'       \code{random_effects_method = "nuts"}; what was rotated is
+#'       reported in \code{fit$convergence$orthogonalize$rotation}. See
+#'       \code{vignette("jmjax-reparameterization")}.}
 #'     \item{\code{dense_mass_beta}, \code{seed_mass_matrix}}{Both logical,
 #'       both default \code{FALSE}. \strong{Tested and not adopted} -
 #'       retained only to document the negative results.

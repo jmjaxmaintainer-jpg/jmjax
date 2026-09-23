@@ -34,8 +34,10 @@ import warnings
 import numpy as np
 
 HERE = os.path.dirname(os.path.abspath(__file__))
-MODEL_PY = os.path.join(HERE, os.pardir, "inst", "python", "jmjax_backend",
-                        "mcmc_model.py")
+# The functions moved out of mcmc_model.py into absorbable.py (basis) and
+# sweep.py (legacy correction); mcmc_model still re-exports them.
+MODEL_PYS = [os.path.join(HERE, os.pardir, "inst", "python", "jmjax_backend", f)
+             for f in ['absorbable.py']]
 WANTED = ("_absorbable_basis", "_absorbable_basis_exact",
           "_structural_extension_residual")
 
@@ -52,14 +54,14 @@ def load():
         from jmjax_backend import mcmc_model as m
         return tuple(getattr(m, w) for w in WANTED), "imported from jmjax_backend"
     except Exception:
-        src = open(MODEL_PY, encoding="utf-8").read()
+        src = "\n".join(open(f, encoding="utf-8").read() for f in MODEL_PYS)
         ns = {"np": np, "warnings": warnings}
         for w in WANTED:
             mt = re.search(r"^def %s\(.*?(?=^def |\Z)" % w, src, flags=re.S | re.M)
             if mt is None:
-                raise RuntimeError("could not locate %s in %s" % (w, MODEL_PY))
+                raise RuntimeError("could not locate %s in %s" % (w, MODEL_PYS))
             exec(mt.group(0), ns)
-        return tuple(ns[w] for w in WANTED), "source-extracted from mcmc_model.py"
+        return tuple(ns[w] for w in WANTED), "source-extracted from %s" % ", ".join(os.path.basename(f) for f in MODEL_PYS)
 
 
 (_absorbable_basis, _absorbable_basis_exact,
