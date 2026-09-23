@@ -246,7 +246,7 @@ def _package_result(fit, idx, p, n_splines):
     return {
         "estimates": dict(zip(names, est.tolist())),
         "se": dict(zip(names, se_nat.tolist())),
-        "vcov": fit["vcov"].tolist(),
+        "vcov": common.natural_scale_vcov(fit, est, se_nat),
         "loglik": fit["loglik"],
         "convergence": {"converged": fit["converged"], "message": fit["message"], "n_iter": fit["n_iter"],
                         # grad_max is what distinguishes "stopped cleanly"
@@ -445,7 +445,7 @@ def _package_result_spline_delta(fit, p, n_splines):
     return {
         "estimates": dict(zip(names, est.tolist())),
         "se": dict(zip(names, se_nat.tolist())),
-        "vcov": fit["vcov"].tolist(),
+        "vcov": common.natural_scale_vcov(fit, est, se_nat),
         "loglik": fit["loglik"],
         "convergence": {"converged": fit["converged"], "message": fit["message"], "n_iter": fit["n_iter"],
                         # grad_max is what distinguishes "stopped cleanly"
@@ -648,7 +648,7 @@ def _package_result_spline_with_baseline_covariates(fit, p, n_splines, n_gamma):
     return {
         "estimates": dict(zip(names, est.tolist())),
         "se": dict(zip(names, se_nat.tolist())),
-        "vcov": fit["vcov"].tolist(),
+        "vcov": common.natural_scale_vcov(fit, est, se_nat),
         "loglik": fit["loglik"],
         "convergence": {"converged": fit["converged"], "message": fit["message"], "n_iter": fit["n_iter"],
                         # grad_max is what distinguishes "stopped cleanly"
@@ -887,7 +887,7 @@ def _package_result_spline_q2(fit, p, n_splines):
     return {
         "estimates": dict(zip(names, est.tolist())),
         "se": dict(zip(names, se_nat.tolist())),
-        "vcov": fit["vcov"].tolist(),
+        "vcov": common.natural_scale_vcov(fit, est, se_nat),
         "loglik": fit["loglik"],
         "convergence": {"converged": fit["converged"], "message": fit["message"], "n_iter": fit["n_iter"],
                         # grad_max is what distinguishes "stopped cleanly"
@@ -1149,7 +1149,7 @@ def _package_result_spline_q2_with_baseline_covariates(fit, p, n_splines, n_gamm
     return {
         "estimates": dict(zip(names, est.tolist())),
         "se": dict(zip(names, se_nat.tolist())),
-        "vcov": fit["vcov"].tolist(),
+        "vcov": common.natural_scale_vcov(fit, est, se_nat),
         "loglik": fit["loglik"],
         "convergence": {"converged": fit["converged"], "message": fit["message"], "n_iter": fit["n_iter"],
                         # grad_max is what distinguishes "stopped cleanly"
@@ -1386,7 +1386,7 @@ def _package_result_spline_q2_extra_channel(fit, p, n_splines, channel_name):
     return {
         "estimates": dict(zip(names, est.tolist())),
         "se": dict(zip(names, se_nat.tolist())),
-        "vcov": fit["vcov"].tolist(),
+        "vcov": common.natural_scale_vcov(fit, est, se_nat),
         "loglik": fit["loglik"],
         "convergence": {"converged": fit["converged"], "message": fit["message"], "n_iter": fit["n_iter"],
                         # grad_max is what distinguishes "stopped cleanly"

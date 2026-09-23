@@ -358,7 +358,7 @@ def _package_result_delta(fit, p):
     return {
         "estimates": dict(zip(names, est.tolist())),
         "se": dict(zip(names, se_nat.tolist())),
-        "vcov": fit["vcov"].tolist(),
+        "vcov": common.natural_scale_vcov(fit, est, se_nat),
         "loglik": fit["loglik"],
         "convergence": {"converged": fit["converged"], "message": fit["message"], "n_iter": fit["n_iter"],
                         # grad_max is what distinguishes "stopped cleanly"
@@ -554,7 +554,7 @@ def _package_result_baseline_covariates(fit, p, n_gamma):
     return {
         "estimates": dict(zip(names, est.tolist())),
         "se": dict(zip(names, se_nat.tolist())),
-        "vcov": fit["vcov"].tolist(),
+        "vcov": common.natural_scale_vcov(fit, est, se_nat),
         "loglik": fit["loglik"],
         "convergence": {"converged": fit["converged"], "message": fit["message"], "n_iter": fit["n_iter"],
                         # grad_max is what distinguishes "stopped cleanly"
@@ -754,7 +754,7 @@ def _package_result_area(fit, p):
     return {
         "estimates": dict(zip(names, est.tolist())),
         "se": dict(zip(names, se_nat.tolist())),
-        "vcov": fit["vcov"].tolist(),
+        "vcov": common.natural_scale_vcov(fit, est, se_nat),
         "loglik": fit["loglik"],
         "convergence": {"converged": fit["converged"], "message": fit["message"], "n_iter": fit["n_iter"],
                         # grad_max is what distinguishes "stopped cleanly"
@@ -948,7 +948,7 @@ def _package_result_area_avg(fit, p):
     return {
         "estimates": dict(zip(names, est.tolist())),
         "se": dict(zip(names, se_nat.tolist())),
-        "vcov": fit["vcov"].tolist(),
+        "vcov": common.natural_scale_vcov(fit, est, se_nat),
         "loglik": fit["loglik"],
         "convergence": {"converged": fit["converged"], "message": fit["message"], "n_iter": fit["n_iter"],
                         # grad_max is what distinguishes "stopped cleanly"
@@ -1369,7 +1369,7 @@ def _package_result_q2_baseline_covariates(fit, p, n_gamma):
     return {
         "estimates": dict(zip(names, est.tolist())),
         "se": dict(zip(names, se_nat.tolist())),
-        "vcov": fit["vcov"].tolist(),
+        "vcov": common.natural_scale_vcov(fit, est, se_nat),
         "loglik": fit["loglik"],
         "convergence": {"converged": fit["converged"], "message": fit["message"], "n_iter": fit["n_iter"],
                         # grad_max is what distinguishes "stopped cleanly"
@@ -1415,7 +1415,7 @@ def _package_result_q2(fit, p):
     return {
         "estimates": dict(zip(names, est.tolist())),
         "se": dict(zip(names, se_nat.tolist())),
-        "vcov": fit["vcov"].tolist(),
+        "vcov": common.natural_scale_vcov(fit, est, se_nat),
         "loglik": fit["loglik"],
         "convergence": {"converged": fit["converged"], "message": fit["message"], "n_iter": fit["n_iter"],
                         # grad_max is what distinguishes "stopped cleanly"
@@ -1662,7 +1662,7 @@ def _package_result_q2_extra_channel(fit, p, channel_name):
     return {
         "estimates": dict(zip(names, est.tolist())),
         "se": dict(zip(names, se_nat.tolist())),
-        "vcov": fit["vcov"].tolist(),
+        "vcov": common.natural_scale_vcov(fit, est, se_nat),
         "loglik": fit["loglik"],
         "convergence": {"converged": fit["converged"], "message": fit["message"], "n_iter": fit["n_iter"],
                         # grad_max is what distinguishes "stopped cleanly"
@@ -1704,7 +1704,7 @@ def _package_result(fit, idx, p):
     return {
         "estimates": dict(zip(names, est.tolist())),
         "se": dict(zip(names, se_nat.tolist())),
-        "vcov": fit["vcov"].tolist(),
+        "vcov": common.natural_scale_vcov(fit, est, se_nat),
         "loglik": fit["loglik"],
         "convergence": {"converged": fit["converged"], "message": fit["message"], "n_iter": fit["n_iter"],
                         # grad_max is what distinguishes "stopped cleanly"

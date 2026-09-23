@@ -560,3 +560,60 @@ def fit_theta(neg_log_lik, data, init_theta, maxiter=1000, ftol=1e-7,
 
 def to_jax_data(**arrays):
     return {k: jnp.array(v) for k, v in arrays.items()}
+
+
+def natural_scale_vcov(fit, est, se_nat):
+    """Covariance matrix of the REPORTED parameters (MLE paths).
+
+    fit_theta() inverts the Hessian of the optimizer's own parameters:
+    log(sigma_e), log(sigma_b*), log(shape), atanh(rho), and the rest as-is.
+    Returning that matrix under the name "vcov" meant its diagonal did not
+    match the reported standard errors, which every _package_result_*()
+    converts to natural units separately (delta method, by hand).
+
+    Every conversion those functions apply is ELEMENTWISE - exp() or tanh()
+    of one internal parameter, or the identity - so the Jacobian of
+    internal -> reported is diagonal, and this returns J V J^T with
+        J_ii = 1            where est_i == theta_i
+               est_i        where est_i == exp(theta_i)
+               1 - est_i^2  where est_i == tanh(theta_i)
+    Each element's transform is read off (theta_i, est_i) rather than
+    passed in, so the 14 packaging functions cannot drift out of step with
+    it. As a second, independent derivation, |J_ii| * se_theta_i must
+    reproduce the hand-written se_nat_i; any element that fits none of the
+    three forms, or any disagreement, returns None rather than a matrix
+    that is quietly wrong. The linear maps R owns (standardized covariates
+    -> original beta) are applied afterwards on the R side.
+    """
+    try:
+        theta = np.asarray(fit["theta_opt"], dtype=np.float64)
+        est = np.asarray(est, dtype=np.float64)
+        V = np.asarray(fit["vcov"], dtype=np.float64)
+        n = theta.size
+        if est.size != n or V.shape != (n, n):
+            return None
+        jac = np.empty(n)
+        for i in range(n):
+            # isclose, not ==: numpy's vectorized exp/tanh (used when a
+            # packager transforms several indices at once) may differ from
+            # the scalar call in the last bit. identity is tested first, so
+            # a tanh parameter at ~0 (where tanh(x) ~ x) is read as the
+            # identity - whose derivative, 1, agrees with 1 - tanh(x)^2 to
+            # far below any reported precision.
+            if np.isclose(est[i], theta[i], rtol=1e-12, atol=0.0):
+                jac[i] = 1.0
+            elif np.isclose(est[i], np.exp(theta[i]), rtol=1e-12, atol=0.0):
+                jac[i] = est[i]
+            elif np.isclose(est[i], np.tanh(theta[i]), rtol=1e-12, atol=0.0):
+                jac[i] = 1.0 - est[i] ** 2
+            else:
+                return None
+        se_theta = np.asarray(fit["se_theta"], dtype=np.float64)
+        se_nat = np.asarray(se_nat, dtype=np.float64)
+        se_chk = np.abs(jac) * se_theta
+        ok = np.isfinite(se_chk) & np.isfinite(se_nat)
+        if not np.allclose(se_chk[ok], se_nat[ok], rtol=1e-8, atol=0.0):
+            return None
+        return (V * np.outer(jac, jac)).tolist()
+    except Exception:
+        return None

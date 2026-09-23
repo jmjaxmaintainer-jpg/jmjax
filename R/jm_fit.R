@@ -2484,6 +2484,14 @@ jm_fit <- function(long_formula,
   # summary.jmjax's estimates/se) works, while preserving names.
   estimates <- unlist(py_result$estimates)
   se <- if (!is.null(py_result$se)) unlist(py_result$se) else NULL
+  # vcov arrives from the MLE backends as a nested list already on the
+  # REPORTED scale (common.natural_scale_vcov(): sigmas, shape and rho
+  # converted from the optimizer's log/atanh scale), in the same order as
+  # the estimates. Turn it into a named numeric matrix once, here, so every
+  # later step - the standardized-covariate map below, vcov.jmjax() - works
+  # on the same object. NULL for MCMC fits (vcov.jmjax() uses the draws)
+  # and whenever the backend could not build it.
+  py_result$vcov <- .jmjax_as_vcov(py_result$vcov, names(estimates))
 
   # --- 2b. Back-transform beta to the ORIGINAL covariate scale ---------
   # Only reached when control$standardize_covariates = TRUE. With
@@ -2752,11 +2760,14 @@ jm_fit <- function(long_formula,
           .bn <- paste0("beta_", seq_len(.p_beta) - 1L)
           estimates[.bn] <- as.numeric(.A %*% as.numeric(estimates[.bn]))
 
-          if (!is.null(py_result$vcov)) {
-            V <- tryCatch(as.matrix(do.call(rbind, lapply(py_result$vcov, unlist))),
-                           error = function(e) NULL)
-            if (!is.null(V) && nrow(V) >= .p_beta) {
-              bi <- seq_len(.p_beta)
+          if (!is.null(py_result$vcov) || !is.null(se)) {
+            # Already a named matrix on the reported scale (see
+            # .jmjax_as_vcov() above), so the linear map applies directly:
+            # the nonlinear sigma/rho conversions happened in Python, this
+            # one belongs to R.
+            V <- py_result$vcov
+            bi <- if (!is.null(V)) match(.bn, rownames(V)) else NA_integer_
+            if (!is.null(V) && !anyNA(bi)) {
               V[bi, bi] <- .A %*% V[bi, bi, drop = FALSE] %*% t(.A)
               if (ncol(V) > .p_beta) {
                 oi <- setdiff(seq_len(ncol(V)), bi)
@@ -2766,10 +2777,10 @@ jm_fit <- function(long_formula,
               py_result$vcov <- V
               if (!is.null(se)) se[.bn] <- sqrt(pmax(diag(V)[bi], 0))
             } else if (!is.null(se)) {
-              warning("standardize_covariates: could not reshape vcov to a ",
-                      "matrix, so beta standard errors are left on the ",
-                      "STANDARDIZED scale while the estimates are on the ",
-                      "original scale. Do not read the two together.")
+              warning("standardize_covariates: the backend returned no ",
+                      "usable covariance matrix, so beta standard errors are ",
+                      "left on the STANDARDIZED scale while the estimates are ",
+                      "on the original scale. Do not read the two together.")
           }
         }
       }
