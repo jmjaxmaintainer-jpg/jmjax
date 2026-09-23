@@ -36,8 +36,7 @@
 # from one very large dataset (n = 20,000), computed once and printed.
 #
 # Fits use the package defaults (rotation on), 2 chains x (500 + 1000), as in
-# study_calibration.R. Intervals are the 95% credible intervals summary()
-# reports (CrI.lower/CrI.upper, straight posterior quantiles).
+# study_calibration.R. Intervals are central 95% posterior quantiles.
 #
 # PILOT FIRST (the default): ref, fixed and weibull at R = 20, about 25
 # minutes. The three cells share their simulation seeds, so the PAIRED
@@ -111,6 +110,23 @@ pop_log_lambda0 <- function() {
   LOG_LAMBDA0_POP
 }
 
+# Draws for one reported parameter. posterior_samples is keyed by SAMPLE SITE
+# (beta, gamma, W, sigma_b), not by the per-element names in fit$estimates
+# (beta_1, gamma_0, sigma_b1); scalar sites (alpha, sigma_e, rho) match
+# directly. Kept local rather than calling summary() so this study does not
+# depend on which version of the print/summary code is installed.
+param_draws <- function(ps, nm) {
+  if (!is.null(ps[[nm]])) return(as.numeric(unlist(ps[[nm]])))
+  m <- regmatches(nm, regexec("^(beta|gamma)_([0-9]+)$|^(W|sigma_b)([0-9]+)$", nm))[[1]]
+  if (!length(m)) return(NULL)
+  site <- if (nzchar(m[2])) m[2] else m[4]
+  idx  <- as.integer(if (nzchar(m[3])) m[3] else m[5]) + 1L
+  v <- ps[[site]]; if (is.null(v)) return(NULL)
+  M <- if (is.list(v)) do.call(rbind, lapply(v, function(z) as.numeric(unlist(z)))) else as.matrix(v)
+  if (idx > ncol(M)) return(NULL)
+  M[, idx]
+}
+
 fit_one <- function(cell, rep_id) {
   sp  <- CELL_SPEC[[cell]]
   sim <- sim_joint(n = sp$n, seed = 7000L + rep_id, k_extra = K_EXTRA,
@@ -126,19 +142,33 @@ fit_one <- function(cell, rep_id) {
               id_var = "id", time_var = "time",
               method = sp$method, random_effects = "intercept_slope",
               random_formula = ~ time, control = ctl)
-  s   <- summary(f)
   tru <- truth_of(sim$truth)
+  est <- unlist(f$estimates); se <- unlist(f$se)
   rh  <- unlist(f$diagnostics$rhat)
-  pn  <- intersect(names(tru), rownames(s))
-  data.frame(cell = cell, rep = rep_id, n_sub = sp$n, method = sp$method,
-             fixed_lambda = sp$fixed, event_rate = sim$event_rate,
-             param = pn, truth = unname(tru[pn]),
-             post_mean = s[pn, "Estimate"], post_sd = s[pn, "Std.Err"],
-             q025 = s[pn, "CrI.lower"], q975 = s[pn, "CrI.upper"],
-             cov95 = as.integer(tru[pn] >= s[pn, "CrI.lower"] & tru[pn] <= s[pn, "CrI.upper"]),
-             rhat = s[pn, "Rhat"], max_rhat_all = max(rh[is.finite(rh)]),
-             sec = as.numeric(f$convergence$sampling_time_sec %||% NA_real_),
-             stringsAsFactors = FALSE)
+  pn  <- intersect(names(tru), names(est))
+  ps  <- f$posterior_samples
+  qs  <- t(vapply(pn, function(p) {
+    d <- param_draws(ps, p)
+    if (is.null(d) || length(d) < 2) c(NA_real_, NA_real_)
+    else as.numeric(stats::quantile(d, c(0.025, 0.975), names = FALSE))
+  }, numeric(2)))
+  one <- function(x) { x <- suppressWarnings(as.numeric(x)); if (length(x) == 1L) x else NA_real_ }
+  cols <- list(cell = cell, rep = rep_id, n_sub = sp$n, method = sp$method,
+               fixed_lambda = sp$fixed, event_rate = one(sim$event_rate),
+               param = pn, truth = unname(tru[pn]),
+               post_mean = unname(est[pn]),
+               post_sd = unname(se[pn]),
+               q025 = qs[, 1], q975 = qs[, 2],
+               rhat = unname(rh[pn]),
+               max_rhat_all = one(max(rh[is.finite(rh)])),
+               sec = one(f$convergence$sampling_time_sec))
+  lens <- vapply(cols, length, integer(1))
+  if (any(!lens %in% c(1L, length(pn))))
+    stop("column length mismatch: ", paste(sprintf("%s=%d", names(lens), lens), collapse = " "),
+         call. = FALSE)
+  out <- as.data.frame(cols, stringsAsFactors = FALSE)
+  out$cov95 <- as.integer(out$truth >= out$q025 & out$truth <= out$q975)
+  out
 }
 
 # ---- run (resumable) ---------------------------------------------------------
@@ -160,6 +190,8 @@ if (!SUMMARY_ONLY) {
 }
 
 # ---- summary -----------------------------------------------------------------
+if (!file.exists(OUT)) stop("no results in ", OUT, " - every fit failed; see the messages above",
+                            call. = FALSE)
 R <- utils::read.csv(OUT, stringsAsFactors = FALSE)
 R <- R[R$cell %in% CELLS, ]
 R <- R[R$max_rhat_all <= 1.05, ]   # same R-hat gate as study_calibration.R
