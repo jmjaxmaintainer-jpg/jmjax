@@ -134,11 +134,25 @@ correction; the list of `dev/` scripts that reproduce each table.
 3. **Figures 1-3.** Fig 1 from `dev/theory_rotation_toy.py`; Figs 2-3 from
    the committed result CSVs. No new fits needed.
 
-## 7. Decisions for Changbin
+## 7. Decisions
 
-- Journal: JCGS first, Statistics and Computing as the fallback?
-- Title: 1, 2 or 3 (or other)?
-- Keep the JMbayes2 comparison here (needed for contribution 4) and leave
-  broader package benchmarks (JM, joineRML, rstanarm's stan_jm) to the
-  JSS paper?
-- Authors and affiliations.
+- **Journal (decided 23 Sep):** JCGS first; then Statistics and Computing,
+  Communications in Statistics - Simulation and Computation, or similar.
+- **Title (decided, conditional):** title 1 if the generality example
+  (Section 6, item 1) reproduces the gains outside joint models; otherwise
+  title 3.
+- **Authors:** Changbin Guo, sole author for now.
+- **JMbayes2 comparison (proposed, awaiting confirmation):** keep a narrow
+  version here, framed as blocked Metropolis-within-Gibbs against HMC
+  rather than package against package:
+  - alpha: the ESS-per-draw decomposition and the R^2 measurement, which
+    contribution 4 needs;
+  - the regression coefficients: parity with hierarchical centering, as
+    an external check that the rotation recovers what centering buys,
+    without centering's cost on the variance components.
+
+  Leave out JMbayes2's own degradation with the number of covariates
+  (vignette 8.2): it is a property of one package's implementation, not
+  of the method, and reads as criticism of another package. It stays in
+  the vignette. The broad benchmark (JM, joineRML, JMbayes2, rstanarm's
+  stan_jm), usability and prediction go in the JSS paper.
