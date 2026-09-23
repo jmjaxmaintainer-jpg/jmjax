@@ -941,7 +941,28 @@ degeneracy clearly:
   absorbable directions of $b$;
 - every other parameter was near 1 ESS per draw, with that share near 0.
 
-The rotated arm of the same script measures the gain.
+The rotated arm of the same script, 2 seeds per dataset (ESS/sec
+ratios, rotated over unrotated), shows:
+
+| | `aids` | `pbc2` |
+|---|---:|---:|
+| `beta_0` and subject-constant coefficients | 51x-53x | 19x-20x |
+| other parameters | 2.0x-3.5x | 0.56x-0.73x |
+| `alpha` | 3.5x | 0.73x |
+| slowest parameter, ESS per draw (unrotated, then rotated) | 0.05, 0.88 | 0.06, 0.78 |
+| leapfrog steps per iteration (unrotated, then rotated) | 66, 29 | 31, 26 |
+
+- **The affected coefficients.** They go from about one effective draw in
+  17 to more than one per draw.
+- **The other parameters.** On `aids` the rotation also removed the ridge
+  that set the step size, so they gain too, as on the $q = 2$ `aids` fit
+  (Section 7). On `pbc2` they lose some ESS/sec, but this is a loss of
+  antithetic efficiency rather than of mixing. Unrotated they ran at
+  1.3-1.6 ESS per draw; rotated, at 0.78-1.23. The pattern is the same
+  as $q = 2$ on `pbc2`.
+- **The fit as a whole.** What sets the chain length a user needs is the
+  slowest parameter. On that measure the rotation is 15x-18x better on
+  both datasets.
  Elsewhere they are
 silently off. `control = list(rotate_absorbable = FALSE)` gives the
 unrotated fit. Setting `rotate_absorbable = TRUE` explicitly insists on

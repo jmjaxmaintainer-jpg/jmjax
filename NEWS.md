@@ -10,7 +10,11 @@
   degeneracy there: random-intercept-only fits of `aids` and `pbc2` mixed
   `beta_0` and the subject-constant coefficients at 0.04-0.07 ESS per
   draw, and 91-95% of their posterior variance was shared with the
-  absorbable directions of `b`.
+  absorbable directions of `b`. Rotated, those coefficients gained 51x-53x
+  ESS/sec on `aids` and 19x-20x on `pbc2`. The slowest parameter's ESS per
+  draw went from 0.05-0.06 to 0.78-0.88. The other `pbc2` parameters,
+  `alpha` included, fell to 0.56x-0.73x, from 1.3-1.6 ESS per draw to
+  0.78-1.23.
   - **The problem.** The likelihood identifies subject-constant fixed
     effects and the matching random-effect directions only through their
     sum. This "location degeneracy" recurs for the time slope in every
