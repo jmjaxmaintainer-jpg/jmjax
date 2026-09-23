@@ -16,3 +16,4 @@ n-point Gauss-Legendre quadrature nodes/weights on [0,1], via the
 Golub-Welsch algorithm (eigendecomposition of the tridiagonal Jacobi
 matrix) - standard, numerically stable, works for arbitrary n.
 }
+\keyword{internal}

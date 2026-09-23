@@ -40,3 +40,4 @@ longitudinal covariates, not genuinely time-varying ones (a
 substantially harder, separate modeling problem, deliberately out of
 scope - see package development notes).
 }
+\keyword{internal}

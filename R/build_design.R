@@ -13,6 +13,7 @@
 #' @return A list with X_long (padded [N_sub, max_obs, p] design array),
 #'   y_long (padded [N_sub, max_obs]), n_obs ([N_sub] integer vector), and
 #'   subj_ids (sorted unique ids, defines row order used everywhere else).
+#' @keywords internal
 build_long_arrays <- function(long_formula, data_long, id_var) {
   subj_ids <- sort(unique(data_long[[id_var]]))
   N_sub <- length(subj_ids)
@@ -79,6 +80,7 @@ build_long_arrays <- function(long_formula, data_long, id_var) {
 #'   \code{X_long}'s exactly.
 #' @return \code{Z_long}: a padded \code{[N_sub, max_obs, q]} array, where
 #'   \code{q = ncol(model.matrix(random_formula, data_long))}.
+#' @keywords internal
 build_random_long_array <- function(random_formula, data_long, id_var, subj_ids, max_obs) {
   N_sub <- length(subj_ids)
   id_index <- match(data_long[[id_var]], subj_ids)
@@ -125,6 +127,7 @@ build_random_long_array <- function(random_formula, data_long, id_var, subj_ids,
 #' @param gk_order Number of Gauss-Kronrod nodes for the time quadrature
 #'   (10, matching the prototyping scripts; JM itself defaults GKk=15 for
 #'   non-piecewise methods - keep these aligned if exact parity matters).
+#' @keywords internal
 build_surv_arrays <- function(surv_formula, data_surv, subj_ids, id_var, gk_order = 10) {
   data_surv <- data_surv[match(subj_ids, data_surv[[id_var]]), , drop = FALSE]
 
@@ -158,6 +161,7 @@ build_surv_arrays <- function(surv_formula, data_surv, subj_ids, id_var, gk_orde
 #' @param data_surv One-row-per-subject data frame, already reordered to
 #'   match \code{subj_ids}'s row order (see \code{build_surv_arrays()}).
 #' @return A \code{[N_sub, n_gamma]} matrix (\code{n_gamma} may be 0).
+#' @keywords internal
 build_baseline_covariates <- function(surv_formula, data_surv) {
   rhs_terms <- stats::delete.response(stats::terms(surv_formula))
   W <- stats::model.matrix(rhs_terms, data_surv)
@@ -188,6 +192,7 @@ build_baseline_covariates <- function(surv_formula, data_surv) {
 #'   time_var (preserves the original behavior exactly), otherwise a data
 #'   frame with one row per subject (in subj_ids order) and one column
 #'   per baseline covariate.
+#' @keywords internal
 extract_baseline_covariates_long <- function(long_formula, time_var, data_long, id_var, subj_ids) {
   all_vars <- all.vars(long_formula)
   response_var <- all_vars[1]
@@ -235,6 +240,7 @@ extract_baseline_covariates_long <- function(long_formula, time_var, data_long, 
 #'   (default) preserves the original time_var-only behavior exactly.
 #' @return If t_values is a vector: a [N_sub, p] matrix. If a matrix: a
 #'   [N_sub, n_quad, p] array.
+#' @keywords internal
 build_time_design <- function(long_formula, time_var, t_values, baseline_covariates = NULL) {
   rhs_terms <- stats::delete.response(stats::terms(long_formula))
 
@@ -289,6 +295,7 @@ build_time_design <- function(long_formula, time_var, t_values, baseline_covaria
 #'   term and produce a clearer error message on a likely typo.
 #' @return A character vector of requested association types, e.g.
 #'   \code{c("value", "delta")}. Always includes at least one type.
+#' @keywords internal
 parse_functional_forms <- function(functional_forms, response_var) {
   if (is.null(functional_forms)) return("value")
 
@@ -362,6 +369,7 @@ parse_functional_forms <- function(functional_forms, response_var) {
 #'   nodes (\code{[N_sub, n_quad, p]}), from \code{build_time_design()}.
 #' @return A list with \code{X_delta_surv} (\code{[N_sub, p]}) and
 #'   \code{X_delta_quad} (\code{[N_sub, n_quad, p]}).
+#' @keywords internal
 build_delta_channel <- function(long_formula, time_var, X_time_surv, X_time_quad) {
   n_sub <- nrow(X_time_surv)
   p <- ncol(X_time_surv)
@@ -400,6 +408,7 @@ build_delta_channel <- function(long_formula, time_var, X_time_surv, X_time_quad
 #'   Defaults to 10, matching the outer scheme.
 #' @return A list with \code{X_area_surv} (\code{[N_sub, p]}) and
 #'   \code{X_area_quad} (\code{[N_sub, n_quad_outer, p]}).
+#' @keywords internal
 build_area_channel <- function(long_formula, time_var, T_surv, t_quad, gk_weights_outer,
                                 gk_order_inner = 10) {
   n_sub <- nrow(t_quad)

@@ -24,3 +24,4 @@ during development (see n200 replication investigations) - a fixed
 10-node rule may be characteristically less accurate than what other
 packages use internally for some hazard shapes.
 }
+\keyword{internal}

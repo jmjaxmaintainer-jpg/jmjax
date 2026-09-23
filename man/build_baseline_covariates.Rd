@@ -25,3 +25,4 @@ hazard's own intercept (\code{log_lambda0} for Weibull, the spline
 coefficients' own level for the spline baseline) - exactly why
 \code{coxph()} itself never includes an intercept term either.
 }
+\keyword{internal}

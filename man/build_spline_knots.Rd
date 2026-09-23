@@ -50,3 +50,4 @@ A list with `knots` (full padded knot vector) and `basis(t)`, a
 Build the padded B-spline knot vector and basis-evaluation function for
 the spline baseline hazard.
 }
+\keyword{internal}

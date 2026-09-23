@@ -36,3 +36,4 @@ matrix-multiply operator and was silently truncated at it. Elsewhere in
 the package the escaped form is used inside \code{}; here there is no
 need to write one at all.)
 }
+\keyword{internal}

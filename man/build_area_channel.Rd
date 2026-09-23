@@ -51,3 +51,4 @@ node (requiring a genuine NESTED inner quadrature from 0 to that node,
 since the upper integration limit differs node-by-node - this is the
 real complexity increase relative to \code{delta}).
 }
+\keyword{internal}

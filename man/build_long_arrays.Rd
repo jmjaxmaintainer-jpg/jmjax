@@ -24,3 +24,4 @@ A list with X_long (padded [N_sub, max_obs, p] design array),
 Build padded longitudinal arrays (subject x max_obs), analogous to the
 subj_time / subj_y / subj_n arrays built by hand in the prototyping scripts.
 }
+\keyword{internal}

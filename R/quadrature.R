@@ -15,6 +15,7 @@
 #' packages use internally for some hazard shapes.
 #'
 #' @param order Number of quadrature nodes.
+#' @keywords internal
 gauss_kronrod_nodes <- function(order = 10) {
   if (order == 10) {
     return(list(
@@ -32,6 +33,7 @@ gauss_kronrod_nodes <- function(order = 10) {
 #' matrix) - standard, numerically stable, works for arbitrary n.
 #'
 #' @param n Number of quadrature points; must be at least 2.
+#' @keywords internal
 gauss_legendre_01 <- function(n) {
   if (n < 2) stop("n must be >= 2")
   k <- 1:(n - 1)

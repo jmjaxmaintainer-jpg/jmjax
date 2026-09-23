@@ -49,3 +49,4 @@ since there is only one outcome to associate. This keeps the syntax
 forward-compatible with a future multi-outcome
 \code{list(y = ~ value(y) + delta(y))} form without requiring it now.
 }
+\keyword{internal}

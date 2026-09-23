@@ -42,6 +42,7 @@
 #'   (via splines::splineDesign, outer.ok = TRUE so it can be safely
 #'   evaluated on a fine grid for plotting even slightly beyond the range
 #'   used to place the knots).
+#' @keywords internal
 build_spline_knots <- function(T_surv, n_interior = 5L, ord = 4L,
                                 placement = c("quantile", "equal"),
                                 t_quad = NULL) {

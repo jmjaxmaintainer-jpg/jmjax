@@ -30,3 +30,4 @@ Build the survival-side arrays: event times, event indicator, and the
 Gauss-Kronrod time-quadrature grid needed for the cumulative hazard
 integral (used by both the Weibull and spline baseline backends).
 }
+\keyword{internal}

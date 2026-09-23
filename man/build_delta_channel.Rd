@@ -38,3 +38,4 @@ subtraction) - this function therefore only handles the fixed-effects
 part; the caller should not add a random-effect term for this channel
 under that scope.
 }
+\keyword{internal}

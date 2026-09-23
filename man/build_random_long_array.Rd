@@ -44,3 +44,4 @@ the first columns are not simply "intercept" and "slope". Evaluating
 \code{random_formula} independently, the same way \code{long_formula}
 is evaluated for \code{X}, removes that assumption entirely.
 }
+\keyword{internal}
