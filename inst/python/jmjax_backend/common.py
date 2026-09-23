@@ -545,7 +545,8 @@ def fit_theta(neg_log_lik, data, init_theta, maxiter=1000, ftol=1e-7,
         #
         # An EM phase would allow JM's own rule as well - "the optimizer
         # succeeded OR it improved on what EM reached" - but jmjax does not
-        # run one by default. See inst/research/em/ for that work, which is
+        # run one by default. See dev/research/em/ in the source repository for
+        # that work (not shipped in the package), which is
         # kept as reference rather than wired in: with BFGS as the default
         # there is no known case where jmjax's MLE fails and JM's succeeds.
         "converged": bool(
