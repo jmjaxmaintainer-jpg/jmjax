@@ -39,12 +39,21 @@
 # study_calibration.R. Intervals are the 95% credible intervals summary()
 # reports (CrI.lower/CrI.upper, straight posterior quantiles).
 #
-#   caffeinate -i Rscript dev/study_alpha_bias.R                 # all cells
+# PILOT FIRST (the default): ref, fixed and weibull at R = 20, about 25
+# minutes. The three cells share their simulation seeds, so the PAIRED
+# differences fixed - ref and weibull - ref cancel most replicate-to-
+# replicate noise and are resolved far better than each cell's own bias
+# (paired table at the end). Explanation 1 needs the larger n cells, which
+# are unpaired and only worth running if the pilot rules out 2 and 3.
+#
+#   caffeinate -i Rscript dev/study_alpha_bias.R                 # pilot
+#   CAB_REPS=100 CAB_CELLS=ref,fixed,weibull,n600,n1200 caffeinate -i Rscript dev/study_alpha_bias.R
 #   CAB_CELLS=ref,fixed,weibull caffeinate -i Rscript dev/study_alpha_bias.R
 #   Rscript dev/study_alpha_bias.R --summary                     # table only
 #
-# Cost (rough): n = 300 fits ~20 s, n = 600 ~40 s, n = 1200 ~80 s, so about
-# 0.6 + 0.6 + 0.6 + 1.1 + 2.2 = 5 hours for all five cells at R = 100.
+# Cost (rough): n = 300 fits ~20 s, n = 600 ~40 s, n = 1200 ~80 s. The
+# pilot (3 cells x 20) is about 25 minutes; all five cells at R = 100 about
+# 5 hours.
 # Resumable: rows are appended as fits finish and finished (cell, rep) pairs
 # are skipped on restart.
 # ==============================================================================
@@ -63,12 +72,12 @@ source(.gen)
   if (nzchar(v)) strsplit(v, "[,[:space:]]+")[[1]] else d }
 
 SUMMARY_ONLY <- any(commandArgs(trailingOnly = TRUE) == "--summary")
-REPS    <- .envi("CAB_REPS", 100L)
+REPS    <- .envi("CAB_REPS", 20L)
 WARMUP  <- .envi("CAB_WARMUP", 500L)
 SAMPLES <- .envi("CAB_SAMPLES", 1000L)
 CHAINS  <- .envi("CAB_CHAINS", 2L)
 K_EXTRA <- 2L
-CELLS   <- .envc("CAB_CELLS", c("ref", "fixed", "weibull", "n600", "n1200"))
+CELLS   <- .envc("CAB_CELLS", c("ref", "fixed", "weibull"))
 OUT     <- Sys.getenv("CAB_OUT", "dev/alpha_bias_results.csv")
 
 CELL_SPEC <- list(
@@ -174,6 +183,26 @@ for (p in c("alpha", "gamma_0", "beta_1", "sigma_b0", "sigma_b1")) {
                 v["bias"], v["z"], v["rel"], v["bias_over_sd"], v["cov95"], v["sd_ratio"]))
   }
 }
+# Paired differences against ref (same simulation seed per rep).
+for (cell in setdiff(intersect(CELLS, c("fixed", "weibull")), character(0))) {
+  if (!"ref" %in% R$cell) break
+  cat(sprintf("\nPaired: %s - ref (same datasets up to the cell's change)\n", cell))
+  cat(sprintf("%-9s %4s %9s %8s %7s\n", "param", "R", "diff", "SE", "z"))
+  for (p in c("alpha", "gamma_0", "beta_1", "sigma_b1")) {
+    a <- R[R$cell == cell & R$param == p, c("rep", "post_mean", "truth")]
+    b <- R[R$cell == "ref" & R$param == p, c("rep", "post_mean", "truth")]
+    m <- merge(a, b, by = "rep")
+    if (nrow(m) < 3) next
+    d <- (m$post_mean.x - m$truth.x) - (m$post_mean.y - m$truth.y)
+    se <- stats::sd(d) / sqrt(length(d))
+    cat(sprintf("%-9s %4d %9.4f %8.4f %7.2f\n", p, length(d), mean(d), se, mean(d) / se))
+  }
+}
+cat("\nReading the pilot: if weibull - ref on alpha is about -0.014 (the whole",
+    "bias) the spline baseline is the cause; the same for fixed - ref points to",
+    "the simulator. Near 0 for both leaves finite-sample bias, which the n600",
+    "and n1200 cells then test.\n")
+
 A <- R[R$param == "alpha" & R$cell %in% c("ref", "n600", "n1200"), ]
 if (length(unique(A$n_sub)) >= 2) {
   ag <- aggregate(cbind(err = post_mean - truth) ~ n_sub, A, mean)
