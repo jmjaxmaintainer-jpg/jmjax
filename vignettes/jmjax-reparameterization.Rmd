@@ -1071,7 +1071,8 @@ coverage is about 0.011), and the ratio of mean posterior SD to the SD of
 posterior means to within 0.015 - agreement within Monte Carlo error. The two effects visible in *both* columns -
 slightly wide intervals for `beta_0`, and an upward bias in `alpha` of
 about 3 Monte Carlo SEs - belong to the model and this design, not to the
-rotation; Section 9 records them.
+rotation. Section 9 traces the second to ordinary finite-sample bias that
+shrinks with $n$.
 
 The retired sweep, with its correction and the same rotation, reached
 similar efficiency (the no-sweep construction averaged about 0.92x of it
@@ -1435,25 +1436,30 @@ quantity.
 
 ## 9. Limitations and next steps
 
-- **An unrelated finding the same study surfaced, recorded here rather than
-  dropped.** The negative control `alpha` is arm-invariant to a remarkable
-  degree, which is what it was included to check. But in *every* arm,
-  including the unmodified fit, its posterior mean sits about $2.8\%$ above
-  the truth ($0.5142$ against $0.500$) - $32\%$ of one posterior standard
-  deviation, or $2.97$ Monte Carlo standard errors at $R = 100$ - with
-  $\mathrm{sd\_ratio}$ $0.92$ and 95% coverage $0.93$. `sigma_b0` shows a
-  milder version of the same pattern ($\mathrm{sd\_ratio}$ $0.91$, coverage
-  $0.94$, bias $0.3\%$). Because the effect is identical across arms it
-  says nothing about the rotation; it is a property of the joint model, this
-  simulation design, or this sample size, and it appeared only because
-  this is the first time these fits were replicated 100 times and examined
-  for *coverage* rather than point agreement. It is reported because a
-  coverage table that includes a negative control should show what the
-  negative control actually did: omitting `alpha` once it showed something
-  would undermine the value of having included it. Diagnosing it - finite-
-  sample bias in the association parameter is a plausible and
-  well-precedented candidate - is separate work, and it should be
-  understood before this table is put in front of a referee.
+- **`alpha`'s small upward bias is finite-sample bias of the ordinary kind.**
+  The calibration study's negative control put `alpha` about $2.8\%$ above
+  the truth in every arm, including the unrotated fit. That is $0.0142$,
+  or $0.32$ posterior SDs, at $n = 300$, with 95% coverage $0.93$ and
+  $\mathrm{sd\_ratio}$ $0.92$. `dev/study_alpha_bias.R` traced it.
+  - **Not the simulator.** Holding the baseline-hazard constant fixed
+    instead of recalibrating it per dataset changed the bias by $-0.0016$
+    (paired SE $0.0026$, $R = 20$).
+  - **Not the spline baseline.** Fitting the correctly specified Weibull
+    baseline changed it by $-0.0011$ (paired SE $0.0025$).
+  - **It shrinks with $n$.** At $n = 1200$ ($R = 50$) the bias is $0.0055$:
+    $1.1\%$ of the truth, $0.25$ posterior SDs, and $1.7$ Monte Carlo SEs
+    from zero. Coverage is $0.92$ and $\mathrm{sd\_ratio}$ $0.955$. An
+    $O(1/n)$ bias predicts $0.0036$ there, and a bias that did not shrink
+    predicts $0.0142$. The measurement sits within one SE of the first and
+    $2.7$ of its SEs below the second ($1.5$ once the uncertainty of the
+    $n = 300$ value is included). These replicate counts do not pin down
+    the rate.
+
+  This is the familiar small-sample behaviour of hazard-ratio estimators,
+  biased away from zero and vanishing with $n$. It is identical across
+  every sampler arm, so it says nothing about the rotation. `sigma_b0`'s
+  milder version at $n = 300$ ($\mathrm{sd\_ratio}$ $0.91$, coverage $0.94$,
+  bias $0.3\%$) is of the same order.
 - **Scope.** The rotation is implemented under the default NUTS sampler
   for $q = 1$, and for $q \ge 2$ with correlated random effects. Elsewhere the default
   leaves it off, and an explicit `rotate_absorbable = TRUE` raises an
