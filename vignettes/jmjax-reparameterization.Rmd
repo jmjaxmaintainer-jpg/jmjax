@@ -1,8 +1,8 @@
 ---
-title: "Location Degeneracy in jmjax's Joint Model: Diagnosis, an Exact Rotation, and the Comparison with JMbayes2"
+title: "Mixing in jmjax's Joint Model: an Exact Rotation for the Location Degeneracy, and Why NUTS Outmixes Block Samplers on the Association Parameter"
 output: rmarkdown::html_vignette
 vignette: >
-  %\VignetteIndexEntry{jmjax: Location Degeneracy, an Exact Rotation, and the JMbayes2 Comparison}
+  %\VignetteIndexEntry{jmjax: Location Degeneracy, an Exact Rotation, and the Association Parameter}
   %\VignetteEngine{knitr::rmarkdown}
   %\VignetteEncoding{UTF-8}
 ---
@@ -17,8 +17,14 @@ knitr::opts_chunk$set(
 ## Abstract
 
 `jmjax` fits joint longitudinal-survival models with NUTS/HMC. This
-document concerns one geometric obstacle those fits share with every
-hierarchical regression: a *location degeneracy*. The likelihood pins the
+document concerns two features of the joint model's posterior geometry
+that decide how fast a sampler mixes. The first is an obstacle every
+hierarchical regression shares, which a reparameterization removes. The
+second is intrinsic to joint models: it decides how fast a sampler can
+mix the association parameter, and it favours NUTS over blocked samplers
+by construction.
+
+The first is a *location degeneracy*. The likelihood pins the
 sum of a subject-constant fixed effect and the matching linear combination
 of the random effects, but not the split between them. Section 3 names the
 mechanism and traces it to source, including a finding that is easy to
@@ -46,22 +52,40 @@ the same coefficients gain 12x-34x (the intercept and subject-constant
 covariates) and 2x-5x (the time slope). Section 8 compares with `JMbayes2`. With the
 rotation, `jmjax` matches it on the coefficients `JMbayes2` hierarchically
 centres - where the default fit trailed by a factor of 18-30 - and leads
-on the rest. The most important of those is the association parameter
-`alpha`, which measures how the longitudinal marker relates to the hazard.
-Studying that association is the reason to fit a joint model at all, so
-`alpha` is the parameter a joint-model analysis is chiefly run to estimate
-and draw inferences about. `jmjax`'s default fit already mixes it 3x-8x
-faster than `JMbayes2`, and 6.5x-7.3x faster with the rotation on real data.
-Proposition 8 gives the reason. A sampler that updates `alpha` given the
-other parameters has a lag-1 autocorrelation equal to the fraction of
-`alpha`'s posterior variance those parameters explain, and the cost grows
-like $1/(1-R^2)$. HMC moves `alpha` jointly with the rest and pays only in
-integration steps, which grow like $1/\sqrt{1-R^2}$ at worst. This is a
-generic NUTS-versus-block-Gibbs effect and needs no reparameterization.
+on the rest.
+
+The second finding concerns the association parameter `alpha`, which
+measures how the longitudinal marker relates to the hazard. Studying that
+association is the reason to fit a joint model at all, so `alpha` is the
+parameter a joint-model analysis is chiefly run to estimate and draw
+inferences about. `jmjax` mixes it 3x-8x faster than `JMbayes2` with no
+option enabled, and 6.5x-7.3x faster on real data with the rotation.
+
+- **Why (Proposition 8).** Consider a sampler that updates `alpha`
+  conditional on the other parameters. Its lag-1 autocorrelation for
+  `alpha` is the fraction of `alpha`'s posterior variance those
+  parameters explain, $R^2$, so its cost grows like $1/(1-R^2)$. HMC moves
+  `alpha` together with the rest. It pays only in integration steps, which
+  grow at most like $1/\sqrt{1-R^2}$, and often not at all.
+- **How large $R^2$ is.** On `aids` and `pbc2`, 0.87 and 0.85 of
+  `alpha`'s posterior variance is shared with the other parameters.
+  Almost all of it is shared with the survival block: `alpha` trades off
+  against the level of the log hazard. The random effects account for
+  much less. So even an ideal blocked sampler, drawing each full
+  conditional exactly, would keep only one effective draw in 12-15.
+- **How much of the gap it explains.** On a log scale, that structural
+  limit accounts for about three quarters of `jmjax`'s ESS-per-draw
+  advantage over `JMbayes2` on `alpha` (74%-80%). The rest is `JMbayes2`'s
+  implementation (Section 8.1).
+
+This advantage is a property of the joint model and of how the sampler
+updates it, not of any `jmjax` option. It is generic to gradient
+samplers that move all parameters together.
 
 A stress grid of the designs the theory predicts are hardest for the
 rotation keeps the gains at 5x-30x (Section 6.4). On the strength of these
-checks, the rotation is `jmjax`'s default wherever it applies. Throughout
+checks, the rotation is `jmjax`'s default wherever it applies,
+including random-intercept-only models. Throughout
 this document, "the default fit" means the unrotated parameterization it
 replaced, now requested with `rotate_absorbable = FALSE`.
 
@@ -1327,6 +1351,18 @@ explains most of `alpha`'s gap. Any sampler that updates `alpha`
 conditional on the survival parameters inherits it. A gradient sampler
 that moves them together does not.
 
+The same measurements show what a blocked sampler would need to escape
+this. Suppose `alpha`, `gamma` and the baseline-hazard coefficients were
+updated together as one block, and the random effects as the other.
+Proposition 8 then applies with $R$ the random effects alone. Their
+$R^2$ is 0.30 on `aids` and 0.20 on `pbc2`, which gives an ideal ESS per
+draw of about 0.54 and 0.67 instead of 0.07-0.08. But that block has
+10-20 strongly correlated dimensions, and exact draws from it are not
+available. An adaptive random-walk proposal on a block that size and
+that correlated is itself slow. NUTS gets the joint move without any
+block design or proposal tuning. That is the sense in which the
+advantage is intrinsic to it.
+
 Proposition 8 also explains one result in Section 7. On `aids`, the
 rotation raised `alpha`'s ESS/sec 2x without touching `alpha`'s
 geometry: it removed the ridge that set the step size (92-111 leapfrog
@@ -1497,7 +1533,10 @@ estimate, where the lead is 6.5x-7.3x. That advantage is generic to NUTS
 and needs none of this. Proposition 8 accounts for it: a sampler that
 updates `alpha` given the other parameters pays for their correlation
 with `alpha` in autocorrelation, while HMC pays for it, if at all, in
-integration steps.
+integration steps. On real data, 85%-87% of `alpha`'s posterior
+variance is shared with the other parameters, mostly the survival block.
+That caps an ideal blocked sampler at one effective draw in 12-15, and it
+explains about three quarters of the measured gap.
 
 ## References
 
