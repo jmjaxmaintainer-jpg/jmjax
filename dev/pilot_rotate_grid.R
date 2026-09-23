@@ -55,6 +55,16 @@
 # Rough cost at n = 300: ~15-25 s per fit; core grid, 9 arms, 2 seeds is
 # 180 fits, roughly 1-1.5 h. Dense-visit and n = 600 cells cost more.
 # A quick first look: ROT_ARMS=A,D,D_rotall,E,E_rotall,A_rotdense ROT_SEEDS=1
+#
+# ROT_GRID=q1: RANDOM INTERCEPT ONLY (q = 1). Data simulated with no random
+# slope (sigma_b1 = 0) and fitted with random_effects = "intercept". Arms A
+# (unrotated) and A_rotdense (the default) only - the sweep arms need q >= 2.
+# 7 cells: visits {base, dense, vdense} x n {100, 300} at sigma_e = 0.3,
+# plus base / sigma_e = 0.8 / n = 300. Also records the subject-constant
+# covariate `age`, which the rotation should help like the intercept; the
+# time slope has no absorbable direction at q = 1 and should stay near 1x.
+#   ROT_GRID=q1 ROT_SEEDS=3 ROT_OUT=dev/pilot_rotate_q1.csv \
+#     caffeinate -i Rscript dev/pilot_rotate_grid.R      # 42 fits, ~20-30 min
 # ==============================================================================
 
 suppressPackageStartupMessages(library(jmjax))
@@ -82,13 +92,24 @@ CHAINS  <- .envi("ROT_CHAINS", 2L)
 K_EXTRA <- .envi("ROT_K_EXTRA", 2L)
 stopifnot(K_EXTRA <= 3L)   # COVS below names only age/sex/trt
 GRID    <- Sys.getenv("ROT_GRID", "core")
+Q1      <- identical(GRID, "q1")
 OUT     <- Sys.getenv("ROT_OUT", "dev/pilot_rotate_grid.csv")
-ARMS    <- .envc("ROT_ARMS", c("A", "D", "D_rot", "D_rotall", "E", "E_rot0",
-                                "E_rotall", "E_rotall_dense", "A_rotdense"))
+ARMS    <- .envc("ROT_ARMS", if (Q1) c("A", "A_rotdense") else
+                   c("A", "D", "D_rot", "D_rotall", "E", "E_rot0",
+                     "E_rotall", "E_rotall_dense", "A_rotdense"))
+if (Q1 && !all(ARMS %in% c("A", "A_rotdense")))
+  stop("ROT_GRID=q1 supports arms A and A_rotdense only (the sweep needs q >= 2)",
+       call. = FALSE)
 
 VISIT_GAP <- c(sparse = 2.0, base = 1.0, dense = 0.5, vdense = 0.25)
 
-if (identical(GRID, "stress")) {
+if (Q1) {
+  cells <- rbind(
+    expand.grid(visits = c("base", "dense", "vdense"), sigma_e = 0.3, rho = 0,
+                n = c(100L, 300L), stringsAsFactors = FALSE),
+    data.frame(visits = "base", sigma_e = 0.8, rho = 0, n = 300L,
+               stringsAsFactors = FALSE))
+} else if (identical(GRID, "stress")) {
   # The two regimes vignette Section 5.2 says are hardest for the no-sweep
   # rotation: few subjects each carrying a lot of information (the fixed
   # dense block cannot follow the ridge's sigma_b-dependence, residual
@@ -163,14 +184,16 @@ EXPECTED_COLS <- c("cell", "visits", "sigma_e", "rho", "n", "seed", "arm",
 fit_one <- function(cl, arm, seed) {
   sim <- sim_joint(n = cl$n, seed = 9000L + seed, k_extra = K_EXTRA,
                    rho = cl$rho, sigma_e = cl$sigma_e,
+                   sigma_b1 = if (Q1) 0 else 0.3,
                    visit_gap = VISIT_GAP[[cl$visits]])
   f <- jm_fit(
     long_formula = LFORM,
     surv_formula = survival::Surv(time, event) ~ trt,
     data_long = sim$data_long, data_surv = sim$data_surv,
     id_var = "id", time_var = "time",
-    method = "spline-PH-mcmc", random_effects = "intercept_slope",
-    random_formula = ~ time, control = arm_control(arm, seed))
+    method = "spline-PH-mcmc",
+    random_effects = if (Q1) "intercept" else "intercept_slope",
+    random_formula = if (Q1) ~ 1 else ~ time, control = arm_control(arm, seed))
 
   cv   <- f$convergence
   secs <- as.numeric(cv$sampling_time_sec %||% NA_real_)
@@ -187,12 +210,13 @@ fit_one <- function(cl, arm, seed) {
 
   Xd <- stats::model.matrix(LFORM, sim$data_long)
   i0 <- match("(Intercept)", colnames(Xd)); it <- match("time", colnames(Xd))
+  ia <- match("age", colnames(Xd))
   ps <- f$posterior_samples
   # A and A_rotdense (no sweep) report beta itself; every other arm
   # reports beta_corrected.
   M <- if (startsWith(arm, "A")) as_draws(ps[["beta"]]) else as_draws(ps[["beta_corrected"]])
   if (is.null(M)) stop("arm ", arm, " returned no reportable beta", call. = FALSE)
-  d <- site_diag(M[, c(i0, it), drop = FALSE], CHAINS)
+  d <- site_diag(M[, c(i0, it, if (Q1) ia), drop = FALSE], CHAINS)
   AL <- as_draws(ps[["alpha"]])
   da <- site_diag(AL, CHAINS)
 
@@ -203,9 +227,11 @@ fit_one <- function(cl, arm, seed) {
     ess_per_sec = ess / secs, sec = secs, mean_num_steps = mns,
     n_divergences = ndiv, max_rhat_all = mrh, mean_visits = mv,
     stringsAsFactors = FALSE)
-  rbind(mk("intercept", M[, i0], d$ess[1], d$rhat[1]),
-        mk("time",      M[, it], d$ess[2], d$rhat[2]),
-        mk("alpha",     AL[, 1], da$ess[1], da$rhat[1]))
+  out <- rbind(mk("intercept", M[, i0], d$ess[1], d$rhat[1]),
+               mk("time",      M[, it], d$ess[2], d$rhat[2]),
+               mk("alpha",     AL[, 1], da$ess[1], da$rhat[1]))
+  if (Q1) out <- rbind(out, mk("age", M[, ia], d$ess[3], d$rhat[3]))
+  out
 }
 
 # ---- resume -----------------------------------------------------------------
@@ -286,7 +312,10 @@ show("reported time coefficient (beta_corrected; beta for A and A_rotdense), ESS
           "E_rotall/E" = c("E_rotall", "E"), "E_rall_d/E" = c("E_rotall_dense", "E"),
           "A_rotd/A" = c("A_rotdense", "A"), "A_rotd/E_ra" = c("A_rotdense", "E_rotall")))
 show("alpha (negative control: should stay near 1x)", "alpha",
-     list("D_rotall/D" = c("D_rotall", "D"), "E_rotall/E" = c("E_rotall", "E")))
+     list("D_rotall/D" = c("D_rotall", "D"), "E_rotall/E" = c("E_rotall", "E"),
+          "A_rotd/A" = c("A_rotdense", "A")))
+if (Q1) show("q = 1: subject-constant covariate age (should gain like the intercept)", "age",
+             list("A_rotd/A" = c("A_rotdense", "A")))
 
 cat("\nCost: mean seconds and leapfrog steps per iteration (not predicted by the theory)\n")
 cost <- agg[agg$quantity == "intercept", c("cell", "arm", "sec", "mean_num_steps")]

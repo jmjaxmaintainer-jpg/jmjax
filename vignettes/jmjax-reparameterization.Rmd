@@ -1436,30 +1436,17 @@ quantity.
 
 ## 9. Limitations and next steps
 
-- **`alpha`'s small upward bias is finite-sample bias of the ordinary kind.**
-  The calibration study's negative control put `alpha` about $2.8\%$ above
-  the truth in every arm, including the unrotated fit. That is $0.0142$,
-  or $0.32$ posterior SDs, at $n = 300$, with 95% coverage $0.93$ and
-  $\mathrm{sd\_ratio}$ $0.92$. `dev/study_alpha_bias.R` traced it.
-  - **Not the simulator.** Holding the baseline-hazard constant fixed
-    instead of recalibrating it per dataset changed the bias by $-0.0016$
-    (paired SE $0.0026$, $R = 20$).
-  - **Not the spline baseline.** Fitting the correctly specified Weibull
-    baseline changed it by $-0.0011$ (paired SE $0.0025$).
-  - **It shrinks with $n$.** At $n = 1200$ ($R = 50$) the bias is $0.0055$:
-    $1.1\%$ of the truth, $0.25$ posterior SDs, and $1.7$ Monte Carlo SEs
-    from zero. Coverage is $0.92$ and $\mathrm{sd\_ratio}$ $0.955$. An
-    $O(1/n)$ bias predicts $0.0036$ there, and a bias that did not shrink
-    predicts $0.0142$. The measurement sits within one SE of the first and
-    $2.7$ of its SEs below the second ($1.5$ once the uncertainty of the
-    $n = 300$ value is included). These replicate counts do not pin down
-    the rate.
-
-  This is the familiar small-sample behaviour of hazard-ratio estimators,
-  biased away from zero and vanishing with $n$. It is identical across
-  every sampler arm, so it says nothing about the rotation. `sigma_b0`'s
-  milder version at $n = 300$ ($\mathrm{sd\_ratio}$ $0.91$, coverage $0.94$,
-  bias $0.3\%$) is of the same order.
+- **`alpha`'s small upward bias is ordinary finite-sample bias.** In the
+  calibration study `alpha` sat $2.8\%$ above the truth at $n = 300$ in
+  every arm, the unrotated fit included. Small-sample bias in the
+  association parameter is a known feature of joint models, and $n = 300$
+  is small. `dev/study_alpha_bias.R` confirms it:
+  - neither the simulator's baseline-hazard calibration nor the spline
+    baseline explains it (paired changes $-0.0016$ and $-0.0011$, SE about
+    $0.0025$);
+  - at $n = 1200$ it falls to $1.1\%$, which is not significant ($1.7$
+    Monte Carlo SEs), with coverage $0.92$ and $\mathrm{sd\_ratio}$
+    $0.955$.
 - **Scope.** The rotation is implemented under the default NUTS sampler
   for $q = 1$, and for $q \ge 2$ with correlated random effects. Elsewhere the default
   leaves it off, and an explicit `rotate_absorbable = TRUE` raises an
