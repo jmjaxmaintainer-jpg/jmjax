@@ -27,13 +27,20 @@ random effect:
   **association parameter**) measures how strongly the longitudinal
   trajectory predicts the hazard.
 
-jmjax offers two choices for the baseline hazard `h0(t)` and two
-estimation approaches, giving four fitting methods:
+jmjax offers two estimation approaches, each with its own function, and
+two choices for the baseline hazard `h0(t)`:
 
 | | Weibull baseline | Spline baseline |
 |---|---|---|
-| **Adaptive-GH MLE** | `"weibull-PH-aGH"` | `"spline-PH-aGH"` |
-| **Bayesian MCMC (NUTS)** | `"weibull-PH-mcmc"` | `"spline-PH-mcmc"` |
+| **Maximum likelihood** (adaptive Gauss-Hermite) | `jm_mle(baseline = "weibull")` | `jm_mle(baseline = "spline")` |
+| **Bayesian** (NUTS) | `jm_bayes(baseline = "weibull")` | `jm_bayes(baseline = "spline")` |
+
+Both functions take the same model arguments. Each documents only the
+options that apply to it (optimizer and quadrature settings for
+`jm_mle()`; chains, priors and sampler settings for `jm_bayes()`).
+`jm_fit()`, which both call, remains available with the method names
+`"weibull-PH-aGH"`, `"spline-PH-aGH"`, `"weibull-PH-mcmc"` and
+`"spline-PH-mcmc"`.
 
 ## One-time setup
 
@@ -78,19 +85,19 @@ head(data_surv)
 
 ## Fitting: the fast first look
 
-`"weibull-PH-aGH"` is the fastest method, has no priors to configure, and
+Maximum likelihood with a Weibull baseline is the fastest option, has no priors to configure, and
 is a good first look at your data or a source of warm-start values for a
 more flexible fit later.
 
 ```{r, eval = FALSE}
-fit_w <- jm_fit(
+fit_w <- jm_mle(
   long_formula = y ~ time,
   surv_formula = Surv(time, event) ~ 1,
   data_long = data_long,
   data_surv = data_surv,
   id_var = "id",
   time_var = "time",
-  method = "weibull-PH-aGH"
+  baseline = "weibull"
 )
 summary(fit_w)
 #>                                Estimate Std.Err z.value p.value
@@ -113,20 +120,19 @@ package to within a fraction of a standard error - see
 ## Fitting: flexible baseline hazard, correlated random slope
 
 For a data-driven baseline hazard shape and/or a correlated random
-intercept + slope, use one of the two MCMC methods. `"spline-PH-mcmc"`
-gives the most flexibility:
+intercept + slope, use `jm_bayes()`. Its default spline baseline gives
+the most flexibility:
 
 ```{r, eval = FALSE}
-fit_s <- jm_fit(
+fit_s <- jm_bayes(
   long_formula = y ~ time,
   surv_formula = Surv(time, event) ~ 1,
   data_long = data_long,
   data_surv = data_surv,
   id_var = "id",
   time_var = "time",
-  method = "spline-PH-mcmc",
   random_effects = "intercept_slope",
-  control = list(num_warmup = 500, num_samples = 1000, num_chains = 2)
+  chains = 2, warmup = 500, samples = 1000
 )
 print(fit_s)
 #> Method: spline-PH-mcmc
@@ -137,9 +143,9 @@ print(fit_s)
 **Always check the printed diagnostics line before trusting point
 estimates.** `max R-hat` should be close to 1 (conventionally < 1.05) and
 `min ESS` should be at least a few hundred for a 1000-sample fit. If
-either looks off, increase `num_warmup`/`num_samples`, or - especially
+either looks off, increase `warmup`/`samples`, or - especially
 for `random_effects = "intercept_slope"` at small-to-moderate sample
-sizes - run multiple chains (`num_chains = 2` or more) and re-check,
+sizes - run more chains (`chains = 4`) and re-check,
 since a single chain's own diagnostics cannot detect if it has settled
 into the wrong region of a multimodal posterior (see
 `vignette("jmjax-validation")` for a worked example of exactly this
@@ -154,19 +160,16 @@ recommended** on top of the basic call above - see `?jm_fit`'s
 jmjax_setup(num_devices = 4)  # once per session, enables genuinely
                                # parallel (not sequential) chains
 
-fit_s <- jm_fit(
+fit_s <- jm_bayes(
   long_formula = y ~ time,
   surv_formula = Surv(time, event) ~ 1,
   data_long = data_long,
   data_surv = data_surv,
   id_var = "id",
   time_var = "time",
-  method = "spline-PH-mcmc",
   random_effects = "intercept_slope",
-  control = list(
-    num_warmup = 500, num_samples = 1000, num_chains = 4,
-    spline_prior = "penalized"
-  )
+  chains = 4, warmup = 500, samples = 1000,
+  control = list(spline_prior = "penalized")
 )
 ```
 
@@ -181,7 +184,7 @@ before the results were seen) changed that picture:
 | Option | Then | Now |
 |---|---|---|
 | `dense_mass_spline` | recommended | **default `TRUE`** - passed replication at ~2.1x faster, ~2.3x ESS/second, consistent on every run |
-| `rw2_implementation` | recommended `"vectorized"` | **stays `"scan"`** - the original ~1.4x came from a single run and reversed under replication (ESS/second ratio 0.92x at n=1000) |
+| `rw2_implementation` | recommended `"vectorized"` | **default `"vectorized"`** - not for speed (the original ~1.4x came from a single run and did not replicate: 0.92x ESS/second at n=1000), but because `"scan"` cannot run with the pinned jax/numpyro versions (jax-ml/jax#22045) |
 | `random_effects_method` | recommended `"wishart_gibbs"` | **stays `"nuts"`** - mixed direction across seeds, and worse truth recovery, consistent with a documented inverse-Wishart small-variance bias |
 | `progress_bar` | recommended `FALSE` | **default `FALSE`**, for the volume of console output rather than speed - the reported ~30x overhead did not replicate (1.00x-1.16x), so `progress_bar = TRUE` is cheap when you want it; `verbose = TRUE` gives a one-line notice instead |
 | covariate standardization | manual, user-side | **automatic** - see below |
@@ -231,8 +234,8 @@ By default, `"spline-PH-mcmc"` uses:
 
 ## Extracting per-subject random effects
 
-Only the two MCMC methods estimate individual subjects' random effects
-directly (the MLE methods marginalize them via quadrature):
+Only Bayesian fits (`jm_bayes()`) estimate individual subjects' random
+effects directly; `jm_mle()` integrates them out with quadrature:
 
 ```{r, eval = FALSE}
 head(ranef(fit_s))
@@ -245,6 +248,43 @@ head(ranef(fit_s))
 Calling `ranef()` on an MLE fit returns `NULL` with a warning, since
 those methods never estimate individual `b_i` directly.
 
+## Coefficients, intervals and predictions
+
+A fit works with R's usual model functions. The standard errors from
+`vcov()` are the ones `summary()` reports, and for MCMC fits `vcov()` and
+`confint()` are computed from the posterior draws:
+
+```{r, eval = FALSE}
+coef(fit_s)
+confint(fit_s, "alpha")              # a 95% credible interval here
+sqrt(diag(vcov(fit_s)))              # matches summary(fit_s)$Std.Err
+
+logLik(fit_w); AIC(fit_w); BIC(fit_w)  # maximum-likelihood fits only
+nobs(fit_w)                            # the number of subjects
+```
+
+For MCMC fits, `predict()` gives a subject's marker trajectory or their
+probability of surviving to later times, given that they survived to
+`t_from` (by default, the end of their follow-up), with posterior
+intervals:
+
+```{r, eval = FALSE}
+nd <- data_long[data_long$id == 2, ]     # a subject who was censored
+predict(fit_s, newdata = nd, times = seq(0, 5, by = 0.5))
+predict(fit_s, newdata = nd, process = "event")
+```
+
+Each call returns one row per time, with the posterior mean in
+`estimate` and the interval in `lower` and `upper`. This version predicts
+for subjects in the fitted data; predictions for new subjects, whose
+random effects would have to be estimated from their own history, are
+planned.
+
+By default a fit prints only a one-off notice while JAX compiles a large
+model. `control = list(verbose = TRUE)` adds a line announcing each MCMC
+run and the routine notes about warm starts and covariate
+standardization; `progress_bar = TRUE` shows NumPyro's progress bar.
+
 ## Warm-starting a more expensive fit
 
 Since `beta`, `sigma_e`, and `alpha` tend to land in similar places
@@ -252,14 +292,14 @@ regardless of baseline hazard flexibility, a fast Weibull fit's estimates
 make good starting values for a more expensive spline fit:
 
 ```{r, eval = FALSE}
-fit_spline_mle <- jm_fit(
+fit_spline_mle <- jm_mle(
   long_formula = y ~ time,
   surv_formula = Surv(time, event) ~ 1,
   data_long = data_long,
   data_surv = data_surv,
   id_var = "id",
   time_var = "time",
-  method = "spline-PH-aGH",
+  baseline = "spline",
   init_theta = c(
     fit_w$estimates[["beta_0"]], fit_w$estimates[["beta_1"]],
     log(fit_w$estimates[["sigma_e"]]), log(fit_w$estimates[["sigma_b"]]),
@@ -271,13 +311,13 @@ fit_spline_mle <- jm_fit(
 
 ## Choosing a method
 
-| Situation | Recommended method |
+| Situation | Recommended call |
 |---|---|
-| Quick first look, or need warm-start values | `"weibull-PH-aGH"` |
-| Single random effect, flexible baseline hazard, frequentist | `"spline-PH-aGH"` |
-| Correlated random intercept + slope, simple baseline hazard | `"weibull-PH-mcmc"` |
-| Correlated random intercept + slope, flexible baseline hazard | `"spline-PH-mcmc"` |
-| Comparing against `JMbayes2` | `"spline-PH-mcmc"` with `spline_prior = "penalized"` (default `empirical_bayes_prior = TRUE` already matches) |
+| Quick first look, or need warm-start values | `jm_mle(baseline = "weibull")` |
+| Flexible baseline hazard, frequentist | `jm_mle(baseline = "spline")` |
+| Correlated random intercept + slope, simple baseline hazard | `jm_bayes(baseline = "weibull")` |
+| Correlated random intercept + slope, flexible baseline hazard; subject-level predictions | `jm_bayes()` |
+| Comparing against `JMbayes2` | `jm_bayes(control = list(spline_prior = "penalized"))` (the default `empirical_bayes_prior = TRUE` already matches) |
 
 ## Further reading
 

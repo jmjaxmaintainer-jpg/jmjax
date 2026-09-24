@@ -1,7 +1,7 @@
 Package: jmjax
 Type: Package
 Title: Joint Models for Longitudinal and Survival Data via 'JAX'
-Version: 0.2.0
+Version: 0.3.0
 Authors@R: person("Changbin", "Guo", email = "jmjax.maintainer@gmail.com",
                   role = c("aut", "cre", "cph"))
 Description: Fits shared-parameter joint models (linear mixed-effects
