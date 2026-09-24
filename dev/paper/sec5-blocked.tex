@@ -6,8 +6,7 @@ JMbayes2 even without the rotation: 5.7--8.1 times across a replicated
 simulation sweep with 1 to 12 covariates, and 3.2 and 7.6 times on the two
 datasets of Section~\ref{sec:realdata}. JMbayes2 updates the parameters in
 blocks, with adaptive random-walk Metropolis steps for the coefficients.
-This section shows that most of the difference is a property of blocked
-updating in joint models rather than of either implementation.
+This section argues that, on the two datasets measured, about three quarters (on a log scale) of the ESS-per-draw gap on $\alpha$ is what even an ideal two-block sampler would incur, so that most of it is a property of blocked updating rather than of either implementation.
 
 Write $\psi$ for every parameter other than $\alpha$: the random effects,
 $\beta$, $\gamma$, the baseline-hazard coefficients and the variance

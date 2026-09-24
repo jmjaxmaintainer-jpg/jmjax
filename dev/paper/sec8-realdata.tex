@@ -41,8 +41,7 @@ maximum $\hat R$, all parameters & 1.010 / 1.010 & 1.007 / 1.018 \\
 \end{tabular}
 \end{table}
 
-The coefficients on absorbable directions gained 17--28 times and the time
-slope 2.3--4.4 times (Table~\ref{tab:real}). Every posterior mean agreed
+The intercept and subject-constant coefficients gained 17--28 times, and the time slope, also on an absorbable direction, 2.3--4.4 times (Table~\ref{tab:real}). Every posterior mean agreed
 between the two fits within Monte Carlo error (largest paired difference
 1.65 Monte Carlo standard errors over 19 parameter-dataset pairs). The two
 datasets differ in one instructive way. On \texttt{aids} the unrotated
@@ -50,8 +49,7 @@ trajectories were three times longer: the degeneracy was what set NUTS's
 trajectory length, and removing it made every iteration cheaper, so every
 parameter gained, $\alpha$ included, and sampling time fell by 40\%. On
 \texttt{pbc2} the trajectory length was set by something else, and the
-parameters the degeneracy does not involve were unchanged or slightly
-slower.
+parameters the degeneracy does not involve changed by 0.82--1.28 times ($\alpha$ 0.95).
 
 With a random intercept only, the same datasets show the degeneracy more
 starkly. Unrotated, $\beta_0$ and the subject-constant coefficients mixed
@@ -103,7 +101,6 @@ parity on them (0.89--0.97) and ahead on the others: 1.8--6.5 times on
 the time slope, 1.8--2.7 on $\gamma$ and 6.5--7.3 on $\alpha$. The rotation
 thus recovers what hierarchical centring buys on the regression
 coefficients, while keeping the non-centred parameterization for the
-random-effect variances. The lead on $\alpha$ needs no rotation at all; it
-is the blocked-sampler effect of Section~\ref{sec:blocked}. JMbayes2 draws
+random-effect variances. The lead on $\alpha$ is present without the rotation, and Section~\ref{sec:blocked} attributes most of its per-draw part to blocked updating; the rotation added to it on \texttt{aids} (3.2 to 6.5) by shortening NUTS's trajectories. JMbayes2 draws
 4.7--7.1 times faster per second but keeps one effective draw in 29--36 for
 $\alpha$ (Figure~\ref{fig:alpha}).

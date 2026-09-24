@@ -145,11 +145,9 @@ u/\sqrt{N}$, and the data inform a common shift of all levels with
 precision $\sum_i n_i / \sigma_e^2$.
 \end{proof}
 
-For a Gaussian target, the narrow direction bounds the stable leapfrog step
-size and the wide one sets the trajectory length, so the number of leapfrog
-steps per independent draw grows like the square root of their ratio,
+Heuristically, for a Gaussian target the narrow direction bounds the stable leapfrog step size and the wide one sets the trajectory length, so the number of leapfrog steps per independent draw grows like the square root of their ratio,
 $\{(1 + |r|)/(1 - |r|)\}^{1/2} \approx 2\sqrt{\tau\kappa^2}$
-\citep{neal2011}. The statement is exact for the mean intercept direction,
+\citep{neal2011}. Proposition~\ref{prop:ridge} itself is exact for the mean intercept direction,
 whose witness is the single coordinate $\beta_0$. For other directions the witness mixes
 several coordinates of $\beta$, and (ii)--(iii) then describe the whole
 $(\beta, U)$ block. The rotation alone therefore trades a direction spread

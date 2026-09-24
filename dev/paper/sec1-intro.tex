@@ -10,8 +10,7 @@ recommendation for models written directly in Stan or NumPyro: $b =
 \Bstd L^{\top}$ with $\Bstd$ standard normal and $L$ a Cholesky factor of
 the random-effect covariance. This
 removes the funnel between the random effects and their scale
-\citep{neal2003,betancourt2015} and is the reason these samplers work well
-on hierarchical models at all.
+\citep{neal2003,betancourt2015} and is a main reason these samplers work well on hierarchical models.
 
 It leaves a second, simpler problem in place. Suppose the fixed-effects
 design contains a column that is constant within subject: the intercept,
@@ -24,7 +23,7 @@ coefficient trades off against a covariate-weighted combination of the
 random intercepts, and, whenever there is a random slope on time, for the
 fixed time slope and the mean random slope. In HMC's sampling coordinates
 these directions are spread across all $N$ subjects, the posterior has a
-ridge along them, and the sampler mixes slowly on the intercept, the
+ridge along them, and the sampler can mix slowly on the intercept, the
 subject-constant coefficients and the time slope: the coefficients an
 analyst reports. In a joint model of \texttt{pbc2}, for instance, the
 posterior correlation between the fixed intercept and the mean random
@@ -46,14 +45,14 @@ problem directly, suggesting as future work that predictors be made
 orthogonal to the cluster indicators. Section~\ref{sec:related} places the
 present work among these.
 
-This paper does something different. It keeps the absorbable directions,
+This paper takes a different route. It keeps the absorbable directions,
 and makes them sampling coordinates. We construct an orthonormal basis for
 every direction the fixed effects can absorb, in every random-effect
 column, and apply one fixed rotation to the standardized random effects so
 that these directions become a small block $U$ of $k \times q$ coordinates,
 $k$ being the number of directions and $q$ the number of random-effect
 columns. A single dense block of the HMC mass matrix over $(\beta, U)$
-then whitens the ridge. The rotation acts on the subject index and the
+then largely whitens the ridge. The rotation acts on the subject index and the
 covariance factor on the column index, so they commute: the construction is
 exact for every value of the random-effect covariance, with no constraint,
 no correction and no change to any reported quantity.
@@ -66,14 +65,9 @@ NumPyro. There the random effects also enter the hazard through the current
 marker value, and the survival submodel adds a condition on which
 directions remain absorbable. Joint models also raise a second question.
 Their primary estimand is the association parameter $\alpha$, the log
-hazard ratio per unit of the current marker value. On it, NUTS was 3 to 8
-times more efficient than the Metropolis-within-Gibbs sampler of JMbayes2
-\citep{jmbayes2} with no reparameterization at all. We show why: for an
-ideal two-block sampler that draws $\alpha$ exactly given the rest, the
+hazard ratio per unit of the current marker value. On it, NUTS gave 3 to 8 times the ESS per second of the Metropolis-within-Gibbs sampler of JMbayes2 \citep{jmbayes2}, with no reparameterization at all, in a comparison using each package's own ESS estimator. We explain most of the per-draw part of that gap: for an ideal two-block sampler that draws $\alpha$ exactly given the rest, the
 lag-1 autocorrelation equals the share of $\alpha$'s posterior variance
-the rest explains \citep{liu1994}, and in joint models that share is large
-for a structural reason, the trade-off between $\alpha$ and the level of
-the log baseline hazard.
+the rest explains \citep{liu1994}, and in the two joint models we measured that share was large, mostly through the survival parameters, plausibly because $\alpha$ trades off against the level of the log baseline hazard.
 
 \paragraph{Contributions.}
 \begin{enumerate}
@@ -91,8 +85,7 @@ per gradient, localizes every absorbable direction in a $(p + kq)$-dimensional
 block (Proposition~\ref{prop:exact}, Lemma~\ref{lem:local}). An analysis of
 the resulting ridge (Proposition~\ref{prop:ridge}) explains why a diagonal
 metric cannot handle it, why one dense block can, and where a fixed metric
-is weakest; a stress grid aimed at those weak spots kept the gains at
-5--30 times.
+is weakest; a stress grid aimed at those weak spots kept the ESS-per-second gains on the intercept and time slope at 5--30 times.
 \item \emph{Blocked samplers and the association parameter.} The
 application of the data-augmentation autocorrelation identity to
 $\alpha$ (Proposition~\ref{prop:blocked}), with a bound that does not

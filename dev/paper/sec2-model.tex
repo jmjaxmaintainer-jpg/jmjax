@@ -92,8 +92,4 @@ The degeneracy is not a funnel. A funnel is strongly position-dependent
 geometry: a scale parameter changes the curvature of the parameters below
 it, so no single metric fits everywhere. Here, with the variance
 components held fixed, the posterior of $\beta$ and the random effects is
-Gaussian in the linear model (Proposition~\ref{prop:ridge} gives its
-covariance in closed form), so the curvature along the ridge is constant.
-The problem is global and linear: the ridge is narrow in a direction a
-diagonal metric cannot represent, which is exactly what a fixed Euclidean
-metric can correct once the direction is exposed.
+Gaussian in the linear model (Proposition~\ref{prop:ridge} gives it in closed form for one invariant direction), so the curvature along the ridge is constant. Given the variance components, the problem is linear: the ridge is narrow in a direction a diagonal metric cannot represent, which a fixed Euclidean metric can largely correct once the direction is exposed (Section~\ref{sec:residual} gives what remains when the variance components vary).

@@ -70,8 +70,7 @@ slope. Almost all of the gain is in ESS per draw (13.9 and 21.7 times):
 under the rotation the median ESS over 2000 draws was about 3,450 for
 both coefficients, more than the number of draws, against 180--235
 unrotated, that is, about 1.7 against 0.1 ESS per draw. There were no divergences, and the worst $\hat R$ on a reported
-coefficient was 1.002 rotated and 1.044 unrotated. Posterior standard
-deviations agreed as well as the means: rotated over unrotated, 1.01 for
+coefficient was 1.002 rotated and 1.044 unrotated. Posterior means agreed to a median of 0.027 posterior standard deviations, and the largest paired difference was 2.7 Monte Carlo standard errors over 90 pairs. Posterior standard deviations agreed too: rotated over unrotated, 1.01 for
 the intercept (per seed 0.94--1.10) and 0.98 for the time slope
 (0.91--1.06), within the Monte Carlo error of the unrotated fit's short
 effective samples.
@@ -153,7 +152,7 @@ correlated random effects. A stress grid targeted both, with about 35
 visits crossed with $N \in \{50, 100\}$ and $\rho \in \{0.3, 0.95\}$, plus
 $\rho = 0.95$ at 9 visits ($N = 100$) and at 17 visits ($N = 300$). The
 criterion fixed before the run was that the rotation must not fall below
-the unrotated fit on the reported coefficients in any design. It did not
+the unrotated fit on the intercept or time slope in any design. It did not
 (Table~\ref{tab:stress}); the lowest design was 5.5 times and the lowest
 single seed 3.2 times. Per gradient evaluation the gains were 16.7 for the
 intercept and 22.0 for the time slope (geometric means over all designs),
@@ -194,8 +193,7 @@ variant has no fixed-metric residual, and in the 35-visit designs it was
 1.4--2 times more efficient than the rotation, while being about equal to
 it with 9 visits. Posterior means agreed with the unrotated fit's to a
 median of 0.029 posterior standard deviations (maximum 0.166, 90 pairs),
-there were no divergences, and wall time was 0.86--1.06 times the
-unrotated fit's.
+there were no divergences, and wall time was 0.86--1.08 times the unrotated fit's (geometric means per design). $\alpha$, which the degeneracy does not involve, fell to 0.74 in the 9-visit design (Table~\ref{tab:stress}).
 
 \subsection{Calibration}
 
@@ -210,7 +208,7 @@ deviation of posterior means within 0.015 for every estimand
 is about 0.011. Two features appear in both arms and belong to the model
 and design: slightly wide intervals for $\beta_0$, and an upward bias of
 about 3 Monte Carlo standard errors (2.8\%) in $\alpha$. The latter is
-ordinary finite-sample bias. In a separate study
+consistent with ordinary finite-sample bias. In a separate study
 (\texttt{dev/study\_alpha\_bias.R}, Appendix~\ref{app:repro}), neither the
 spline baseline hazard nor the simulator's hazard calibration explained
 it (paired changes of $-0.0011$
