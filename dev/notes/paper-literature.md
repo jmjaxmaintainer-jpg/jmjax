@@ -38,7 +38,13 @@ specific claim.
   effects have a singular joint prior, hence the conditional
   factorisation), not non-centring. A third-party AI summary describing
   it as non-centring (alpha = sigma * z) contradicts the abstract and is
-  not to be used. Still need the full text for the exact transform and
+  not to be used. Secondary source (read 23 Sep): Hallander, Waldmann,
+  Wang & Sillanpaa (2010), *Genetics* 185, 645-654, cite Vines et al.
+  twice - as "transformation of the location parameters in the model" to
+  improve mixing, and as the origin (in WinBUGS) of decomposing a random-
+  effect prior into univariate conditionals, noting Vines et al. did not
+  include covariance between random effects. Both consistent with the
+  sweeping reading. Still need the full text for the exact transform and
   whether it needs a flat prior on the grand mean to be exact. Almost
   certainly the origin of the idea behind our retired sweep, and must be
   cited as such.
