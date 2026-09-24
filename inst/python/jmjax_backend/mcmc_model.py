@@ -885,8 +885,29 @@ def fit_nuts(X_long, y_long, n_obs, X_time_surv, X_time_quad,
                 "control$rotate_absorbable = TRUE requires "
                 "random_effects_method = 'nuts' and, for q >= 2, "
                 "random_effects_corr = TRUE.")
-        _nb = [_absorbable_basis_exact(X_long, Z_long, n_obs, _qq)[0]
-               for _qq in range(q)]
+        _nb = []
+        _s_resid = 0.0
+        for _qq in range(q):
+            _Qq, _gq = _absorbable_basis_exact(X_long, Z_long, n_obs, _qq)
+            _nb.append(_Qq)
+            # Condition (S): the directions are found on the longitudinal
+            # grid, but b also enters the hazard through m_i(t) at the event
+            # times and quadrature nodes, so absorbability must hold there
+            # too. The legacy sweep (sweep.py) always checked this; the
+            # rotation path, which became the default, did not.
+            if Z_time_surv is not None and Z_time_quad is not None:
+                _s_resid = max(_s_resid, _structural_extension_residual(
+                    _gq, _qq, X_time_surv, Z_time_surv, X_time_quad, Z_time_quad))
+        if _s_resid > 1e-6:
+            warnings.warn(
+                "rotate_absorbable: the absorbable directions do not extend "
+                "to the survival/quadrature time grid (worst relative "
+                "residual %.2e). Condition (S) of "
+                "vignette('jmjax-reparameterization') Section 4.4 fails, so "
+                "the rotation is NOT guaranteed to leave the joint likelihood "
+                "unchanged for this design. Refit with "
+                "control$rotate_absorbable = FALSE." % _s_resid,
+                RuntimeWarning, stacklevel=2)
         _Qu = _union_basis(_nb)
         if _Qu is not None:
             _gen_reflectors = _householder_reflectors(_Qu)
@@ -903,6 +924,8 @@ def fit_nuts(X_long, y_long, n_obs, X_time_surv, X_time_quad,
                 "mode": "all_columns_no_sweep",
                 "applied": _gen_reflectors is not None,
                 "k": 0 if _gen_reflectors is None else int(_gen_reflectors.shape[1]),
+                # worst relative residual of Condition (S); > 1e-6 warned
+                "condition_s_residual": float(_s_resid),
             },
         }
 

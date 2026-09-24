@@ -53,6 +53,11 @@ test_that("the rotation is on by default where it applies, and opts out cleanly"
   rot <- fit_d$convergence$orthogonalize$rotation
   expect_identical(rot$mode, "all_columns_no_sweep")
   expect_true(isTRUE(rot$applied))
+  # Condition (S) is checked on the default path too (it used to be
+  # checked only by the legacy sweep): recorded, and negligible for
+  # y ~ time with ~ time random effects.
+  expect_true(is.numeric(rot$condition_s_residual))
+  expect_lt(rot$condition_s_residual, 1e-6)
   expect_false(is.null(fit_d$posterior_samples$b_gen_U))
 
   # Opt-out: nothing reported, no generator site.
