@@ -30,6 +30,11 @@
 #   caffeinate -i Rscript dev/study_q1_longrun.R
 #   LONG_MULT=1,2 LONG_SEEDS=2 Rscript dev/study_q1_longrun.R     # smaller
 #   LONG_CELLS=vdense_n300 LONG_MULT=4 Rscript dev/study_q1_longrun.R
+#   LONG_ARMS=A LONG_MULT=4,8,16,32 LONG_SEEDS=2 Rscript dev/study_q1_longrun.R
+#       extend ONLY the unrotated arm until it meets the criterion; the
+#       summary then reports the computation each arm needed to get there.
+# Memory: every draw of b is returned to R, so very long runs are heavy
+# (about 300 x 2 x samples doubles per site); 32x is about 64,000 draws.
 # Settings: LONG_WARMUP (500), LONG_BASE_SAMPLES (1000), LONG_CHAINS (2),
 #   LONG_SCALE_WARMUP=1 also multiplies warm-up by the multiplier,
 #   LONG_OUT (dev/study_q1_longrun.csv).
@@ -60,7 +65,8 @@ SCALE_WU <- identical(Sys.getenv("LONG_SCALE_WARMUP", "0"), "1")
 RHAT_MAX <- .envn("LONG_RHAT", 1.01)
 ESS_MIN  <- .envn("LONG_MIN_ESS", 400)
 OUT      <- Sys.getenv("LONG_OUT", "dev/study_q1_longrun.csv")
-ARMS     <- c("A", "A_rotdense")
+ARMS     <- .envc("LONG_ARMS", c("A", "A_rotdense"))
+stopifnot(all(ARMS %in% c("A", "A_rotdense")))
 VISIT_GAP <- c(base = 1.0, dense = 0.5, vdense = 0.25)
 CELLS <- .envc("LONG_CELLS", c("base_n300", "dense_n300", "vdense_n300"))
 cells <- do.call(rbind, lapply(CELLS, function(cc) {
@@ -175,10 +181,36 @@ for (cc in cells$cell) for (m in MULTS) for (q in c("intercept", "age", "time", 
   cat(sprintf("  %-12s x%d %-9s all %s   both conv. %s   unrot. ESS/draw %.3f  R-hat %.3f\n",
               cc, m, q, f(x), f(y), mean(x$ess_per_draw.x), max(x$rhat.x)))
 }
-cat("\nPosterior agreement, |mean_rot - mean_unrot| / sd_rot, converged pairs only\n")
-x <- merge(R[R$arm == "A", ], R[R$arm == "A_rotdense", ], by = c("cell", "mult", "seed", "quantity"))
-x <- x[as.logical(x$converged.x) & as.logical(x$converged.y), ]
-if (nrow(x)) cat(sprintf("  median %.3f, max %.3f over %d pairs; SD ratio median %.3f\n",
-                         stats::median(abs(x$est.y - x$est.x) / x$sd.y),
-                         max(abs(x$est.y - x$est.x) / x$sd.y), nrow(x),
-                         stats::median(x$sd.y / x$sd.x)))
+cat("\nComputation needed to MEET THE CRITERION (convergence-matched comparison):\n")
+cat("  smallest run length at which each arm converged, its wall time and draws;\n")
+cat("  ratio = unrotated seconds / rotated seconds, per seed\n")
+cvr <- unique(R[, c("cell", "mult", "seed", "arm", "converged", "sec", "n_draws")])
+cvr$converged <- as.logical(cvr$converged)
+first_ok <- function(cc, s, a) {
+  z <- cvr[cvr$cell == cc & cvr$seed == s & cvr$arm == a & cvr$converged, ]
+  if (!nrow(z)) return(NULL); z[which.min(z$mult), ]
+}
+for (cc in cells$cell) for (s in sort(unique(cvr$seed[cvr$cell == cc]))) {
+  a <- first_ok(cc, s, "A"); b <- first_ok(cc, s, "A_rotdense")
+  tried <- max(cvr$mult[cvr$cell == cc & cvr$seed == s & cvr$arm == "A"], -Inf)
+  cat(sprintf("  %-12s seed %d  unrotated: %s   rotated: %s   %s\n", cc, s,
+              if (is.null(a)) sprintf("not met up to x%s", tried) else
+                sprintf("x%-3d %7.1fs %7d draws", a$mult, a$sec, a$n_draws),
+              if (is.null(b)) "not met" else sprintf("x%-3d %6.1fs %6d draws", b$mult, b$sec, b$n_draws),
+              if (!is.null(a) && !is.null(b)) sprintf("ratio %.1fx", a$sec / b$sec) else ""))
+}
+
+cat("\nPosterior agreement between each arm's first converged fit (same cell and seed):\n")
+cat("  |mean_rot - mean_unrot| / sd_rot and sd_rot / sd_unrot, over quantities\n")
+agr <- NULL
+for (cc in cells$cell) for (s in sort(unique(cvr$seed[cvr$cell == cc]))) {
+  a <- first_ok(cc, s, "A"); b <- first_ok(cc, s, "A_rotdense")
+  if (is.null(a) || is.null(b)) next
+  x <- R[R$cell == cc & R$seed == s & R$arm == "A" & R$mult == a$mult, ]
+  y <- R[R$cell == cc & R$seed == s & R$arm == "A_rotdense" & R$mult == b$mult, ]
+  m <- merge(x, y, by = "quantity")
+  agr <- rbind(agr, data.frame(d = abs(m$est.y - m$est.x) / m$sd.y, r = m$sd.y / m$sd.x))
+}
+if (!is.null(agr)) cat(sprintf("  median %.3f, max %.3f over %d pairs; SD ratio median %.3f (range %.3f-%.3f)\n",
+                               stats::median(agr$d), max(agr$d), nrow(agr), stats::median(agr$r),
+                               min(agr$r), max(agr$r))) else cat("  no cell/seed with both arms converged yet\n")
