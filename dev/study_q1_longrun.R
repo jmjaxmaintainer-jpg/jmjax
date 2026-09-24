@@ -184,7 +184,11 @@ for (cc in cells$cell) for (m in MULTS) for (q in c("intercept", "age", "time", 
 cat("\nComputation needed to MEET THE CRITERION (convergence-matched comparison):\n")
 cat("  smallest run length at which each arm converged, its wall time and draws;\n")
 cat("  ratio = unrotated seconds / rotated seconds, per seed\n")
-cvr <- unique(R[, c("cell", "mult", "seed", "arm", "converged", "sec", "n_draws")])
+# every run length in the file counts here, not only this call's LONG_MULT:
+# an arm that converged at 1x in an earlier call must be credited with 1x.
+RA <- utils::read.csv(OUT, stringsAsFactors = FALSE)
+RA <- RA[RA$cell %in% cells$cell, ]
+cvr <- unique(RA[, c("cell", "mult", "seed", "arm", "converged", "sec", "n_draws")])
 cvr$converged <- as.logical(cvr$converged)
 first_ok <- function(cc, s, a) {
   z <- cvr[cvr$cell == cc & cvr$seed == s & cvr$arm == a & cvr$converged, ]
@@ -206,8 +210,8 @@ agr <- NULL
 for (cc in cells$cell) for (s in sort(unique(cvr$seed[cvr$cell == cc]))) {
   a <- first_ok(cc, s, "A"); b <- first_ok(cc, s, "A_rotdense")
   if (is.null(a) || is.null(b)) next
-  x <- R[R$cell == cc & R$seed == s & R$arm == "A" & R$mult == a$mult, ]
-  y <- R[R$cell == cc & R$seed == s & R$arm == "A_rotdense" & R$mult == b$mult, ]
+  x <- RA[RA$cell == cc & RA$seed == s & RA$arm == "A" & RA$mult == a$mult, ]
+  y <- RA[RA$cell == cc & RA$seed == s & RA$arm == "A_rotdense" & RA$mult == b$mult, ]
   m <- merge(x, y, by = "quantity")
   agr <- rbind(agr, data.frame(d = abs(m$est.y - m$est.x) / m$sd.y, r = m$sd.y / m$sd.x))
 }
