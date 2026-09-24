@@ -29,7 +29,17 @@ specific claim.
 - Vines, Gilks & Wild (1996), *Statistics and Computing* 6(4), 337-346:
   "Fitting Bayesian multiple random effects models" - reparameterizes
   random effects by sweeping out their means (sum-to-zero). **To read**
-  (reference details confirmed from Zanella & Roberts' bibliography). Almost
+  (reference details confirmed from Zanella & Roberts' bibliography;
+  DOI 10.1007/BF00143554). Abstract (checked 23 Sep, Open University
+  repository): Gibbs "can be slow mixing due to what might be regarded as
+  lack of model identifiability"; the fix transforms the random effects
+  and optionally writes their joint prior "as a sequence of univariate
+  conditional distributions". That fits sum-to-zero sweeping (the swept
+  effects have a singular joint prior, hence the conditional
+  factorisation), not non-centring. A third-party AI summary describing
+  it as non-centring (alpha = sigma * z) contradicts the abstract and is
+  not to be used. Still need the full text for the exact transform and
+  whether it needs a flat prior on the grand mean to be exact. Almost
   certainly the origin of the idea behind our retired sweep, and must be
   cited as such.
 - Stan's `sum_to_zero_vector`: constrains a vector to sum to zero through
