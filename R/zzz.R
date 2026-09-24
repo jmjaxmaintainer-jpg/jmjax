@@ -110,6 +110,28 @@ jmjax_setup <- function(recreate = FALSE, num_devices = parallel::detectCores(),
   invisible(TRUE)
 }
 
+#' Is the Python backend available?
+#'
+#' \code{TRUE} when a Python environment with jax and numpyro is loaded or
+#' can be loaded, without creating or installing anything. Useful to guard
+#' code - package examples use it - that should run only where
+#' \code{\link{jmjax_setup}()} has been done.
+#'
+#' @return A single logical.
+#' @export
+#' @examples
+#' jmjax_available()
+jmjax_available <- function() {
+  if (!is.null(.jmjax_env$backend)) return(TRUE)
+  if (reticulate::py_available(initialize = FALSE)) {
+    return(isTRUE(tryCatch(
+      reticulate::py_module_available("jax") &&
+        reticulate::py_module_available("numpyro"),
+      error = function(e) FALSE)))
+  }
+  .python_has_backend_deps(tryCatch(reticulate::py_exe(), error = function(e) NULL))
+}
+
 .onLoad <- function(libname, pkgname) {
   # Point reticulate at the venv WITHOUT forcing creation/install at package
   # load time - that belongs in jmjax_setup(), called explicitly by the user

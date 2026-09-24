@@ -11,6 +11,11 @@
 #' two estimation approaches (adaptive Gauss-Hermite MLE, full Bayesian
 #' NUTS) - see \code{method} below.
 #'
+#' Most analyses are easier to write with \code{\link{jm_mle}()} or
+#' \code{\link{jm_bayes}()}, which call this function and document only the
+#' options of their own estimation approach. \code{jm_fit()} is the general
+#' interface: every option of both approaches is documented here in full.
+#'
 #' @param long_formula Fixed-effects formula for the longitudinal submodel,
 #'   e.g. \code{y ~ time}, optionally including time-constant baseline
 #'   covariates such as \code{y ~ time + age}. Longitudinal-side covariates
@@ -768,52 +773,36 @@
 #'   means, accessible via \code{ranef()}). See \code{print.jmjax} and
 #'   \code{summary.jmjax}.
 #'
-#' @examples
-#' \dontrun{
-#' library(survival)
+#' @examplesIf jmjax_available() && requireNamespace("JM", quietly = TRUE)
+#' data("pbc2", "pbc2.id", package = "JM")
+#' pbc2$log_bili <- log(pbc2$serBilir)
 #'
-#' # Fast Weibull MLE - good first look / warm-start source
-#' fit_w <- jm_fit(
-#'   long_formula = y ~ time,
-#'   surv_formula = Surv(time, event) ~ 1,
-#'   data_long = sim_long, data_surv = sim_surv,
-#'   id_var = "id", time_var = "time",
-#'   method = "weibull-PH-aGH"
-#' )
-#' summary(fit_w)
+#' # Maximum likelihood with a Weibull baseline hazard: a quick first look
+#' fit_w <- jm_fit(log_bili ~ year, survival::Surv(years, status2) ~ drug,
+#'                 data_long = pbc2, data_surv = pbc2.id,
+#'                 id_var = "id", time_var = "year",
+#'                 method = "weibull-PH-aGH")
+#' fit_w
+#' confint(fit_w, "alpha")
+#' AIC(fit_w)
 #'
-#' # Flexible spline baseline hazard via full Bayesian MCMC, with a
-#' # correlated random intercept and slope
-#' fit_s <- jm_fit(
-#'   long_formula = y ~ time,
-#'   surv_formula = Surv(time, event) ~ 1,
-#'   data_long = sim_long, data_surv = sim_surv,
-#'   id_var = "id", time_var = "time",
-#'   method = "spline-PH-mcmc",
-#'   random_effects = "intercept_slope",
-#'   control = list(num_warmup = 500, num_samples = 1000, num_chains = 2)
-#' )
-#' print(fit_s)                # shows max R-hat / min ESS
-#' head(ranef(fit_s))          # per-subject random effects
+#' \donttest{
+#' # Bayesian (NUTS) with a spline baseline hazard and a correlated random
+#' # intercept and slope
+#' fit_s <- jm_fit(log_bili ~ year, survival::Surv(years, status2) ~ drug,
+#'                 data_long = pbc2, data_surv = pbc2.id,
+#'                 id_var = "id", time_var = "year",
+#'                 method = "spline-PH-mcmc",
+#'                 random_effects = "intercept_slope", random_formula = ~ year,
+#'                 control = list(num_warmup = 500, num_samples = 500,
+#'                                num_chains = 2))
+#' summary(fit_s)
+#' head(ranef(fit_s))
 #'
-#' # Same model, with the validated performance-tuning options enabled -
-#' # recommended over the defaults above for any real analysis. Pair with
-#' # jmjax_setup(num_devices = 4) (called once, before this) for genuinely
-#' # parallel chains rather than sequential execution.
-#' fit_s_fast <- jm_fit(
-#'   long_formula = y ~ time,
-#'   surv_formula = Surv(time, event) ~ 1,
-#'   data_long = sim_long, data_surv = sim_surv,
-#'   id_var = "id", time_var = "time",
-#'   method = "spline-PH-mcmc",
-#'   random_effects = "intercept_slope",
-#'   control = list(num_warmup = 500, num_samples = 1000, num_chains = 4,
-#'                  progress_bar = FALSE,
-#'                  random_effects_method = "wishart_gibbs",
-#'                  spline_prior = "penalized",
-#'                  rw2_implementation = "vectorized",
-#'                  dense_mass_spline = TRUE)
-#' )
+#' # Survival probabilities for a censored subject, given survival to the
+#' # end of their follow-up
+#' id_c <- pbc2.id$id[pbc2.id$status2 == 0 & pbc2.id$years < 8][1]
+#' predict(fit_s, newdata = pbc2[pbc2$id == id_c, ], process = "event")
 #' }
 #'
 #' @export
@@ -2997,7 +2986,7 @@ jm_fit <- function(long_formula,
 
   structure(
     list(
-      call = match.call(),
+      call = .jmjax_named_call(match.call(), "jm_fit"),
       method = method,
       long_formula = long_formula,
       surv_formula = surv_formula,

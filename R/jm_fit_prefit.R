@@ -96,17 +96,14 @@
 #'   supported and is the better choice when you do not already have fitted
 #'   component models.
 #'
-#' @examples
-#' \dontrun{
-#' lme_fit <- nlme::lme(log_serBilir ~ year, random = ~ year | id, data = pbc2)
-#' cox_fit <- survival::coxph(Surv(years, status2) ~ drug, data = pbc2.id)
-#' # data_surv recovered from cox_fit's call:
-#' fit <- jm_fit_prefit(lme_fit, cox_fit, time_var = "year")
-#' # or passed explicitly, which always works:
-#' fit <- jm_fit_prefit(lme_fit, cox_fit, data_surv = pbc2.id, time_var = "year")
-#' }
-#'
-#' @export
+#' @section Status:
+#'   Internal since jmjax 0.3.0 (call it as \code{jmjax:::jm_fit_prefit()}).
+#'   It was exported in development versions; users found a second way of
+#'   specifying the same model confusing, and \code{jm_mle()},
+#'   \code{jm_bayes()} and \code{jm_fit()} cover the same fits.
+#'   The development studies behind the methods paper still call it.
+#' @keywords internal
+#' @noRd
 jm_fit_prefit <- function(lme_object,
                            cox_object,
                            data_surv = NULL,

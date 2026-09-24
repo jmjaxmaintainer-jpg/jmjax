@@ -75,7 +75,7 @@
 #'
 #' Extract the estimates, their covariance matrix, confidence or credible
 #' intervals, the log-likelihood and the number of subjects from a fit
-#' returned by [jm_fit()] or [jm_fit_prefit()].
+#' returned by [jm_mle()], [jm_bayes()] or [jm_fit()].
 #'
 #' The estimates and standard errors these return are the same numbers
 #' [summary.jmjax()] reports, on the same (original) scale.
@@ -103,6 +103,17 @@
 #' @return `coef()`: named numeric vector. `vcov()`: named square matrix.
 #'   `confint()`: two-column matrix, one row per parameter. `logLik()`: an
 #'   object of class `"logLik"`. `nobs()`: an integer.
+#' @examplesIf jmjax_available() && requireNamespace("JM", quietly = TRUE)
+#' data("pbc2", "pbc2.id", package = "JM")
+#' pbc2$log_bili <- log(pbc2$serBilir)
+#' fit <- jm_mle(log_bili ~ year, survival::Surv(years, status2) ~ drug,
+#'               data_long = pbc2, data_surv = pbc2.id,
+#'               id_var = "id", time_var = "year")
+#' coef(fit)
+#' sqrt(diag(vcov(fit)))     # the standard errors in summary(fit)
+#' confint(fit, level = 0.9)
+#' logLik(fit); AIC(fit); BIC(fit)
+#' nobs(fit)                 # subjects, not measurements
 #' @name jmjax-methods
 #' @importFrom stats coef vcov confint logLik nobs
 NULL

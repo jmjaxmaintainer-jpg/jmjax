@@ -68,7 +68,8 @@
 #' \code{delta}/\code{area}/\code{area_avg} associations and new subjects
 #' stop with an error saying so.
 #'
-#' @param object A \code{"jmjax"} fit from an MCMC method.
+#' @param object A \code{"jmjax"} fit from \code{\link{jm_bayes}()} (or an
+#'   MCMC method of \code{jm_fit()}).
 #' @param newdata Optional long-format data frame whose \code{id_var}
 #'   values select the subjects to predict for. They must all be subjects
 #'   of the fit. Default: every subject. Required (and then also the source
@@ -93,6 +94,23 @@
 #' @return A data frame with columns \code{id}, \code{time},
 #'   \code{estimate}, \code{lower}, \code{upper} (and \code{t_from} for
 #'   \code{"event"}), one row per subject and time.
+#' @examplesIf jmjax_available() && requireNamespace("JM", quietly = TRUE)
+#' \donttest{
+#' data("pbc2", "pbc2.id", package = "JM")
+#' pbc2$log_bili <- log(pbc2$serBilir)
+#' fit <- jm_bayes(log_bili ~ year, survival::Surv(years, status2) ~ drug,
+#'                 data_long = pbc2, data_surv = pbc2.id,
+#'                 id_var = "id", time_var = "year",
+#'                 random_effects = "intercept_slope", random_formula = ~ year,
+#'                 warmup = 500, samples = 500)
+#' id_c <- pbc2.id$id[pbc2.id$status2 == 0 & pbc2.id$years < 8][1]
+#' nd <- pbc2[pbc2$id == id_c, ]
+#'
+#' # the marker trajectory (on the log-bilirubin scale) ...
+#' predict(fit, newdata = nd, times = 0:5)
+#' # ... and survival from the end of follow-up onwards
+#' predict(fit, newdata = nd, process = "event")
+#' }
 #' @importFrom stats predict
 #' @export
 predict.jmjax <- function(object, newdata = NULL,
@@ -101,9 +119,9 @@ predict.jmjax <- function(object, newdata = NULL,
                           return_draws = FALSE, ...) {
   process <- match.arg(process)
   if (!.jmjax_is_mcmc(object)) {
-    stop("predict() currently supports the MCMC methods only ",
-         "(spline-PH-mcmc, weibull-PH-mcmc): maximum-likelihood fits do not ",
-         "store per-subject random effects.", call. = FALSE)
+    stop("predict() currently supports Bayesian fits (jm_bayes(); the MCMC ",
+         "methods only): maximum-likelihood fits do not store per-subject ",
+         "random effects.", call. = FALSE)
   }
   mi <- object$model_info
   if (is.null(mi)) {

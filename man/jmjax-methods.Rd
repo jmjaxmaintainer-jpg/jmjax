@@ -36,7 +36,7 @@
 \description{
 Extract the estimates, their covariance matrix, confidence or credible
 intervals, the log-likelihood and the number of subjects from a fit
-returned by [jm_fit()] or [jm_fit_prefit()].
+returned by [jm_mle()], [jm_bayes()] or [jm_fit()].
 }
 \details{
 The estimates and standard errors these return are the same numbers
@@ -57,4 +57,18 @@ The estimates and standard errors these return are the same numbers
   Maximum-likelihood methods only: the MCMC methods do not compute it.
 * `nobs()`: the number of subjects - the independent units of a joint
   model, and the sample size [stats::BIC()] uses.
+}
+\examples{
+\dontshow{if (jmjax_available() && requireNamespace("JM", quietly = TRUE)) withAutoprint(\{ # examplesIf}
+data("pbc2", "pbc2.id", package = "JM")
+pbc2$log_bili <- log(pbc2$serBilir)
+fit <- jm_mle(log_bili ~ year, survival::Surv(years, status2) ~ drug,
+              data_long = pbc2, data_surv = pbc2.id,
+              id_var = "id", time_var = "year")
+coef(fit)
+sqrt(diag(vcov(fit)))     # the standard errors in summary(fit)
+confint(fit, level = 0.9)
+logLik(fit); AIC(fit); BIC(fit)
+nobs(fit)                 # subjects, not measurements
+\dontshow{\}) # examplesIf}
 }
