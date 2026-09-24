@@ -14,8 +14,8 @@ One fixed orthogonal rotation of the standardized random effects, the same
 for every random-effect column, turns these directions into a small block
 of sampling coordinates. It is exact for every value of the random-effect
 covariance: prior, posterior and every reported quantity are unchanged. A
-dense mass-matrix block over this block and the fixed effects then removes
-the ridge. In simulation the rotation raised the effective sample size per
+dense mass-matrix block over this block and the fixed effects then whitens
+the resulting posterior ridge. In simulation the rotation raised the effective sample size per
 second of the intercept and the time slope by factors of 14 and 21
 (geometric means); on two standard joint-model datasets the intercept and
 subject-constant covariates gained 17--28 times; and the same coefficients

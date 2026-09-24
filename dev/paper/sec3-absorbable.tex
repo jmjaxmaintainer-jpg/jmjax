@@ -31,7 +31,10 @@ Both sets are linear subspaces of $\R^N$. The likelihood uses $m_i(t)$
 only up to each subject's event or censoring time, so requiring
 (\ref{eq:T}) on all of $[0, \tau]$ is slightly more than invariance of
 the likelihood needs; it is what makes the set of directions a property
-of the model rather than of the observed follow-up. The definition concerns
+of the model rather than of the observed follow-up. $\A_c$ is therefore a
+structural set of invariant directions, sufficient for likelihood
+invariance; it need not be the largest set of shifts that leaves a
+particular observed likelihood numerically unchanged. The definition concerns
 the likelihood only: the prior on the random effects is not invariant under
 these shifts, and that asymmetry is what identifies the split at all.
 
@@ -49,8 +52,9 @@ $X_i$ for $i \notin S_c$.
 
 \begin{proposition}[Characterization]\label{prop:char}
 \begin{enumerate}
-\item[(a)] $\A_c^{\mathrm{long}} = \U_c^{-1}(\range \T) =
-\ker\{(I - P_{\T})\,\U_c\}$. It depends on the fixed-effects design only
+\item[(a)] $\A_c^{\mathrm{long}} = \{v : \U_c v \in \range \T\}$, the
+preimage of $\range \T$ under $\U_c$, and equals $\ker\{(I -
+P_{\T})\,\U_c\}$. It depends on the fixed-effects design only
 through its column space.
 \item[(b)] A vector $d$ witnesses some $v \in \A_c^{\mathrm{long}}$ if and
 only if $d \in \ker M_c$. The witnessed $v$ then has $v_i = -z_i^{\top}
@@ -107,11 +111,14 @@ for every column type that commonly arises: a subject-constant column
 $z_i(t) \equiv 1$), the time column ($x_i(t)^{\top}e_j = t$, absorbed by a
 random slope $z_i(t) = t$) and a covariate-by-time interaction
 ($c_i t$). In each the identity holds as a function of $t$, not by
-coincidence at the observed times. More generally it holds whenever the
-functions involved lie in a space determined by their values at a
-subject's observed times, such as polynomials of degree below $n_i$. It
-can fail for subjects with few observations relative to the flexibility of
-the time basis. It is also cheap to check: the design rows at the event
+coincidence at the observed times. More generally it holds when, for each
+subject, the functions $t \mapsto x_i(t)^{\top} d$ and $t \mapsto z_i(t)$
+are known to lie in a finite-dimensional function space determined by its
+values at the subject's distinct observation times, for example
+polynomials of degree below $n_i$ (Appendix~\ref{app:proofs}). For spline
+bases this depends on the knots and on where the observations fall, and
+it can fail for subjects with few observations relative to the
+flexibility of the basis. It is also cheap to check: the design rows at the event
 times and quadrature nodes are needed for the likelihood anyway, and
 \texttt{jmjax} evaluates the identity there at every fit and warns if the
 worst relative residual exceeds $10^{-6}$. Proposition~\ref{prop:joint}

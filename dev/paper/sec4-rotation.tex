@@ -10,8 +10,11 @@ $N \times N$ matrix is formed. Instead of $\Bstd$, sample
 \Bstd = R \begin{bmatrix} U \\ V \end{bmatrix} = Q U + Q_{\perp} V,
 \qquad B = \Bstd L^{\top},
 \end{equation}
-where $U \in \R^{k \times q}$ and $V \in \R^{(N-k) \times q}$ have iid
-$\N(0,1)$ entries.
+where $Q \in \R^{N \times k}$, $Q_{\perp} \in \R^{N \times (N-k)}$, and
+$U \in \R^{k \times q}$ and $V \in \R^{(N-k) \times q}$ have iid $\N(0,1)$
+entries. $Q$, and hence $R$, is computed once from the design matrices
+before sampling and is held fixed; it does not depend on any sampled
+parameter.
 
 \begin{proposition}[Exactness]\label{prop:exact}
 For any fixed orthogonal $R$: (i) the map $(U, V) \mapsto \Bstd$ is linear
@@ -30,13 +33,27 @@ posterior pushed forward to $(B, \theta)$ is unchanged: (iii). (iv)
 follows from $Q^{\top} Q_{\perp} = 0$.
 \end{proof}
 
+Because the target distribution is unchanged, the sampler itself is
+unmodified. NUTS, its step-size and metric adaptation during warm-up, and
+the argument for its correctness are exactly those of standard NUTS applied
+to an equivalent parameterization of the same posterior. The rotation
+changes only which linear combinations of the random effects are sampling
+coordinates, and therefore what a metric adapted to those coordinates can
+represent.
+
 Two choices in (\ref{eq:rot}) matter. First, the rotation acts on the
 sampled, standardized coordinates. Rotating the draws after sampling would
 change nothing about the sampler's geometry, and sampling rotated
 \emph{centred} effects $R^{\top} B$ would reintroduce the dependence on
 $\sigma_b$ that non-centring removes. Second, $R$ acts on the subject
-index, the same for every column, while $L$ acts on the column index. The
-two commute, $R^{\top} B = (R^{\top} \Bstd) L^{\top}$, which is why the
+index, the same for every column, while $L$ acts on the column index. In
+vectorized form, $\operatorname{vec}(B) = (L \otimes I_N)
+\operatorname{vec}(\Bstd)$ and $\operatorname{vec}(\Bstd) = (I_q \otimes
+R)\operatorname{vec}([U; V])$, and
+\[
+(L \otimes I_N)(I_q \otimes R) = L \otimes R = (I_q \otimes R)(L \otimes I_N):
+\]
+the two factors act on different indices and commute. This is why the
 construction is exact for every value of the covariance with no
 correction. A rotation of the stacked $Nq$-vector designed to align
 particular intercept-slope combinations with coordinate axes would also be
@@ -72,18 +89,24 @@ $Q^{\top} \Delta = (Q^{\top} v)\, e_c^{\top} (L^{\top})^{-1}$.
 \end{proof}
 
 Without the rotation, the same shift has a component on every one of the
-$N$ rows of $\Bstd$. With it, the flat directions of the likelihood mix
+$N$ rows of $\Bstd$. With it, the likelihood-invariant directions mix
 the intercept and slope columns of $U$ in proportions set by the sampled
 $L$, but always stay inside the fixed block $(\beta, U)$. This is why every
 column is rotated by the same $Q$: rotating the intercept column alone
 captures the directions only when the random effects are uncorrelated.
+Because the same $Q$, a basis of the union of the $\A_c$, is used for every
+column, $U$ always has $kq$ coordinates, and a few of them may not be
+invariant directions for their own column (in Section~\ref{sec:simulation}'s
+design, $k = 3$ and 4 of the 6 coordinates of $U$ are). Including them in
+the dense block costs little and keeps the construction independent of
+$L$.
 
 \subsection{The ridge, and the dense block}
 
-Being flat in the likelihood is not the same as being flat in the
-posterior: along each invariant direction the priors on $\beta$ and $\Bstd$
-still locate the split. The next result describes the ridge this leaves in
-one plane.
+Invariance of the likelihood is not degeneracy of the posterior: along
+each likelihood-invariant direction the priors on $\beta$ and $\Bstd$ still
+locate the split, and the posterior is proper but weakly identified along
+it. The next result describes the ridge this leaves in one plane.
 
 \begin{proposition}[The ridge]\label{prop:ridge}
 Consider one invariant direction in the reduced model that holds every
@@ -93,10 +116,11 @@ with prior $\N(0,1)$, and suppose the likelihood informs only $s =
 \tilde\beta + \kappa u$, with precision $\tau$. Then
 \begin{enumerate}
 \item[(i)] $\corr(\tilde\beta, u \mid y) = -\{1 + 1/(\tau\kappa^2)\}^{-1/2}$;
-\item[(ii)] under a diagonal metric, the whitened covariance of the plane
-has eigenvalues $1 \pm |r|$, $r$ the correlation in (i): it is never slow
-along the ridge, but has a narrow direction of variance $1 - |r| \approx
-1/(2\tau\kappa^2)$, which caps the step size;
+\item[(ii)] under the ideal diagonal metric, equal to the exact marginal
+posterior variances (the quantity warm-up adaptation estimates), the
+whitened covariance of the plane has eigenvalues $1 \pm |r|$, $r$ the
+correlation in (i). Its wide direction has variance at most 2, but its
+narrow direction has variance $1 - |r| \approx 1/(2\tau\kappa^2)$;
 \item[(iii)] a dense metric over $(\tilde\beta, u)$ whitens the plane
 exactly;
 \item[(iv)] for the mean direction of the random intercepts, $\kappa =
@@ -121,16 +145,21 @@ u/\sqrt{N}$, and the data inform a common shift of all levels with
 precision $\sum_i n_i / \sigma_e^2$.
 \end{proof}
 
-The statement is exact for the mean intercept direction, whose witness is
-the single coordinate $\beta_0$. For other directions the witness mixes
+For a Gaussian target, the narrow direction bounds the stable leapfrog step
+size and the wide one sets the trajectory length, so the number of leapfrog
+steps per independent draw grows like the square root of their ratio,
+$\{(1 + |r|)/(1 - |r|)\}^{1/2} \approx 2\sqrt{\tau\kappa^2}$
+\citep{neal2011}. The statement is exact for the mean intercept direction,
+whose witness is the single coordinate $\beta_0$. For other directions the witness mixes
 several coordinates of $\beta$, and (ii)--(iii) then describe the whole
 $(\beta, U)$ block. The rotation alone therefore trades a direction spread
 over $N$ coordinates for one concentrated in a few, but under a diagonal
 metric that direction is still narrow, and narrowest where the
 degeneracy is worst: many visits per subject, or little noise. A dense
-metric block over $(\beta, U)$ removes it. Without the rotation, the same
-fix would need a dense metric over all $Nq$ random-effect coordinates, too
-large to adapt reliably during warm-up and $O(N^2 q^2)$ per gradient.
+metric block over $(\beta, U)$ whitens it. Without the rotation, the same
+fix would need a dense metric over all $Nq$ random-effect coordinates: an
+$Nq \times Nq$ matrix to estimate during warm-up, $O(N^2q^2)$ storage and
+work for each metric-vector product, and more to factorize it.
 
 Figure~\ref{fig:ridge} shows this in the exact Gaussian posterior of the
 longitudinal submodel with the variance components fixed at the
@@ -138,8 +167,12 @@ simulation values of Section~\ref{sec:simulation} ($N = 300$, 2--11
 visits, $\rho = 0.3$, $\sigma_e = 0.3$). The conditional correlation of
 $\beta_0$ and the mean intercept direction is $-0.97$ in the unrotated
 coordinates and still $-0.97$ after rotation with a diagonal metric; the
-dense block brings it to $-0.01$. The condition number of the whole whitened
-posterior falls from 4,521 to 368. Across the designs examined, the dense
+dense block brings it to $-0.01$. The condition number of the whole
+whitened posterior, the ratio of the largest to the smallest eigenvalue of
+$M^{-1/2} \Sigma M^{-1/2}$ with $\Sigma$ the exact posterior covariance and
+$M$ the metric ($\operatorname{diag}\Sigma$, or $\operatorname{diag}\Sigma$
+with its $(\beta, U)$ block replaced by that of $\Sigma$), falls from 4,521
+to 368. Across the designs examined, the dense
 block cut it by factors of 5 to 70, for example from 12,037 to 174 with
 8--20 visits per subject; what remains is conditioning any fit has, such as
 the correlation between each subject's own intercept and slope.
@@ -156,7 +189,7 @@ deviation contours; dashed: the 2 standard deviation contour of a
 perfectly scaled target. (a) Unrotated coordinates, diagonal metric: $u$
 is spread over all $N$ random intercepts and trades off almost one for one
 with $\beta_0$. (b) The rotation makes $u$ a single coordinate but leaves
-the ridge. (c) The dense metric block over $(\beta, U)$ removes it.
+the ridge. (c) The dense metric block over $(\beta, U)$ whitens it.
 ``cond.'' is the condition number of the whole whitened posterior.}
 \label{fig:ridge}
 \end{figure}
@@ -167,10 +200,16 @@ By Lemma~\ref{lem:local}, the ridge's orientation depends on the sampled
 $L$: on $\sigma_0$ through $\kappa \propto \sigma_0$, and, for directions
 shared between the intercept and slope columns, on the correlation $\rho$.
 NUTS adapts one fixed metric. For the $\sigma_0$ part the loss can be
-bounded. Let $\delta$ be the posterior coefficient of variation of
-$\sigma_0$, roughly $1/\sqrt{2N}$. A metric that whitens the plane exactly
-at one value of $\sigma_0$ leaves a condition number of $1 +
-O(\delta\sqrt{\tau\kappa^2})$ elsewhere in the posterior, that is,
+estimated. Let $\delta$ be the posterior coefficient of variation of
+$\sigma_0$; in an idealized variance-component model with $N$ groups it is
+roughly $1/\sqrt{2N}$, and we use that value only to set the scale. A
+relative change $\delta$ in $\kappa \propto \sigma_0$ tilts the plane's
+narrow direction, in the units of a metric fitted at the original value,
+by an angle of order $\delta\sqrt{\tau\kappa^2}$, so a metric that whitens
+the plane exactly at one value of $\sigma_0$ leaves a condition number of
+$1 + O(\delta\sqrt{\tau\kappa^2})$ elsewhere in the posterior. With $\delta
+\approx (2N)^{-1/2}$ and $\tau\kappa^2 = \bar n\,\sigma_0^2/\sigma_e^2$
+this is
 \[
 1 + O\Bigl(\sqrt{\bar n\,\sigma_0^2 / (\sigma_e^2 N)}\Bigr),
 \]
@@ -189,9 +228,10 @@ mismatch of order $\delta$ rather than $\delta\sqrt{\tau\kappa^2}$.
 
 \texttt{jmjax} implements (\ref{eq:rot}) in NumPyro: $U$ and $V$ are the
 sampled sites, $\Bstd$ is a deterministic function of them computed with
-$q$ applications of the $k$ reflectors, and the mass matrix is dense on
-$(\beta, U)$ and diagonal elsewhere, adapted during warm-up in the usual
-way. The extra cost per gradient is $O(Nkq)$. In Section~\ref{sec:simulation}'s
+$q$ applications of the $k$ reflectors, and the mass matrix is
+block-diagonal: dense on $(\beta, U)$ and diagonal elsewhere, specified
+through NumPyro's option for dense blocks over groups of sites and adapted
+during warm-up in the usual way. The extra cost per gradient is $O(Nkq)$. In Section~\ref{sec:simulation}'s
 design the dense block has $p + kq = 10$ coordinates, and wall time per
 fit was 0.83--1.10 times that of the unrotated fit. The basis is computed
 once from the design matrices, before sampling. The rotation and the

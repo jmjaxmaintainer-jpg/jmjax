@@ -17,9 +17,9 @@ It leaves a second, simpler problem in place. Suppose the fixed-effects
 design contains a column that is constant within subject: the intercept,
 a treatment arm, sex. Adding a constant $c$ to every subject's random
 intercept and subtracting $c$ from the fixed intercept leaves every fitted
-value unchanged. The likelihood identifies the sum; only the prior on the
-random effects, at scale $\sigma_0/\sqrt{N}$ for $N$ subjects, pins the
-split. The same holds for every subject-constant covariate, whose
+value unchanged. The likelihood identifies the sum; only the priors pin the
+split, at scale $\sigma_0/\sqrt{N}$ for $N$ subjects when the fixed
+intercept's prior is diffuse. The same holds for every subject-constant covariate, whose
 coefficient trades off against a covariate-weighted combination of the
 random intercepts, and, whenever there is a random slope on time, for the
 fixed time slope and the mean random slope. In HMC's sampling coordinates

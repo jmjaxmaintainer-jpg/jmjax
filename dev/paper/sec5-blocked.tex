@@ -36,10 +36,15 @@ is AR(1) with coefficient $R^2$, and the bound in (ii) is attained.
 \end{proposition}
 
 \begin{proof}
-The $\alpha$ chain of a two-block sampler is a data-augmentation chain.
-Its lag-1 autocovariance is $\Var\{\E(\alpha \mid \psi, y)\}$ and its
-transition operator is self-adjoint and positive on $L^2$ of the
-posterior of $\alpha$ \citep{liu1994}, which gives (i); the second
+The $\alpha$ chain of a two-block sampler is a data-augmentation chain
+\citep{liu1994}. Let $P$ map a function $h$ of $\alpha$ to the function
+$(Ph)(\psi) = \E\{h(\alpha) \mid \psi, y\}$, and $P^{*}$ map $g$ to
+$(P^{*}g)(\alpha) = \E\{g(\psi) \mid \alpha, y\}$; these are adjoint in
+the $L^2$ inner products of the posterior. The transition operator of the
+$\alpha$ chain is $K = P^{*}P$, so $K$ is self-adjoint and $\langle Kh, h
+\rangle = \|Ph\|^2 \geq 0$. With $h(\alpha) = \alpha - \E(\alpha \mid y)$,
+the lag-1 autocovariance is $\langle Kh, h \rangle = \Var\{\E(\alpha \mid
+\psi, y)\}$, which gives (i); the second
 expression for $r$ is the law of total variance, and $R^2 \leq r$ because
 the best linear predictor of $\alpha$ explains no more variance than
 $\E(\alpha \mid \psi, y)$. For (ii), the spectral theorem writes the
@@ -62,11 +67,11 @@ of the posterior. The proposition is an application of known theory; the
 two-block sampler is a benchmark, not a model of JMbayes2. Finer blocking
 and random-walk Metropolis steps can be expected to make a real
 implementation slower still \citep{liu1994,roberts1997}, though neither is
-guaranteed to in every case. What the proposition makes precise is the
-contrast with HMC, which moves $\alpha$ and $\psi$ together. Under a
-fixed metric, a correlation between them is part of the posterior's shape
-and is paid for in leapfrog steps, which grow with the square root of the
-condition number \citep{neal2011}. A single correlation at level $R^2$
+guaranteed to in every case. The contrast with HMC, which moves $\alpha$
+and $\psi$ together, is a heuristic rather than a theorem. Under a fixed
+metric, a correlation between them is part of the posterior's shape and is
+paid for in leapfrog steps, which for a Gaussian target grow with the
+square root of the condition number \citep{neal2011}. A single correlation at level $R^2$
 contributes a condition number $(1 + \sqrt{R^2})/(1 - \sqrt{R^2})$, so the
 cost grows at most like $1/\sqrt{1 - R^2}$, against $1/(1 - R^2)$ for the
 blocked sampler.
@@ -84,7 +89,7 @@ already present, the step count was 22.2 at every $R^2$ from 0 to 0.99.
 
 \subsection{How large $R^2$ is in a joint model}
 
-Two things make $R^2$ large. The first is errors in variables: given the
+Two mechanisms can make $R^2$ large. The first is errors in variables: given the
 random effects, each marker trajectory $m_i(t)$ is known and $\alpha$ is
 the coefficient of a known time-varying covariate, which the data pin
 sharply; marginally, $\alpha$ also carries the uncertainty in every
@@ -93,14 +98,20 @@ constant for every subject changes $\alpha\, m_i(t)$ by an amount the log
 baseline hazard absorbs, so $\alpha$ is correlated with the baseline-hazard
 level unless the marker is centred.
 
-We estimated $R^2$ by regressing $\alpha$ on every other sampled quantity
-in a long rotated fit (4 chains of 5000 draws; 960 regressors for
-\texttt{aids} and 649 for \texttt{pbc2}, adjusted for their number), and
-split it by source. On \texttt{aids}, $R^2 = 0.873$; the survival block
+We estimated the linear explained variance $R^2$ by an ordinary
+least-squares regression of the 20,000 draws of $\alpha$ from a long
+rotated fit (4 chains of 5000 draws, close to independent) on every other
+sampled quantity: the random effects, $\beta$, $\gamma$, the
+baseline-hazard coefficients and the variance components, 960 regressors
+for \texttt{aids} and 649 for \texttt{pbc2} after dropping constant
+columns. We report the adjusted $R^2$; with 20,000 draws the adjustment
+changes it by less than 0.01. We also regressed $\alpha$ on each block
+alone. On \texttt{aids}, $R^2 = 0.873$; the survival block
 alone ($\gamma$ and the baseline-hazard coefficients) explained 0.86 of
 $\alpha$'s posterior variance and the random effects alone 0.30. On
-\texttt{pbc2} the figures were 0.853, 0.82 and 0.20. The hazard level, not
-the random effects, is what a blocked sampler mostly conditions away.
+\texttt{pbc2} the figures were 0.853, 0.82 and 0.20. In these two
+datasets, most of the linear explained variance is attributable to the
+survival block rather than the random effects.
 By Proposition~\ref{prop:blocked}(ii), the linear $R^2$ is a lower bound
 on the fraction $r$, so the efficiency it implies for an ideal blocked
 sampler is an upper bound.
@@ -133,4 +144,6 @@ $\gamma$ and the baseline-hazard coefficients: with only the random
 effects conditioned away, the ideal ESS per draw would be about 0.54 and
 0.67. But that block has 10--20 strongly correlated dimensions without
 exact conditional draws, and an adaptive random-walk proposal on it is
-itself slow. NUTS obtains the joint move without any block design.
+itself slow. HMC moves $\alpha$ and $\psi$ along a joint trajectory
+without an explicitly designed block, although how well it does so still
+depends on the metric and on the rest of the geometry.

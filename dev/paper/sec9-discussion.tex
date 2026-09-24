@@ -2,6 +2,14 @@
 
 \subsection{Related work}\label{sec:related}
 
+Approaches to a location degeneracy fall into three groups: remove the
+directions (constraints, projections, integration), reparameterize them
+(centring, non-centring, interweaving), or adapt the sampler's metric to
+them. The rotation is a reparameterization chosen so that the third
+becomes cheap. Unlike removal, it keeps the original parameter space and
+posterior and returns the original parameters.
+
+
 \paragraph{Choosing a parameterization.} That the parameterization of a
 hierarchical model decides how fast a sampler mixes is well established.
 Hierarchical centring \citep{gelfand1995,gelfand1996} removes the location
@@ -82,10 +90,10 @@ Metropolis-within-Gibbs; the function \texttt{stan\_jm} in the rstanarm package
 \citep{brilleman2018} uses NUTS with non-centred random effects and so, we
 expect, meets the same ridge, which we have not tested; INLAjoint
 \citep{rustand2024} uses integrated nested Laplace approximations and does
-not sample. To our knowledge, the application of the data-augmentation
-autocorrelation identity \citep{liu1994} to the association parameter,
-together with the measurement that places most of the shared variance in
-the baseline hazard, has not been reported before.
+not sample. We have not found a previous treatment that applies the
+data-augmentation autocorrelation identity \citep{liu1994} to the
+association parameter together with a measurement of how its shared
+variance divides between the random effects and the baseline hazard.
 
 \subsection{Costs and limits}
 
@@ -120,14 +128,17 @@ over unchanged.
 
 The location degeneracy between fixed and random effects is shared by
 every hierarchical regression with subject-constant covariates, and it
-recurs for the time slope in every model with a random slope. It slows HMC
-on the coefficients an analyst reports. Rotating the standardized random
-effects so that the absorbable directions become a small block of
-coordinates, and giving that block and the fixed effects one dense metric
-block, removes it without changing the model: in simulation by factors of
-14 and 21 for the intercept and time slope, on real joint-model data by
-17--28 on the intercept and subject-constant covariates, and on the same
-coefficients by 5--7 per gradient in two ordinary mixed models. The association parameter of a
+recurs for the time slope in every model with a random slope; this much
+is algebra. In the models studied here it slowed HMC substantially on the
+coefficients an analyst reports. Rotating the standardized random effects
+so that the absorbable directions become a small block of coordinates, and
+giving that block and the fixed effects one dense metric block, whitens
+the resulting ridge without changing the model. In ESS per second the
+gains were 14 and 21 times for the intercept and time slope in
+simulation and 17--28 times for the intercept and subject-constant
+covariates on two joint-model datasets; in ESS per gradient evaluation
+they were 16 and 24 times in simulation and 5--7 times on the same
+coefficients in two ordinary mixed models. The association parameter of a
 joint model is a separate matter. Its posterior variance is largely shared
 with the level of the baseline hazard, and a sampler that updates it
 conditionally pays for that sharing in autocorrelation, whereas HMC pays,

@@ -71,9 +71,10 @@ offers two comparisons: on the centred coefficients, of the rotation with
 centring; on the rest, and on $\alpha$ in particular, of HMC with a blocked
 sampler (Section~\ref{sec:blocked}). JMbayes2 was run with 4 chains of
 16,000 iterations and 4,000 burn-in, well above its defaults, and its time
-is the whole model-fitting call. Its ESS is the one JMbayes2 reports,
-computed by a spectral estimator rather than NumPyro's, so the ratios
-compare two ESS estimators as well as two samplers.
+is the whole model-fitting call. Each package's ESS is its own native
+estimator, so the ratios compare two ESS estimators as well as two
+samplers, and we read them as a software-level comparison rather than a
+controlled benchmark of samplers.
 
 \begin{table}[t]
 \centering
@@ -95,7 +96,8 @@ survival coefficient $\gamma$ & 1.1 & 2.7 & 2.1 & 1.8 \\
 \end{tabular}
 \end{table}
 
-Unrotated, the NUTS fit trailed JMbayes2 by a factor of 17--33 on the
+Using each package's native ESS, the unrotated NUTS fit trailed JMbayes2
+by a factor of 17--33 on the
 coefficients JMbayes2 centres (Table~\ref{tab:jmb}). Rotated, it is at
 parity on them (0.89--0.97) and ahead on the others: 1.8--6.5 times on
 the time slope, 1.8--2.7 on $\gamma$ and 6.5--7.3 on $\alpha$. The rotation

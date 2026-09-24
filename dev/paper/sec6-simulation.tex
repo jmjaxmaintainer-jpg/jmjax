@@ -15,11 +15,16 @@ Section~\ref{sec:setup}, so the fitted model does not contain the true
 hazard exactly. Each design was simulated with three seeds, and every seed
 was fitted twice on the same data: unrotated, and with the rotation and
 its dense block. Both fits report the same parameters, $\beta$ included,
-so the comparison is on the quantities a user reports. Effective sample
-size (ESS) and split $\hat R$ are the multi-chain estimators computed by
-NumPyro \citep{gelman2013}; ESS per second uses each fit's own sampling
-time, and ratios are rotated over unrotated, paired by seed, with the
-geometric mean over seeds reported for each design.
+so the comparison is on the quantities a user reports. The design is
+paired: both arms see the same data. Effective sample size (ESS) is
+NumPyro's (version 0.15) multi-chain autocorrelation estimator, truncated
+by Geyer's initial monotone sequence and without rank normalization
+\citep{geyer1992,gelman2013}, and $\hat R$ is its split-chain version. ESS
+per second divides by the wall time of the whole MCMC run, warm-up and
+compilation included; ESS per gradient divides by the number of leapfrog
+steps in the sampling phase. Ratios are rotated over unrotated, paired by
+seed, with the geometric mean over seeds reported for each design and the
+per-seed range in the text.
 
 The core grid crossed about 9 against about 17 visits per subject with
 $\rho \in \{0, 0.3, 0.6, 0.9\}$ at $N = 300$, and added $N \in \{150,
@@ -58,11 +63,18 @@ visits & $\rho$ & $N$ & unrot. & rotated & ratio & unrot. & rotated & ratio & ra
 Table~\ref{tab:core} gives the results. Over all 30 paired fits the
 geometric-mean gain was 13.5 for the intercept (per seed 4.5--31.6) and
 21.1 for the time slope (5.1--70.8). Wall time was essentially unchanged
-(ratio 1.03, range 0.83--1.10), so the gain is almost entirely in ESS per
-draw: under the rotation the median ESS over 2000 draws was about 3,450
-for both coefficients, above the number of draws, against 180--235
-unrotated. There were no divergences, and the worst $\hat R$ on a reported
-coefficient was 1.002 rotated and 1.044 unrotated.
+(ratio 1.03, range 0.83--1.10), and the rotated fit took slightly fewer
+leapfrog steps per iteration (0.89 times; 0.49--1.02), so per gradient
+evaluation the gains were 15.6 for the intercept and 24.3 for the time
+slope. Almost all of the gain is in ESS per draw (13.9 and 21.7 times):
+under the rotation the median ESS over 2000 draws was about 3,450 for
+both coefficients, more than the number of draws, against 180--235
+unrotated, that is, about 1.7 against 0.1 ESS per draw. There were no divergences, and the worst $\hat R$ on a reported
+coefficient was 1.002 rotated and 1.044 unrotated. Posterior standard
+deviations agreed as well as the means: rotated over unrotated, 1.01 for
+the intercept (per seed 0.94--1.10) and 0.98 for the time slope
+(0.91--1.06), within the Monte Carlo error of the unrotated fit's short
+effective samples.
 
 The pattern follows Proposition~\ref{prop:ridge}. The gain is largest with
 dense visits, where each subject carries the most information about its
@@ -122,7 +134,9 @@ $\rho = 0.95$ at 9 visits ($N = 100$) and at 17 visits ($N = 300$). The
 criterion fixed before the run was that the rotation must not fall below
 the unrotated fit on the reported coefficients in any design. It did not
 (Table~\ref{tab:stress}); the lowest design was 5.5 times and the lowest
-single seed 3.2 times.
+single seed 3.2 times. Per gradient evaluation the gains were 16.7 for the
+intercept and 22.0 for the time slope (geometric means over all designs),
+and the rotated fit took 0.81 times as many leapfrog steps per iteration.
 
 \begin{table}[t]
 \centering
@@ -146,8 +160,12 @@ visits & $N$ & $\rho$ & intercept & time slope & $\alpha$ \\
 
 The design with the fewest subjects and the most information per subject
 gained least, as the fixed-metric residual predicts. Strong correlation
-did not hurt: at $\rho = 0.95$ the gains were as large as or larger than
-at $\rho = 0.3$, because the unrotated fit degrades faster. The predicted
+did not reduce the rotation's advantage: at $\rho = 0.95$ the gains were as
+large as or larger than at $\rho = 0.3$, partly because the unrotated fit
+degrades faster. Nor did it hurt the rotated fit in absolute terms: with
+35 visits its ESS per draw for the intercept was 1.25 at $\rho = 0.95$
+against 0.68 at $\rho = 0.3$ with $N = 50$, and 1.50 against 1.18 with
+$N = 100$. The predicted
 weakness is visible only against a variant that removes the absorbable
 directions from the likelihood's coordinates and restores the reported
 coefficients with an exact correction (Section~\ref{sec:related}). That
@@ -162,16 +180,19 @@ unrotated fit's.
 
 Proposition~\ref{prop:exact} says the rotation cannot change the posterior,
 so a calibration study checks the implementation rather than the method.
-With $N = 300$ and 100 replicates, all passing an $\hat R \leq 1.05$ gate
-on the regression parameters, coverage of 95\% intervals agreed within
+With $N = 300$ and 100 replicates, every one of which passed an $\hat R
+\leq 1.05$ check on the regression parameters (so none was excluded),
+coverage of 95\% intervals agreed within
 0.01 and the ratio of mean posterior standard deviation to the standard
 deviation of posterior means within 0.015 for every estimand
 (Table~\ref{tab:cal}); the Monte Carlo standard error of a 95\% coverage
 is about 0.011. Two features appear in both arms and belong to the model
 and design: slightly wide intervals for $\beta_0$, and an upward bias of
 about 3 Monte Carlo standard errors (2.8\%) in $\alpha$. The latter is
-ordinary finite-sample bias. Neither the spline baseline hazard nor the
-simulator's hazard calibration explained it (paired changes of $-0.0011$
+ordinary finite-sample bias. In a separate study
+(\texttt{dev/study\_alpha\_bias.R}, Appendix~\ref{app:repro}), neither the
+spline baseline hazard nor the simulator's hazard calibration explained
+it (paired changes of $-0.0011$
 and $-0.0016$, standard error about 0.0025), and at $N = 1200$ it fell to
 1.1\%, 1.7 Monte Carlo standard errors, with coverage 0.92.
 

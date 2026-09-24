@@ -16,10 +16,15 @@ MODELS (data written by dev/generality/export_data.R):
 Both use the NON-CENTRED parameterization (b = b_std L^T), which is what
 brms and rstanarm do by default, with NUTS and an adapted diagonal metric.
 
-ARMS:
+ARMS (GEN_ARMS, comma-separated; default all five):
   U       unrotated - the default a user of brms/rstanarm/NumPyro gets
   R_diag  rotated, diagonal metric only
   R       rotated + one dense metric block over (beta, U)   [the method]
+  U_dense unrotated, FULL dense metric over every sampled coordinate
+          (paper review, experiment 1: "why not just adapt a dense metric
+          in the original coordinates?")
+  C       centred parameterization (b sampled directly, b_i ~ N(0, L L')),
+          diagonal metric (review experiment 2: "why not just centre?")
 
 The rotation: Q = orthonormal basis of the absorbable directions (union
 over random-effect columns; constructed below from the design, not from
@@ -34,8 +39,13 @@ METRICS per parameter: ESS per draw, ESS per 1000 gradient evaluations
 (leapfrog steps; machine-independent), ESS/sec, R-hat, and the posterior
 mean difference from U in posterior SDs (exactness check).
 
-    python dev/generality/mixed_models.py              # 3 seeds, ~5-15 min
+    python dev/generality/mixed_models.py              # 3 seeds, all arms
     GEN_SEEDS=1 python dev/generality/mixed_models.py  # quick look
+    GEN_ARMS=U,R_diag,R python dev/generality/mixed_models.py   # original 3 arms
+
+Output: results_<datasets>.csv for the original three arms, and
+results_<datasets>_ext.csv whenever U_dense or C is included, so the
+committed three-arm results are never overwritten.
 """
 import os
 import sys
@@ -153,7 +163,7 @@ def load(name):
 
 
 # ---- model ----------------------------------------------------------------
-def make_model(d, H=None, k=0):
+def make_model(d, H=None, k=0, centred=False):
     import jax.numpy as jnp
     import numpyro
     import numpyro.distributions as dist
@@ -170,13 +180,19 @@ def make_model(d, H=None, k=0):
             L = sigma_b[:, None] * Lc
         else:
             L = sigma_b.reshape(1, 1)
-        if Vr is None:
+        if centred:
+            # centred: the random effects themselves are the sampled coordinates
+            b = numpyro.sample("b", dist.MultivariateNormal(jnp.zeros(q), scale_tril=L)
+                               .expand([N]).to_event(1))
+            b_std = None
+        elif Vr is None:
             b_std = numpyro.sample("b_std", dist.Normal(0.0, 1.0).expand([N, q]).to_event(2))
         else:
             U = numpyro.sample("U", dist.Normal(0.0, 1.0).expand([k, q]).to_event(2))
             V = numpyro.sample("V", dist.Normal(0.0, 1.0).expand([N - k, q]).to_event(2))
             b_std = apply_reflectors(Vr, jnp.concatenate([U, V], axis=0))
-        b = b_std @ L.T
+        if b_std is not None:
+            b = b_std @ L.T
         eta = X @ beta + jnp.sum(Z * b[sid], axis=1)
         if gaussian:
             sigma_e = numpyro.sample("sigma_e", dist.HalfNormal(5.0))
@@ -191,8 +207,8 @@ def run_arm(d, arm, seed, H, k, warmup, samples, chains):
     from numpyro.infer import MCMC, NUTS
     from numpyro.diagnostics import summary
     rot = arm in ("R", "R_diag")
-    model = make_model(d, H if rot else None, k if rot else 0)
-    dense = [("beta", "U")] if arm == "R" else False
+    model = make_model(d, H if rot else None, k if rot else 0, centred=(arm == "C"))
+    dense = [("beta", "U")] if arm == "R" else (True if arm == "U_dense" else False)
     kern = NUTS(model, dense_mass=dense, target_accept_prob=0.8)
     mcmc = MCMC(kern, num_warmup=warmup, num_samples=samples, num_chains=chains,
                 chain_method="sequential", progress_bar=False)
@@ -201,6 +217,10 @@ def run_arm(d, arm, seed, H, k, warmup, samples, chains):
     sec = time.time() - t0
     ex = mcmc.get_extra_fields()
     steps = float(np.sum(np.asarray(ex["num_steps"])))
+    try:   # adapted step size, averaged over chains (a direct view of the geometry)
+        eps = float(np.mean(np.asarray(mcmc.last_state.adapt_state.step_size)))
+    except Exception:
+        eps = float("nan")
     ndiv = int(np.sum(np.asarray(ex["diverging"])))
     s = mcmc.get_samples(group_by_chain=True)
     keep = {k_: v for k_, v in s.items() if k_ in ("beta", "sigma_b", "sigma_e", "L_corr")}
@@ -223,7 +243,8 @@ def run_arm(d, arm, seed, H, k, warmup, samples, chains):
         add("rho", "L_corr", (1, 0))
     n = chains * samples
     for r in out:
-        r.update(arm=arm, seed=seed, sec=sec, grads=steps, ndiv=ndiv,
+        r.update(arm=arm, seed=seed, sec=sec, grads=steps, ndiv=ndiv, step_size=eps,
+                 steps_per_draw=steps / n,
                  ess_per_draw=r["ess"] / n, ess_per_kgrad=1000 * r["ess"] / steps,
                  ess_per_sec=r["ess"] / sec)
     return out
@@ -242,6 +263,8 @@ def main():
     out_csv = None
     rows = []
     names = os.environ.get("GEN_DATA", "orthodont,toenail").split(",")
+    arms = os.environ.get("GEN_ARMS", "U,R_diag,R,U_dense,C").split(",")
+    assert "U" in arms, "the unrotated arm U is the reference for every ratio"
     for name in names:
         d = load(name)
         if d is None:
@@ -257,20 +280,24 @@ def main():
         assert np.allclose(Hr.T @ Hr, np.eye(d["N"]), atol=1e-10)
         assert np.allclose(Hr[:, :k] @ (Hr[:, :k].T @ Q), Q, atol=1e-10)
         for seed in range(1, seeds + 1):
-            for arm in ("U", "R_diag", "R"):
+            for arm in arms:
                 res = run_arm(d, arm, seed, H, k, warmup, samples, chains)
                 for r in res:
                     r["dataset"] = name
                 rows += res
                 i0 = res[0]
-                print(f"   seed {seed} {arm:6s} {i0['sec']:6.1f}s  grads {i0['grads']:9.0f}  "
-                      f"div {i0['ndiv']:3d}  intercept ESS/draw {i0['ess_per_draw']:.3f}  "
+                print(f"   seed {seed} {arm:7s} {i0['sec']:6.1f}s  grads {i0['grads']:9.0f}  "
+                      f"step {i0['step_size']:.4f}  div {i0['ndiv']:3d}  "
+                      f"intercept ESS/draw {i0['ess_per_draw']:.3f}  "
                       f"max R-hat {max(r['rhat'] for r in res):.3f}")
     import csv
     tag = "_".join(sorted(set(r["dataset"] for r in rows))) or "none"
-    out_csv = os.path.join(HERE, f"results_{tag}.csv")
+    ext = "_ext" if ({"U_dense", "C"} & set(arms)) else ""
+    out_csv = os.path.join(HERE, f"results_{tag}{ext}.csv")
     keys = ["dataset", "seed", "arm", "param", "mean", "sd", "ess", "rhat",
             "ess_per_draw", "ess_per_kgrad", "ess_per_sec", "sec", "grads", "ndiv"]
+    if ext:
+        keys += ["step_size", "steps_per_draw"]
     with open(out_csv, "w", newline="") as fh:
         w = csv.DictWriter(fh, fieldnames=keys); w.writeheader()
         for r in rows:
@@ -285,24 +312,32 @@ def summarize(rows):
         R = [r for r in rows if r["dataset"] == name]
         params = list(dict.fromkeys(r["param"] for r in R))
         seeds = sorted(set(r["seed"] for r in R))
+        arms = [a for a in dict.fromkeys(r["arm"] for r in R) if a != "U"]
         print(f"\n{name}: ratios over U, geometric mean over seeds "
-              f"(per gradient | per second); U's own ESS per draw; max R-hat per arm")
-        print(f"{'param':11s} {'U ESS/draw':>10s} {'R_diag/U':>17s} {'R/U':>17s} "
-              f"{'R-hat U':>8s} {'R-hat R':>8s} {'|dmean|/sd':>10s}")
+              f"(per gradient | per second, sec = whole run incl. warm-up); U's ESS per draw")
+        print(f"{'param':11s} {'U ESS/draw':>10s} " + " ".join(f"{a + '/U':>17s}" for a in arms))
         for p in params:
             g = lambda arm, key: {r["seed"]: r[key] for r in R if r["param"] == p and r["arm"] == arm}
             def ratio(arm, key):
                 a, u = g(arm, key), g("U", key)
-                return gm([a[s] / u[s] for s in seeds if s in a and s in u and u[s] > 0])
-            eu = g("U", "ess_per_draw"); rhu = g("U", "rhat"); rhr = g("R", "rhat")
-            mu, mr, sr = g("U", "mean"), g("R", "mean"), g("R", "sd")
-            dm = max(abs(mr[s] - mu[s]) / sr[s] for s in seeds if s in mr and s in mu)
-            print(f"{p:11s} {np.mean(list(eu.values())):10.3f} "
-                  f"{ratio('R_diag','ess_per_kgrad'):7.2f}x|{ratio('R_diag','ess_per_sec'):7.2f}x "
-                  f"{ratio('R','ess_per_kgrad'):7.2f}x|{ratio('R','ess_per_sec'):7.2f}x "
-                  f"{max(rhu.values()):8.3f} {max(rhr.values()):8.3f} {dm:10.3f}")
-        print("(|dmean|/sd: largest difference between U's and R's posterior means, in R's "
-              "posterior SDs, over seeds - the rotation is exact, so this should be Monte Carlo noise.)")
+                return gm([a[s_] / u[s_] for s_ in seeds if s_ in a and s_ in u and u[s_] > 0])
+            eu = g("U", "ess_per_draw")
+            print(f"{p:11s} {np.mean(list(eu.values())):10.3f} " + " ".join(
+                f"{ratio(a,'ess_per_kgrad'):7.2f}x|{ratio(a,'ess_per_sec'):7.2f}x" for a in arms))
+        print("per arm: max R-hat | divergences | mean step size | leapfrog steps per draw | "
+              "mean seconds | largest |mean - mean_U| in SDs")
+        for arm in ["U"] + arms:
+            A = [r for r in R if r["arm"] == arm]
+            dm = 0.0
+            for r in A:
+                u = [x for x in R if x["arm"] == "U" and x["param"] == r["param"] and x["seed"] == r["seed"]]
+                if u and r["sd"] > 0:
+                    dm = max(dm, abs(r["mean"] - u[0]["mean"]) / r["sd"])
+            per_run = {(r["seed"]): r for r in A}
+            print(f"  {arm:7s} {max(r['rhat'] for r in A):6.3f} | {sum(r['ndiv'] for r in per_run.values()):4d} | "
+                  f"{np.mean([r.get('step_size', np.nan) for r in per_run.values()]):.4f} | "
+                  f"{np.mean([r.get('steps_per_draw', np.nan) for r in per_run.values()]):7.1f} | "
+                  f"{np.mean([r['sec'] for r in per_run.values()]):6.1f} | {dm:6.3f}")
 
 
 if __name__ == "__main__":
