@@ -7,8 +7,9 @@ directions (constraints, projections, integration), reparameterize them
 (centring, non-centring, interweaving), or adapt the sampler's metric to
 them. The rotation is a reparameterization chosen so that the third
 becomes cheap: in Section~\ref{sec:generality}, a full dense metric without
-the rotation was 2 to 20 times less efficient per second than the rotation
-with its small block, and centring did not remove the cost. Unlike removal, it keeps the original parameter space and
+the rotation, adapted over the same 1000 warm-up iterations, was 2 to 20
+times less efficient per second than the rotation with its small block, and
+centring did not remove the cost in those low-information settings. Unlike removal, it keeps the original parameter space and
 posterior and returns the original parameters.
 
 

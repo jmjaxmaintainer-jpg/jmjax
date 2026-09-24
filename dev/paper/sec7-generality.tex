@@ -93,22 +93,27 @@ In the toenail model, with $N = 294$ and about 300 coordinates, it was worse tha
 warm-up iterations needed 47.6 leapfrog steps per draw against 21.2, per
 gradient it gained 3.2--3.7 against 5.5--6.7, and each run took 167
 seconds against 7, so per second it was 0.2--0.3 times the \emph{unrotated}
-fit. The rotation is what makes a dense metric affordable: it moves the
-ridge into $p + kq$ coordinates (8 and 6 here), whatever $N$ is.
+fit. This is a result for the tested adaptation budget, not a limit of dense
+NUTS as such: a longer warm-up would estimate the metric better, at a
+cost that grows with the number of coordinates. The rotation is what makes a
+dense metric affordable: it moves the ridge into $p + kq$ coordinates (8 and
+6 here), whatever $N$ is.
 
-\paragraph{Why not centre?} The centred parameterization did not remove the
-degeneracy's cost in either model: per gradient it gave 0.4 on the
+\paragraph{Why not centre?} In these two configurations the centred
+parameterization did not remove the degeneracy's cost: per gradient it gave 0.4 on the
 \texttt{Orthodont} intercept and male coefficients and 0.8--1.1 on toenail's.
 It also brought back the funnel that non-centring avoids. In
 \texttt{Orthodont}, with 4 observations per child, it produced 34
 divergent transitions over the 3 seeds, $\hat R$ up to 1.047 and 52.5
 leapfrog steps per draw, and the slope standard deviation mixed at 0.06
 times the unrotated rate; in toenail, with binary outcomes, the random-effect
-standard deviation mixed at 0.35 times. Both are low-information settings
-per subject, where centring is known to do poorly
-\citep{gelfand1995,browne2009}. The rotation needs no choice between the
-two parameterizations: it keeps the non-centred one and removes the
-location cost within it.
+standard deviation mixed at 0.35 times. Both carry little information per
+subject, the regime in which centring is known to do poorly
+\citep{gelfand1995,browne2009}; where subjects are informative, centring
+can work well, as JMbayes2's centred coefficients do on the joint-model data
+of Section~\ref{sec:realdata}. The rotation needs no choice between the two
+parameterizations: it keeps the non-centred one and removes the location
+cost within it, whatever the information per subject.
 
 Across all arms, posterior means agreed with the unrotated fit's to within
 0.14 posterior standard deviations. Apart from the centred arm, $\hat R
