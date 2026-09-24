@@ -26,28 +26,49 @@ specific claim.
   the fixed-effect / random-effect location ridge.
 
 ### Sweeping, sum-to-zero and other constraints (the closest prior art)
-- Vines, Gilks & Wild (1996), *Statistics and Computing* 6(4), 337-346:
-  "Fitting Bayesian multiple random effects models" - reparameterizes
-  random effects by sweeping out their means (sum-to-zero). **To read**
-  (reference details confirmed from Zanella & Roberts' bibliography;
-  DOI 10.1007/BF00143554). Abstract (checked 23 Sep, Open University
-  repository): Gibbs "can be slow mixing due to what might be regarded as
-  lack of model identifiability"; the fix transforms the random effects
-  and optionally writes their joint prior "as a sequence of univariate
-  conditional distributions". That fits sum-to-zero sweeping (the swept
-  effects have a singular joint prior, hence the conditional
-  factorisation), not non-centring. A third-party AI summary describing
-  it as non-centring (alpha = sigma * z) contradicts the abstract and is
-  not to be used. Secondary source (read 23 Sep): Hallander, Waldmann,
-  Wang & Sillanpaa (2010), *Genetics* 185, 645-654, cite Vines et al.
-  twice - as "transformation of the location parameters in the model" to
-  improve mixing, and as the origin (in WinBUGS) of decomposing a random-
-  effect prior into univariate conditionals, noting Vines et al. did not
-  include covariance between random effects. Both consistent with the
-  sweeping reading. Still need the full text for the exact transform and
-  whether it needs a flat prior on the grand mean to be exact. Almost
-  certainly the origin of the idea behind our retired sweep, and must be
-  cited as such.
+- Vines, Gilks & Wild (1996), *Statistics and Computing* 6(4), 337-346,
+  DOI 10.1007/BF00143554. **Read (full text, 23 Sep).**
+  - Model: y depends on mu + sum_j beta^(j)_{k_j(i)} (M crossed or nested
+    factors, independent exchangeable N(0, sigma_j^2) effects, no
+    covariance), plus other parameters lambda (fixed effects, error
+    variance). Prior on the grand mean mu is PROPER NORMAL, N(mu0,
+    sigma_mu^2) (1e6 in the application). The absorbing fixed effect is
+    the grand mean only; covariates in lambda play no part.
+  - Diagnosis (Sec 2.4): the likelihood is invariant to beta_k -> beta_k +
+    delta_j, mu -> mu - delta_j, so only the prior locates mu and the
+    means of the effects; cites Gelfand, Sahu & Carlin's approximate
+    corr(beta_i, mu) formula - large when sigma^2 is small relative to
+    sigma_beta^2 / m. Same mechanism as our ridge, for the grand mean.
+  - Transform (Sec 3): mu' = mu + sum_j betabar^(j); beta'_k = beta_k -
+    betabar^(j) (sum to zero); delta_j = mu - betabar^(j). Under the
+    Gaussian priors the delta_j are a priori independent of (mu', beta')
+    and appear in no likelihood term, so they are INTEGRATED OUT exactly.
+    They say it "does not alter the model"; the sampled parameters are
+    mu' ~ N(mu0, sigma_mu^2 + sum sigma_j^2/m_j) and the contrasts beta'
+    with singular prior N(0, sigma_j^2 (I - J/m_j)), written as univariate
+    conditionals for BUGS. This is exact marginalisation of the
+    non-identified directions, NOT a constraint that changes the target.
+    Original mu and beta_k are not reported (not of substantive interest,
+    they say); only mu' and the contrasts.
+  - They explicitly warn against the ad hoc alternative - resetting the
+    effects to sum to zero inside each Gibbs iteration and moving the mean
+    onto mu - because "the effect of such interference on the stationary
+    distribution of the Gibbs sampling Markov chain is unknown". Same
+    family of risk as our retired sweep's miscalibration; cite the
+    warning.
+  - Results: Raftery-Lewis dependence factor for mu 16.2 -> 2.7, worst
+    time effect 20.9 -> 5.2; but each BUGS iteration became 10x slower
+    (0.05 s -> 0.5 s) and they report no worthwhile net computational
+    gain in BUGS. Contrast: our rotation costs O(Nk) per gradient and
+    gives net per-second gains.
+  - Scope stated in their Discussion: applies to any model of their form
+    (1) with independent normal priors on the effects, incl. GLMMs and
+    nonlinear RE models; extension to a priori CORRELATED random effects
+    "requires further methodological development" (left open).
+  - Earlier third-party AI summary calling it non-centring was wrong;
+    Hallander et al. (2010, *Genetics* 185, 645-654) cite it correctly as
+    a location-parameter transformation and as the origin of the
+    conditional-decomposition trick in WinBUGS.
 - Stan's `sum_to_zero_vector`: constrains a vector to sum to zero through
   an orthonormal (Helmert-type) basis, related to the isometric log-ratio
   transform. **Verified** (Stan Reference Manual, Constraint Transforms).
@@ -201,13 +222,21 @@ Also established, and to be credited explicitly (from the reading):
 
 Ours, worded "to our knowledge" (never "first"); items 1 and 2 of section
 3 below are now read and did not change these, but narrowed claim 2:
-1. **Rotate, don't constrain.** Stan's sum-to-zero type, sweeping (Vines
-   et al.) and restricted spatial regression all REMOVE the mean or
-   absorbable directions, which changes the model or needs a correction
-   (our retired sweep miscalibrated without one). The rotation KEEPS them
-   as explicit sampled coordinates, so the model, prior and every reported
-   quantity are unchanged, for every value of the random-effect
-   covariance.
+1. **Rotate: keep the directions instead of removing them.** Prior work
+   removes the location directions in one of two ways. (a) By
+   constraint - Stan's sum-to-zero type, Zanella & Roberts' conditioning,
+   restricted spatial regression, our retired sweep - which changes the
+   target unless separately corrected. (b) By exact marginalisation -
+   Vines, Gilks & Wild (1996) - which is exact, but only for the grand-
+   mean direction, with independent exchangeable Gaussian effects and a
+   Gaussian prior on the mean, and reports contrasts rather than the
+   original parameters; correlated effects are left open there. The
+   rotation keeps the directions as sampled coordinates: exact, with any
+   prior on the fixed effects, for correlated random effects (full
+   Sigma), for the covariate-weighted directions of every random-effect
+   column, and returning the original beta and b. Credit Vines et al. as
+   the exact grand-mean precedent; do NOT say prior approaches all change
+   the model.
 2. **The absorbable subspace in general, as sampling coordinates.** Yang
    & Liu have the random-intercept case with subject-mean covariates, for
    Gibbs analysis. Ours: the exact construction for every random-effect
@@ -227,12 +256,11 @@ Ours, worded "to our knowledge" (never "first"); items 1 and 2 of section
 1. ~~Browne et al. (2009)~~ - READ 23 Sep: orthogonal = Gram-Schmidt
    among fixed-effect predictors; orthogonality to cluster indicators
    posed as future work (see section 1).
-2. Vines, Gilks & Wild (1996) - exact form of their sweeping. Still
-   needed.
+2. ~~Vines, Gilks & Wild (1996)~~ - READ 23 Sep: exact marginalisation of
+   the grand-mean directions (see section 1); claim 1 reworded.
 3. ~~Zanella & Roberts (2021)~~ - READ 23 Sep incl. discussion: see
    section 1; Yang & Liu discussion is the closest prior art for claim 2.
 4. Gelfand, Sahu & Carlin (1996) GLMM paper; Gelman et al. (2008).
 5. The marginalized-LMM HMC paper, to cite correctly.
 
-Item 2 can still change claim 1; the rest affect citations only.
-These need the full texts, which should come through your library access.
+All claim-changing items are read. Items 4-5 affect citations only.
