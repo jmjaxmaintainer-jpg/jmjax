@@ -69,14 +69,19 @@ offers two comparisons: on the centred coefficients, of the rotation with
 centring; on the rest, and on $\alpha$ in particular, of HMC with a blocked
 sampler (Section~\ref{sec:blocked}). JMbayes2 was run with 4 chains of
 16,000 iterations and 4,000 burn-in, well above its defaults, and its time
-is the whole model-fitting call. Each package's ESS is its own native
-estimator, so the ratios compare two ESS estimators as well as two
-samplers, and we read them as a software-level comparison rather than a
-controlled benchmark of samplers.
+is the whole model-fitting call. To keep the ESS estimator from driving the
+comparison, we saved the draws of all three fits and computed every ESS in
+Table~\ref{tab:jmb} with the same estimator, NumPyro's. The ratios moved
+little: with the rank-normalized bulk ESS of the \texttt{posterior}
+package applied to all fits they were within 5\% of those in the table,
+and with each package's own estimator within 18\% (JMbayes2's own
+estimator is somewhat more generous to it). These fits are a separate run
+from those of Table~\ref{tab:real}, with the same settings.
 
 \begin{table}[t]
 \centering
-\caption{ESS per second relative to JMbayes2 (same data, 3 seeds).}
+\caption{ESS per second relative to JMbayes2 (same data, geometric means
+over 3 seeds; one ESS estimator, NumPyro's, for all fits).}
 \label{tab:jmb}
 \small
 \begin{tabular}{l rr rr}
@@ -85,22 +90,21 @@ controlled benchmark of samplers.
 \cmidrule(lr){2-3}\cmidrule(lr){4-5}
 & unrotated & rotated & unrotated & rotated \\
 \midrule
-intercept & 0.04 & 0.97 & 0.05 & 0.89 \\
-subject-constant covariates & 0.03--0.04 & 0.89--0.95 & 0.06 & 0.92 \\
-time slope & 2.8 & 6.5 & 0.42 & 1.8 \\
-$\alpha$ & 3.2 & 6.5 & 7.6 & 7.3 \\
-survival coefficient $\gamma$ & 1.1 & 2.7 & 2.1 & 1.8 \\
+intercept & 0.04 & 0.97 & 0.05 & 0.93 \\
+subject-constant covariates & 0.03--0.04 & 0.88--0.98 & 0.06 & 0.98 \\
+time slope & 3.3 & 7.7 & 0.42 & 1.9 \\
+$\alpha$ & 3.5 & 7.2 & 8.2 & 7.9 \\
+survival coefficient $\gamma$ & 1.2 & 2.8 & 2.1 & 1.8 \\
 \bottomrule
 \end{tabular}
 \end{table}
 
-Using each package's native ESS, the unrotated NUTS fit trailed JMbayes2
-by a factor of 17--33 on the
+The unrotated NUTS fit trailed JMbayes2 by a factor of 17--33 on the
 coefficients JMbayes2 centres (Table~\ref{tab:jmb}). Rotated, it is at
-parity on them (0.89--0.97) and ahead on the others: 1.8--6.5 times on
-the time slope, 1.8--2.7 on $\gamma$ and 6.5--7.3 on $\alpha$. The rotation
+parity on them (0.88--0.98) and ahead on the others: 1.9--7.7 times on
+the time slope, 1.8--2.8 on $\gamma$ and 7.2--7.9 on $\alpha$. The rotation
 thus recovers what hierarchical centring buys on the regression
 coefficients, while keeping the non-centred parameterization for the
-random-effect variances. The lead on $\alpha$ is present without the rotation, and Section~\ref{sec:blocked} attributes most of its per-draw part to blocked updating; the rotation added to it on \texttt{aids} (3.2 to 6.5) by shortening NUTS's trajectories. JMbayes2 draws
-4.7--7.1 times faster per second but keeps one effective draw in 29--36 for
+random-effect variances. The lead on $\alpha$ is present without the rotation, and Section~\ref{sec:blocked} attributes most of its per-draw part to blocked updating; the rotation added to it on \texttt{aids} (3.5 to 7.2) by shortening NUTS's trajectories. JMbayes2 draws
+4.6--7.3 times faster per second but keeps one effective draw in 31--40 for
 $\alpha$ (Figure~\ref{fig:alpha}).

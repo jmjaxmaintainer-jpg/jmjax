@@ -65,7 +65,7 @@ NumPyro. There the random effects also enter the hazard through the current
 marker value, and the survival submodel adds a condition on which
 directions remain absorbable. Joint models also raise a second question.
 Their primary estimand is the association parameter $\alpha$, the log
-hazard ratio per unit of the current marker value. On it, NUTS gave 3 to 8 times the ESS per second of the Metropolis-within-Gibbs sampler of JMbayes2 \citep{jmbayes2}, with no reparameterization at all, in a comparison using each package's own ESS estimator. We explain most of the per-draw part of that gap: for an ideal two-block sampler that draws $\alpha$ exactly given the rest, the
+hazard ratio per unit of the current marker value. On it, NUTS gave 3 to 8 times the ESS per second of the Metropolis-within-Gibbs sampler of JMbayes2 \citep{jmbayes2}, with no reparameterization at all (3.5 and 8.2 times on two real datasets with one ESS estimator applied to both). We explain most of the per-draw part of that gap: for an ideal two-block sampler that draws $\alpha$ exactly given the rest, the
 lag-1 autocorrelation equals the share of $\alpha$'s posterior variance
 the rest explains \citep{liu1994}, and in the two joint models we measured that share was large, mostly through the survival parameters, plausibly because $\alpha$ trades off against the level of the log baseline hazard.
 

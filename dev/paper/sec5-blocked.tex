@@ -3,8 +3,9 @@
 The location degeneracy does not involve $\alpha$. Yet on $\alpha$,
 \texttt{jmjax}'s NUTS was 3--8 times more efficient per second than
 JMbayes2 even without the rotation: 5.7--8.1 times across a replicated
-simulation sweep with 1 to 12 covariates, and 3.2 and 7.6 times on the two
-datasets of Section~\ref{sec:realdata}. JMbayes2 updates the parameters in
+simulation sweep with 1 to 12 covariates (each package's own ESS
+estimator), and 3.5 and 8.2 times on the two datasets of
+Section~\ref{sec:realdata} (one estimator for both). JMbayes2 updates the parameters in
 blocks, with adaptive random-walk Metropolis steps for the coefficients.
 This section argues that, on the two datasets measured, about three quarters (on a log scale) of the ESS-per-draw gap on $\alpha$ is what even an ideal two-block sampler would incur, so that most of it is a property of blocked updating rather than of either implementation.
 
@@ -133,10 +134,12 @@ Figure~\ref{fig:alpha} puts the measurements against the prediction. At
 the measured $R^2$ an ideal two-block sampler keeps at most 0.068
 (\texttt{aids}) and 0.079 (\texttt{pbc2}) effective draws per draw, one
 in 13--15.
-JMbayes2 achieved 0.035 and 0.028, and \texttt{jmjax}'s NUTS 1.05 and 1.72
-in the same long fit. On a log scale, the ideal benchmark accounts for
-80\% of the measured ESS-per-draw gap on \texttt{aids} (15.5 of 30 times)
-and 75\% on \texttt{pbc2} (21.7 of 61 times); the rest, a factor of two to
+JMbayes2 achieved 0.032 and 0.025 (its draws, from the runs of
+Table~\ref{tab:jmb}, analysed with NumPyro's estimator; its own estimator
+gives 0.035 and 0.028), and \texttt{jmjax}'s NUTS 1.05 and 1.72 in the long
+fit. On a log scale, the ideal benchmark accounts for 78\% of the measured
+ESS-per-draw gap on \texttt{aids} (15.4 of 33 times) and 73\% on
+\texttt{pbc2} (21.7 of 68 times); the rest, a factor of two to
 three, is attributable to the implementation. A blocked sampler could
 escape most of the structural part by updating $\alpha$ jointly with
 $\gamma$ and the baseline-hazard coefficients: with only the random

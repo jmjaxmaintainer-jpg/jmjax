@@ -185,11 +185,13 @@ def fig2():
 
 
 # ---------------------------------------------------------------- Figure 3
-# Vignette Section 8.1 (dev/alpha_missing_information.R, long rotated fit,
-# 4 chains x 5000; JMbayes2 from dev/study_realdata_rotate.R, 3 seeds).
+# R^2 and jmjax's ESS/draw: dev/alpha_missing_information.R (long rotated
+# fit, 4 chains x 5000). JMbayes2's ESS/draw: dev/study_common_ess.R, its
+# draws analysed with NumPyro's estimator (3 seeds; JMbayes2's own
+# estimator gives 0.035 and 0.028).
 ALPHA = {
-    "aids": dict(R2=0.873, R2_re=0.30, jmb=0.035, jmjax=1.05),
-    "pbc2": dict(R2=0.853, R2_re=0.20, jmb=0.028, jmjax=1.72),
+    "aids": dict(R2=0.873, R2_re=0.30, jmb=0.032, jmjax=1.05),
+    "pbc2": dict(R2=0.853, R2_re=0.20, jmb=0.025, jmjax=1.72),
 }
 
 

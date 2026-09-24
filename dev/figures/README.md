@@ -38,7 +38,8 @@ gives the comparison between converged fits.
 of an ideal two-block sampler, (1 - R^2)/(1 + R^2) (Proposition 8). R^2 of
 alpha on all other parameters, measured from a long NUTS fit, is 0.873
 (aids) and 0.853 (pbc2); black open markers are the ideal sampler there.
-JMbayes2 does 2-3 times worse than that ideal; jmjax's NUTS draws are
+JMbayes2 (its draws analysed with the same NumPyro ESS estimator,
+dev/study_common_ess.R) does 2-3 times worse than that ideal; jmjax's NUTS draws are
 effectively independent. Green open markers: the ideal if alpha were
 updated in one block with gamma and the baseline-hazard coefficients, so
 that only the random effects are conditioned away (R^2 0.30 and 0.20).
