@@ -106,7 +106,7 @@ jx_control <- function(arm, seed) {
 POP <- "^beta_|^alpha$|^gamma_|^sigma_e$|^sigma_b|^rho$"
 
 fit_jx <- function(ds, d, pf, arm, seed) {
-  f <- jm_fit_prefit(pf$lme, pf$cox, data_surv = d$ds, time_var = d$time_var,
+  f <- jmjax:::jm_fit_prefit(pf$lme, pf$cox, data_surv = d$ds, time_var = d$time_var,
                      method = "spline-PH-mcmc", control = jx_control(arm, seed))
   cv <- f$convergence
   if (arm == "R" && !isTRUE(cv$orthogonalize$rotation$applied))
@@ -157,7 +157,7 @@ for (ds in DATASETS) {
   cat(sprintf("\n== %s: n = %d subjects, %d longitudinal obs, %.0f%% events\n", ds,
               length(unique(d$dl$id)), nrow(d$dl), 100 * mean(d$ds$event)))
   # Throwaway fit so the first timed fit does not carry JAX compilation.
-  invisible(suppressWarnings(try(jm_fit_prefit(pf$lme, pf$cox, data_surv = d$ds,
+  invisible(suppressWarnings(try(jmjax:::jm_fit_prefit(pf$lme, pf$cox, data_surv = d$ds,
     time_var = d$time_var, method = "spline-PH-mcmc",
     control = utils::modifyList(jx_control("R", 1L), list(num_warmup = 5L, num_samples = 5L))),
     silent = TRUE)))

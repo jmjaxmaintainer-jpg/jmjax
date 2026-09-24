@@ -237,13 +237,13 @@ for (kk in K_LIST) for (nn in N_LIST) {
       # the report, just not inside the steady-state throughput number.
       ctl_w <- utils::modifyList(base, list(num_warmup = 5L, num_samples = 5L))
       t_cmp <- system.time(suppressWarnings(try(
-        jm_fit_prefit(lme_fit, cox_fit, data_surv = ds, time_var = "time",
+        jmjax:::jm_fit_prefit(lme_fit, cox_fit, data_surv = ds, time_var = "time",
                       method = "spline-PH-mcmc", control = ctl_w),
         silent = TRUE)))
 
       ctl <- utils::modifyList(base, list(num_warmup = WARMUP,
                                           num_samples = SAMPLES))
-      tm <- system.time(f <- jm_fit_prefit(lme_fit, cox_fit, data_surv = ds,
+      tm <- system.time(f <- jmjax:::jm_fit_prefit(lme_fit, cox_fit, data_surv = ds,
                                            time_var = "time",
                                            method = "spline-PH-mcmc", control = ctl))
       ps <- f$posterior_samples

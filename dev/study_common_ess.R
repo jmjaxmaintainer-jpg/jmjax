@@ -112,7 +112,7 @@ name_cols <- function(M, prefix) {
   M
 }
 draws_jx <- function(ds, d, pf, arm, seed) {
-  f <- jm_fit_prefit(pf$lme, pf$cox, data_surv = d$ds, time_var = d$time_var,
+  f <- jmjax:::jm_fit_prefit(pf$lme, pf$cox, data_surv = d$ds, time_var = d$time_var,
                      method = "spline-PH-mcmc", control = jx_control(arm, seed))
   cv <- f$convergence
   if (arm == "R" && !isTRUE(cv$orthogonalize$rotation$applied))
@@ -185,7 +185,7 @@ for (ds in DATASETS) {
   d <- load_data(ds); pf <- prefit(d)
   cat(sprintf("\n== %s\n", ds))
   if (any(ARMS %in% c("A", "R")))   # throwaway fit so the first timed fit carries no compilation
-    invisible(suppressWarnings(try(jm_fit_prefit(pf$lme, pf$cox, data_surv = d$ds,
+    invisible(suppressWarnings(try(jmjax:::jm_fit_prefit(pf$lme, pf$cox, data_surv = d$ds,
       time_var = d$time_var, method = "spline-PH-mcmc",
       control = utils::modifyList(jx_control("R", 1L), list(num_warmup = 5L, num_samples = 5L))),
       silent = TRUE)))

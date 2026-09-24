@@ -104,7 +104,7 @@ for (ds in c("aids", "pbc2")) {
                 num_warmup = WARMUP, num_samples = SAMPLES,
                 num_chains = CHAINS, seed = s, progress_bar = FALSE)
     if (arm == "A") ctl$rotate_absorbable <- FALSE
-    f <- jm_fit_prefit(lme_fit, cox_fit, data_surv = d$ds, time_var = d$time_var,
+    f <- jmjax:::jm_fit_prefit(lme_fit, cox_fit, data_surv = d$ds, time_var = d$time_var,
                        method = "spline-PH-mcmc", control = ctl)
     cv <- f$convergence
     applied <- isTRUE(cv$orthogonalize$rotation$applied)

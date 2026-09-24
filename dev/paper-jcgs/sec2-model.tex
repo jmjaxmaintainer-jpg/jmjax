@@ -33,9 +33,11 @@ enters a proportional hazards model,
 h_i(t) = h_0(t)\exp\{\gamma^{\top} w_i + \alpha\, m_i(t)\},
 \end{equation}
 with baseline covariates $w_i$ and association parameter $\alpha$, where
-$x_i(t)$ and $z_i(t)$ are the design rows at time $t$. In \texttt{jmjax}
-the log baseline hazard is a cubic B-spline with a second-order
-random-walk prior and the cumulative hazard is computed by Gauss--Legendre
+$x_i(t)$ and $z_i(t)$ are the design rows at time $t$. In the \texttt{jmjax}
+fits reported here the log baseline hazard is a cubic B-spline with five
+interior knots and a second-order random-walk prior (the package's
+penalized option; its default puts independent normal priors on the
+coefficients), and the cumulative hazard is computed by Gauss--Legendre
 quadrature, so the random effects enter the likelihood through $\eta_{ij}$
 and through $m_i(t)$ at each event time and quadrature node. The priors on
 $\beta$, $\gamma$ and $\alpha$ are normal, those on the random-effect

@@ -86,7 +86,7 @@ for (ds in c("aids", "pbc2")) {
   lme_fit <- lme(d$lform, random = d$rform, data = d$dl,
                  control = lmeControl(opt = "optim", msMaxIter = 200, niterEM = 100))
   cox_fit <- coxph(Surv(stime, event) ~ drug, data = d$ds)
-  f <- jm_fit_prefit(lme_fit, cox_fit, data_surv = d$ds, time_var = d$time_var,
+  f <- jmjax:::jm_fit_prefit(lme_fit, cox_fit, data_surv = d$ds, time_var = d$time_var,
                      method = "spline-PH-mcmc",
                      control = list(n_interior_knots = 5, spline_prior = "penalized",
                                     rw2_implementation = "vectorized", dense_mass_spline = TRUE,
