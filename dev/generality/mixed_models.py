@@ -27,6 +27,9 @@ column names), H = an orthogonal N x N matrix whose first k columns span
 Q, and b_std = H [U; V] with U [k, q], V [N-k, q] iid N(0, 1). Exact:
 b_std is iid N(0, 1) either way.
 
+The rotation is applied as k Householder reflections (O(Nk) per column),
+as in jmjax, not as a dense N x N matrix.
+
 METRICS per parameter: ESS per draw, ESS per 1000 gradient evaluations
 (leapfrog steps; machine-independent), ESS/sec, R-hat, and the posterior
 mean difference from U in posterior SDs (exactness check).
@@ -88,6 +91,30 @@ def absorbable_basis(X, Z, sid, N, tol=1e-9):
     return U_[:, :k], k, info
 
 
+def householder_reflectors(Q):
+    """k unit Householder vectors [N, k] with H = H_1 ... H_k orthogonal and
+    H[:, :k] spanning Q. Applying H costs O(N k) per column, against
+    O(N^2) for a dense N x N matrix - the form jmjax uses."""
+    A = np.array(Q, float); N, k = A.shape
+    Vr = np.zeros((N, k))
+    for j in range(k):
+        x = A[j:, j]
+        alpha = -np.copysign(np.linalg.norm(x), x[0] if x[0] != 0 else 1.0)
+        v = x.copy(); v[0] -= alpha
+        v /= np.linalg.norm(v)
+        Vr[j:, j] = v
+        A = A - 2.0 * np.outer(Vr[:, j], Vr[:, j] @ A)
+    return Vr
+
+
+def apply_reflectors(Vr, M, xp=np):
+    """H @ M with H = H_1 ... H_k, H_j = I - 2 v_j v_j'."""
+    for j in range(Vr.shape[1] - 1, -1, -1):
+        v = Vr[:, j:j + 1]
+        M = M - 2.0 * (v @ (v.T @ M))
+    return M
+
+
 def completion(Q):
     """Orthogonal [N, N] matrix whose first k columns span Q."""
     H, _ = np.linalg.qr(Q, mode="complete")
@@ -132,7 +159,7 @@ def make_model(d, H=None, k=0):
     import numpyro.distributions as dist
     X, Z, y = jnp.asarray(d["X"]), jnp.asarray(d["Z"]), jnp.asarray(d["y"])
     sid = jnp.asarray(d["sid"]); N = d["N"]; p = X.shape[1]; q = Z.shape[1]
-    Hj = None if H is None else jnp.asarray(H)
+    Vr = None if H is None else jnp.asarray(H)      # Householder vectors [N, k]
     gaussian = d["family"] == "gaussian"
 
     def model():
@@ -143,12 +170,12 @@ def make_model(d, H=None, k=0):
             L = sigma_b[:, None] * Lc
         else:
             L = sigma_b.reshape(1, 1)
-        if Hj is None:
+        if Vr is None:
             b_std = numpyro.sample("b_std", dist.Normal(0.0, 1.0).expand([N, q]).to_event(2))
         else:
             U = numpyro.sample("U", dist.Normal(0.0, 1.0).expand([k, q]).to_event(2))
             V = numpyro.sample("V", dist.Normal(0.0, 1.0).expand([N - k, q]).to_event(2))
-            b_std = Hj @ jnp.concatenate([U, V], axis=0)
+            b_std = apply_reflectors(Vr, jnp.concatenate([U, V], axis=0))
         b = b_std @ L.T
         eta = X @ beta + jnp.sum(Z * b[sid], axis=1)
         if gaussian:
@@ -212,7 +239,7 @@ def main():
     warmup = int(os.environ.get("GEN_WARMUP", "1000"))
     samples = int(os.environ.get("GEN_SAMPLES", "1000"))
     chains = int(os.environ.get("GEN_CHAINS", "4"))
-    out_csv = os.path.join(HERE, "results.csv")
+    out_csv = None
     rows = []
     names = os.environ.get("GEN_DATA", "orthodont,toenail").split(",")
     for name in names:
@@ -224,7 +251,11 @@ def main():
               f"absorbable directions per RE column {info}, union k = {k}")
         if Q is None:
             print("   no absorbable direction - nothing to rotate"); continue
-        H = completion(Q)
+        Hd = completion(Q)                      # dense check of the construction
+        H = householder_reflectors(Q)
+        Hr = apply_reflectors(H, np.eye(d["N"]))
+        assert np.allclose(Hr.T @ Hr, np.eye(d["N"]), atol=1e-10)
+        assert np.allclose(Hr[:, :k] @ (Hr[:, :k].T @ Q), Q, atol=1e-10)
         for seed in range(1, seeds + 1):
             for arm in ("U", "R_diag", "R"):
                 res = run_arm(d, arm, seed, H, k, warmup, samples, chains)
@@ -236,6 +267,8 @@ def main():
                       f"div {i0['ndiv']:3d}  intercept ESS/draw {i0['ess_per_draw']:.3f}  "
                       f"max R-hat {max(r['rhat'] for r in res):.3f}")
     import csv
+    tag = "_".join(sorted(set(r["dataset"] for r in rows))) or "none"
+    out_csv = os.path.join(HERE, f"results_{tag}.csv")
     keys = ["dataset", "seed", "arm", "param", "mean", "sd", "ess", "rhat",
             "ess_per_draw", "ess_per_kgrad", "ess_per_sec", "sec", "grads", "ndiv"]
     with open(out_csv, "w", newline="") as fh:
