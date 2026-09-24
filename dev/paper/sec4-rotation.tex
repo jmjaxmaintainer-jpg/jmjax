@@ -1,0 +1,199 @@
+\section{The rotation and the metric}\label{sec:rotation}
+
+\subsection{Construction and exactness}
+
+Complete $Q$ to an orthogonal matrix $R = [\,Q \mid Q_{\perp}\,] \in
+\R^{N \times N}$. We use the Householder completion: $R$ is stored as $k$
+reflectors, so applying $R$ or $R^{\top}$ to a vector costs $O(Nk)$ and no
+$N \times N$ matrix is formed. Instead of $\Bstd$, sample
+\begin{equation}\label{eq:rot}
+\Bstd = R \begin{bmatrix} U \\ V \end{bmatrix} = Q U + Q_{\perp} V,
+\qquad B = \Bstd L^{\top},
+\end{equation}
+where $U \in \R^{k \times q}$ and $V \in \R^{(N-k) \times q}$ have iid
+$\N(0,1)$ entries.
+
+\begin{proposition}[Exactness]\label{prop:exact}
+For any fixed orthogonal $R$: (i) the map $(U, V) \mapsto \Bstd$ is linear
+and volume-preserving; (ii) the prior it induces on $\Bstd$ is the original
+iid $\N(0,1)$ prior; (iii) the posterior of $(B, \theta)$ is identical to
+that of the non-centred parameterization (\ref{eq:ncp}), for every value of
+$L$; and (iv) $U = Q^{\top} \Bstd$.
+\end{proposition}
+
+\begin{proof}
+$\operatorname{vec}(\Bstd) = (I_q \otimes R)\operatorname{vec}([U; V])$
+and $I_q \otimes R$ is orthogonal, which gives (i), and (ii) because
+$(I_q \otimes R)\,\N(0, I_{Nq}) = \N(0, I_{Nq})$. The likelihood depends
+on $(\Bstd, \theta)$ only, and their joint prior is unchanged, so the
+posterior pushed forward to $(B, \theta)$ is unchanged: (iii). (iv)
+follows from $Q^{\top} Q_{\perp} = 0$.
+\end{proof}
+
+Two choices in (\ref{eq:rot}) matter. First, the rotation acts on the
+sampled, standardized coordinates. Rotating the draws after sampling would
+change nothing about the sampler's geometry, and sampling rotated
+\emph{centred} effects $R^{\top} B$ would reintroduce the dependence on
+$\sigma_b$ that non-centring removes. Second, $R$ acts on the subject
+index, the same for every column, while $L$ acts on the column index. The
+two commute, $R^{\top} B = (R^{\top} \Bstd) L^{\top}$, which is why the
+construction is exact for every value of the covariance with no
+correction. A rotation of the stacked $Nq$-vector designed to align
+particular intercept-slope combinations with coordinate axes would also be
+exact, but those combinations depend on $L$, so a fixed rotation of that
+kind would align them only at one value of the correlation.
+
+For a random intercept alone ($q = 1$), \texttt{jmjax} samples the
+centred effects $b \sim \N(0, \sigma_b^2 I_N)$ directly, and the rotation
+is applied to $b$. Because the covariance is a multiple of the identity,
+$R^{\top} b$ has the same prior for every $\sigma_b$ and
+Proposition~\ref{prop:exact} holds unchanged.
+
+\subsection{Where the degeneracy goes}
+
+\begin{lemma}[Localization]\label{lem:local}
+Let $v \in \A_c$ with witness $d$. In the coordinates
+$(\beta, U, V)$, the likelihood-invariant shift $(\beta, B e_c) \mapsto
+(\beta + d, B e_c + v)$ is
+\[
+\beta \mapsto \beta + d, \qquad
+U \mapsto U + (Q^{\top} v)\, e_c^{\top} (L^{\top})^{-1}, \qquad
+V \mapsto V,
+\]
+for every value of $L$. Every such shift therefore lies in the coordinate
+block $(\beta, U)$, of dimension $p + kq$.
+\end{lemma}
+
+\begin{proof}
+Adding $v$ to column $c$ of $B = \Bstd L^{\top}$ adds $\Delta = v\,
+e_c^{\top} (L^{\top})^{-1}$ to $\Bstd$. Every column of $\Delta$ is a
+multiple of $v \in \spn(Q)$, so $Q_{\perp}^{\top} \Delta = 0$ and
+$Q^{\top} \Delta = (Q^{\top} v)\, e_c^{\top} (L^{\top})^{-1}$.
+\end{proof}
+
+Without the rotation, the same shift has a component on every one of the
+$N$ rows of $\Bstd$. With it, the flat directions of the likelihood mix
+the intercept and slope columns of $U$ in proportions set by the sampled
+$L$, but always stay inside the fixed block $(\beta, U)$. This is why every
+column is rotated by the same $Q$: rotating the intercept column alone
+captures the directions only when the random effects are uncorrelated.
+
+\subsection{The ridge, and the dense block}
+
+Being flat in the likelihood is not the same as being flat in the
+posterior: along each invariant direction the priors on $\beta$ and $\Bstd$
+still locate the split. The next result describes the ridge this leaves in
+one plane.
+
+\begin{proposition}[The ridge]\label{prop:ridge}
+Consider one invariant direction in the reduced model that holds every
+other coordinate fixed. Let $\tilde\beta$ be the coordinate of $\beta$ along
+the witness, with a flat prior, and $u$ the matching coordinate of $U$,
+with prior $\N(0,1)$, and suppose the likelihood informs only $s =
+\tilde\beta + \kappa u$, with precision $\tau$. Then
+\begin{enumerate}
+\item[(i)] $\corr(\tilde\beta, u \mid y) = -\{1 + 1/(\tau\kappa^2)\}^{-1/2}$;
+\item[(ii)] under a diagonal metric, the whitened covariance of the plane
+has eigenvalues $1 \pm |r|$, $r$ the correlation in (i): it is never slow
+along the ridge, but has a narrow direction of variance $1 - |r| \approx
+1/(2\tau\kappa^2)$, which caps the step size;
+\item[(iii)] a dense metric over $(\tilde\beta, u)$ whitens the plane
+exactly;
+\item[(iv)] for the mean direction of the random intercepts, $\kappa =
+\sigma_0/\sqrt{N}$ and $\tau = \sum_i n_i/\sigma_e^2$, so $\tau\kappa^2 =
+\bar n\,\sigma_0^2/\sigma_e^2$, the information each subject carries about
+its own level. It does not depend on $N$.
+\end{enumerate}
+\end{proposition}
+
+\begin{proof}
+The posterior precision of $(\tilde\beta, u)$ is $\tau (1, \kappa)^{\top}
+(1, \kappa) + \operatorname{diag}(0, 1)$, whose inverse is
+\[
+\tau^{-1}\begin{pmatrix} 1 + \tau\kappa^2 & -\tau\kappa \\ -\tau\kappa
+& \tau \end{pmatrix};
+\]
+this gives (i). Whitening a $2 \times 2$ covariance
+by its diagonal gives its correlation matrix, whose eigenvalues are $1 \pm
+|r|$: (ii). (iii) is the definition of a dense metric. For (iv), moving
+the mean direction by $u$ moves every subject's level by $\sigma_0
+u/\sqrt{N}$, and the data inform a common shift of all levels with
+precision $\sum_i n_i / \sigma_e^2$.
+\end{proof}
+
+The statement is exact for the mean intercept direction, whose witness is
+the single coordinate $\beta_0$. For other directions the witness mixes
+several coordinates of $\beta$, and (ii)--(iii) then describe the whole
+$(\beta, U)$ block. The rotation alone therefore trades a direction spread
+over $N$ coordinates for one concentrated in a few, but under a diagonal
+metric that direction is still narrow, and narrowest where the
+degeneracy is worst: many visits per subject, or little noise. A dense
+metric block over $(\beta, U)$ removes it. Without the rotation, the same
+fix would need a dense metric over all $Nq$ random-effect coordinates, too
+large to adapt reliably during warm-up and $O(N^2 q^2)$ per gradient.
+
+Figure~\ref{fig:ridge} shows this in the exact Gaussian posterior of the
+longitudinal submodel with the variance components fixed at the
+simulation values of Section~\ref{sec:simulation} ($N = 300$, 2--11
+visits, $\rho = 0.3$, $\sigma_e = 0.3$). The conditional correlation of
+$\beta_0$ and the mean intercept direction is $-0.97$ in the unrotated
+coordinates and still $-0.97$ after rotation with a diagonal metric; the
+dense block brings it to $-0.01$. The condition number of the whole whitened
+posterior falls from 4,521 to 368. Across the designs examined, the dense
+block cut it by factors of 5 to 70, for example from 12,037 to 174 with
+8--20 visits per subject; what remains is conditioning any fit has, such as
+the correlation between each subject's own intercept and slope.
+
+\begin{figure}[t]
+\centering
+\includegraphics[width=\textwidth]{fig1_ridge.pdf}
+\caption{The location ridge and what removes it. Exact conditional
+posterior of the fixed intercept $\beta_0$ and the mean intercept
+direction $u$, through the mode, in the units the HMC metric sees them
+(Gaussian longitudinal submodel, variance components fixed; $N = 300$,
+2--11 visits, $\rho = 0.3$, $\sigma_e = 0.3$). Solid: 1, 2 and 3 standard
+deviation contours; dashed: the 2 standard deviation contour of a
+perfectly scaled target. (a) Unrotated coordinates, diagonal metric: $u$
+is spread over all $N$ random intercepts and trades off almost one for one
+with $\beta_0$. (b) The rotation makes $u$ a single coordinate but leaves
+the ridge. (c) The dense metric block over $(\beta, U)$ removes it.
+``cond.'' is the condition number of the whole whitened posterior.}
+\label{fig:ridge}
+\end{figure}
+
+\subsection{What a fixed metric cannot do}\label{sec:residual}
+
+By Lemma~\ref{lem:local}, the ridge's orientation depends on the sampled
+$L$: on $\sigma_0$ through $\kappa \propto \sigma_0$, and, for directions
+shared between the intercept and slope columns, on the correlation $\rho$.
+NUTS adapts one fixed metric. For the $\sigma_0$ part the loss can be
+bounded. Let $\delta$ be the posterior coefficient of variation of
+$\sigma_0$, roughly $1/\sqrt{2N}$. A metric that whitens the plane exactly
+at one value of $\sigma_0$ leaves a condition number of $1 +
+O(\delta\sqrt{\tau\kappa^2})$ elsewhere in the posterior, that is,
+\[
+1 + O\Bigl(\sqrt{\bar n\,\sigma_0^2 / (\sigma_e^2 N)}\Bigr),
+\]
+which is small when there are many subjects relative to the information
+each carries, the usual regime for longitudinal data. In the exact
+Gaussian model of Figure~\ref{fig:ridge} the worst block condition number
+over $\sigma_0 (1 \pm \delta)$ was 1.76, 1.50 and 1.31 for $N = 150$, 300
+and 600 with 2--11 visits, and 2.71, 2.05 and 1.64 with 8--20 visits. The
+analysis does not cover the $\rho$ part, which grows as $|\rho| \to 1$.
+These are the two regimes Section~\ref{sec:stress} stress-tests. For $q =
+1$ in centred coordinates, the ridge's orientation does not involve
+$\sigma_b$; only the scale of the rotated coordinate's prior does, a
+mismatch of order $\delta$ rather than $\delta\sqrt{\tau\kappa^2}$.
+
+\subsection{Implementation and cost}
+
+\texttt{jmjax} implements (\ref{eq:rot}) in NumPyro: $U$ and $V$ are the
+sampled sites, $\Bstd$ is a deterministic function of them computed with
+$q$ applications of the $k$ reflectors, and the mass matrix is dense on
+$(\beta, U)$ and diagonal elsewhere, adapted during warm-up in the usual
+way. The extra cost per gradient is $O(Nkq)$. In Section~\ref{sec:simulation}'s
+design the dense block has $p + kq = 10$ coordinates, and wall time per
+fit was 0.83--1.10 times that of the unrotated fit. The basis is computed
+once from the design matrices, before sampling. The rotation and the
+dense block are the package's default for NUTS fits with a random
+intercept only, or with $q \geq 2$ correlated random effects.

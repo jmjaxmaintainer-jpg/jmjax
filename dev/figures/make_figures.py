@@ -64,7 +64,9 @@ def _slice(W, E):
 def fig1(N=300, k=3, nmin=2, nmax=11, rho=0.3, se=0.3):
     d = design(N=N, nmin=nmin, nmax=nmax)
     g = intercept_basis(d)[0][:, 0]           # mean direction (Q0 column 1)
-    panels = []
+    sgn = np.sign(g.sum())                    # QR fixes Q0 only up to sign:
+    g = sgn * g                               # orient u as +mean(b), so the
+    panels = []                               # ridge shows its true (negative) sign
 
     # (a) unrotated, diagonal metric: u = g'b is spread over N coordinates
     S, _, _ = posterior(d, 0, 0, None, rho=rho, se=se)
@@ -76,7 +78,7 @@ def fig1(N=300, k=3, nmin=2, nmax=11, rho=0.3, se=0.3):
     # (b) rotated, diagonal metric: u is one coordinate, ridge unchanged
     S, _, _ = posterior(d, 0, 0, "all", rho=rho, se=se)
     m = np.diag(S); W = S / np.sqrt(np.outer(m, m))
-    E = np.zeros((len(m), 2)); E[0, 0] = E[4, 1] = 1
+    E = np.zeros((len(m), 2)); E[0, 0] = 1; E[4, 1] = sgn
     panels.append(("(b) rotated, diagonal", W, E))
 
     # (c) rotated, dense block over (beta, U): symmetric-root whitening
@@ -103,7 +105,7 @@ def fig1(N=300, k=3, nmin=2, nmax=11, rho=0.3, se=0.3):
         ax.set_xlim(-4, 4); ax.set_ylim(-4, 4)
         ax.set_xticks([-3, 0, 3]); ax.set_yticks([-3, 0, 3])
         ax.axhline(0, color=GRID, lw=0.6, zorder=0); ax.axvline(0, color=GRID, lw=0.6, zorder=0)
-        ax.set_title(f"{title}\ncorr {r:+.2f},  $\\kappa$ = {kap:,.0f}", loc="left", color=INK)
+        ax.set_title(f"{title}\ncorr {r:+.2f},  cond. {kap:,.0f}", loc="left", color=INK)
         print(f"  {title.replace(chr(10), ' '):38s} slice corr {r:+.4f}  "
               f"slice sds {np.sqrt(np.diag(C)).round(3)}  whitened condition number {kap:,.0f}")
     axes[0].set_xlabel(r"$\beta_0$ (metric units)")

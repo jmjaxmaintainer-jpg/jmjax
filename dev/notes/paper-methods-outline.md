@@ -1,6 +1,8 @@
 # Methods paper: outline for review
 
-Status: draft outline, 23 Sep 2026. Nothing below is paper text yet. The
+Status: draft 1 of the paper is in `dev/paper/` (LaTeX, 23 Sep 2026;
+`latexmk -pdf methods-paper.tex`). The outline below is kept for the record;
+the draft supersedes it where they differ (e.g. Figure 1 has three panels). The
 source for every number is `vignettes/jmjax-reparameterization.Rmd`
 (the full technical record), which this paper condenses.
 

@@ -1,0 +1,31 @@
+\section{Reproducibility}\label{app:repro}
+
+All code is in the \texttt{jmjax} repository. The development scripts
+below reproduce each result; paths are relative to the package root.
+
+\begin{center}
+\footnotesize
+\begin{tabular}{p{0.36\textwidth}p{0.58\textwidth}}
+\toprule
+result & script (output) \\
+\midrule
+Figure~\ref{fig:ridge}, Section~\ref{sec:residual} numbers &
+\texttt{dev/theory\_rotation\_toy.py}; \texttt{dev/figures/make\_figures.py} \\
+Section~\ref{sec:blocked}, Gaussian check & \texttt{dev/theory\_alpha\_toy.py} \\
+Section~\ref{sec:blocked}, $R^2$ and its split & \texttt{dev/alpha\_missing\_information.R} \\
+Figure~\ref{fig:alpha} & \texttt{dev/figures/make\_figures.py} \\
+Table~\ref{tab:core} & \texttt{dev/pilot\_rotate\_grid.R} (\texttt{dev/pilot\_rotate\_grid.csv}) \\
+Section~\ref{sec:q1} & \texttt{ROT\_GRID=q1 dev/pilot\_rotate\_grid.R} (\texttt{dev/pilot\_rotate\_q1.csv}) \\
+Table~\ref{tab:stress} & \texttt{ROT\_GRID=stress dev/pilot\_rotate\_grid.R} (\texttt{dev/pilot\_rotate\_stress.csv}) \\
+Figure~\ref{fig:gain} & \texttt{dev/figures/make\_figures.py} \\
+Table~\ref{tab:cal} & \texttt{dev/study\_calibration.R} \\
+$\alpha$ bias, $N = 1200$ & \texttt{dev/study\_alpha\_bias.R} (\texttt{dev/alpha\_bias\_results.csv}) \\
+Table~\ref{tab:gen} & \texttt{dev/generality/mixed\_models.py} \\
+& (\texttt{dev/generality/results\_orthodont\_toenail.csv}) \\
+Tables~\ref{tab:real} and \ref{tab:jmb} & \texttt{dev/study\_realdata\_rotate.R} \\
+Section~\ref{sec:realdata}, random intercept only & \texttt{dev/pilot\_q1\_intercept.R} \\
+$\alpha$ against JMbayes2, 1--12 covariates & \texttt{dev/study\_orth\_vs\_jmbayes2.R} \\
+Example~\ref{ex:spline}, basis checks & \texttt{dev/verify\_absorbable\_basis.py} \\
+\bottomrule
+\end{tabular}
+\end{center}

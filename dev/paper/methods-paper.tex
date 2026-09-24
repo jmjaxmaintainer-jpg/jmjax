@@ -1,0 +1,66 @@
+% Methods paper, draft 1 (24 Sep 2026). Target: JCGS.
+% Source of every number: vignettes/jmjax-reparameterization.Rmd (the full
+% record) and the dev/ scripts listed in Appendix B.
+% Build: latexmk -pdf methods-paper.tex   (figures are read from ../figures/)
+\documentclass[11pt]{article}
+\usepackage[margin=1in]{geometry}
+\usepackage{amsmath,amssymb,amsthm}
+\usepackage{graphicx}
+\usepackage{booktabs}
+\usepackage[round,authoryear]{natbib}
+\usepackage[hidelinks]{hyperref}
+\usepackage{setspace}
+\onehalfspacing
+\graphicspath{{../figures/}}
+
+\newtheorem{proposition}{Proposition}
+\newtheorem{lemma}{Lemma}
+\newtheorem{corollary}{Corollary}
+\theoremstyle{definition}
+\newtheorem{definition}{Definition}
+\newtheorem{example}{Example}
+\newtheorem{condition}{Condition}
+\renewcommand{\thecondition}{S}
+\theoremstyle{remark}
+\newtheorem{remark}{Remark}
+
+\newcommand{\R}{\mathbb{R}}
+\newcommand{\N}{\mathcal{N}}
+\newcommand{\A}{\mathcal{A}}
+\newcommand{\T}{\mathcal{T}}
+\newcommand{\U}{\mathcal{U}}
+\newcommand{\Bstd}{B_{\mathrm{std}}}
+\newcommand{\range}{\operatorname{range}}
+\newcommand{\spn}{\operatorname{span}}
+\newcommand{\corr}{\operatorname{corr}}
+\newcommand{\Var}{\operatorname{Var}}
+\newcommand{\E}{\mathrm{E}}
+
+\title{Rotating Away the Location Degeneracy: an Exact
+Reparameterization for Hamiltonian Monte Carlo in Hierarchical and Joint
+Models}
+\author{Changbin Guo}
+\date{Draft, \today}
+
+\begin{document}
+\maketitle
+
+\input{sec0-abstract}
+\input{sec1-intro}
+\input{sec2-model}
+\input{sec3-absorbable}
+\input{sec4-rotation}
+\input{sec5-blocked}
+\input{sec6-simulation}
+\input{sec7-generality}
+\input{sec8-realdata}
+\input{sec9-discussion}
+
+\bibliographystyle{apalike}
+\bibliography{refs}
+
+\appendix
+\input{appA-proofs}
+\input{appB-reproducibility}
+
+\end{document}

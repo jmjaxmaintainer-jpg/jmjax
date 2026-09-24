@@ -18,7 +18,7 @@ simulation values: N = 300, 2-11 visits, rho = 0.3, sigma_e = 0.3;
 diagonal metric: u is spread over all N random intercepts and trades off
 almost one-for-one with beta_0. (b) Rotation alone makes u a single
 coordinate but leaves the ridge in place. (c) The small dense metric block
-over (beta, U) removes it. kappa is the condition number of the whole
+over (beta, U) removes it. 'cond.' is the condition number of the whole
 whitened posterior; what remains in (c) comes from directions outside the
 ridge.
 

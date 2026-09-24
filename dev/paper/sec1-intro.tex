@@ -1,0 +1,116 @@
+\section{Introduction}\label{sec:intro}
+
+Mixed models with subject-level random effects are fitted by Hamiltonian
+Monte Carlo (HMC) and its adaptive variant, the No-U-Turn sampler
+\citep[NUTS;][]{hoffman2014}, in general-purpose software such as Stan
+\citep{carpenter2017}, brms \citep{burkner2017}, rstanarm and NumPyro
+\citep{phan2019}. brms and rstanarm generate the non-centred
+parameterization of the random effects by default, and it is the standard
+recommendation for models written directly in Stan or NumPyro: $b =
+\Bstd L^{\top}$ with $\Bstd$ standard normal and $L$ a Cholesky factor of
+the random-effect covariance. This
+removes the funnel between the random effects and their scale
+\citep{neal2003,betancourt2015} and is the reason these samplers work well
+on hierarchical models at all.
+
+It leaves a second, simpler problem in place. Suppose the fixed-effects
+design contains a column that is constant within subject: the intercept,
+a treatment arm, sex. Adding a constant $c$ to every subject's random
+intercept and subtracting $c$ from the fixed intercept leaves every fitted
+value unchanged. The likelihood identifies the sum; only the prior on the
+random effects, at scale $\sigma_0/\sqrt{N}$ for $N$ subjects, pins the
+split. The same holds for every subject-constant covariate, whose
+coefficient trades off against a covariate-weighted combination of the
+random intercepts, and, whenever there is a random slope on time, for the
+fixed time slope and the mean random slope. In HMC's sampling coordinates
+these directions are spread across all $N$ subjects, the posterior has a
+ridge along them, and the sampler mixes slowly on the intercept, the
+subject-constant coefficients and the time slope: the coefficients an
+analyst reports. In a joint model of \texttt{pbc2}, for instance, the
+posterior correlation between the fixed intercept and the mean random
+intercept was $-0.97$ (Section~\ref{sec:degeneracy}).
+
+The problem is old and well understood for Gibbs samplers. Hierarchical
+centring \citep{gelfand1995} removes it by sampling the centred effects,
+at the price of the funnel that non-centring was introduced to avoid, and
+the choice between the two is the subject of a large literature
+\citep{papaspiliopoulos2003,papaspiliopoulos2007,yu2011}. A second route
+removes the directions: sum-to-zero constraints, whose effect on Gibbs and
+on NUTS \citet{zanella2021} quantify; Stan's \texttt{sum\_to\_zero\_vector};
+restricted spatial regression \citep{reich2006,hodges2010}; and, exactly,
+the transformation of \citet{vines1996}, which integrates the grand-mean
+directions out. The covariate-weighted direction for a random intercept
+appears in the discussion of \citet{zanella2021} by \citet{yang2021} as a
+device for analysing Gibbs samplers, and \citet{browne2009} name the
+problem directly, suggesting as future work that predictors be made
+orthogonal to the cluster indicators. Section~\ref{sec:related} places the
+present work among these.
+
+This paper does something different. It keeps the absorbable directions,
+and makes them sampling coordinates. We construct an orthonormal basis for
+every direction the fixed effects can absorb, in every random-effect
+column, and apply one fixed rotation to the standardized random effects so
+that these directions become a small block $U$ of $k \times q$ coordinates,
+$k$ being the number of directions and $q$ the number of random-effect
+columns. A single dense block of the HMC mass matrix over $(\beta, U)$
+then whitens the ridge. The rotation acts on the subject index and the
+covariance factor on the column index, so they commute: the construction is
+exact for every value of the random-effect covariance, with no constraint,
+no correction and no change to any reported quantity.
+
+The motivating application is the Bayesian joint model of a longitudinal
+marker and a time-to-event outcome
+\citep{wulfsohn1997,henderson2000,tsiatis2004,rizopoulos2012}, as
+implemented by the R package \texttt{jmjax}, which samples with NUTS in
+NumPyro. There the random effects also enter the hazard through the current
+marker value, and the survival submodel adds a condition on which
+directions remain absorbable. Joint models also raise a second question.
+Their primary estimand is the association parameter $\alpha$, the log
+hazard ratio per unit of the current marker value. On it, NUTS was 3 to 8
+times more efficient than the Metropolis-within-Gibbs sampler of JMbayes2
+\citep{jmbayes2} with no reparameterization at all. We show why: for an
+ideal two-block sampler that draws $\alpha$ exactly given the rest, the
+lag-1 autocorrelation equals the share of $\alpha$'s posterior variance
+the rest explains \citep{liu1994}, and in joint models that share is large
+for a structural reason, the trade-off between $\alpha$ and the level of
+the log baseline hazard.
+
+\paragraph{Contributions.}
+\begin{enumerate}
+\item \emph{The absorbable directions.} An exact characterization of the
+random-effect directions fixed effects can absorb, for any design and every
+random-effect column (Proposition~\ref{prop:char}); a construction that
+depends only on the column space of the design, with an example where the
+natural column-by-column check silently misses the slope direction
+(Example~\ref{ex:spline}); and, for joint models, the condition the
+survival submodel imposes (Condition~\ref{cond:S},
+Proposition~\ref{prop:joint}).
+\item \emph{An exact rotation and a small dense metric block.} One
+Householder rotation of the standardized random effects, costing $O(Nkq)$
+per gradient, localizes every absorbable direction in a $(p + kq)$-dimensional
+block (Proposition~\ref{prop:exact}, Lemma~\ref{lem:local}). An analysis of
+the resulting ridge (Proposition~\ref{prop:ridge}) explains why a diagonal
+metric cannot handle it, why one dense block can, and where a fixed metric
+is weakest; a stress grid aimed at those weak spots kept the gains at
+5--30 times.
+\item \emph{Blocked samplers and the association parameter.} The
+application of the data-augmentation autocorrelation identity to
+$\alpha$ (Proposition~\ref{prop:blocked}), with a bound that does not
+need Gaussianity, the measurement of the relevant $R^2$ on real data
+(0.85--0.87), and its decomposition, which
+places most of it in the survival block rather than the random effects.
+\item \emph{Evidence.} Simulation grids for one and two random-effect
+columns, a 100-replicate calibration study, two linear and generalized
+linear mixed models outside the joint-model setting, and two standard
+joint-model datasets, including a comparison with JMbayes2.
+\end{enumerate}
+
+Section~\ref{sec:model} sets out the model and the degeneracy,
+Section~\ref{sec:absorbable} the absorbable directions,
+Section~\ref{sec:rotation} the rotation and the metric, and
+Section~\ref{sec:blocked} the blocked-sampler result. Sections
+\ref{sec:simulation}--\ref{sec:realdata} give the evidence and
+Section~\ref{sec:discussion} discusses related work, costs and extensions.
+Proofs not given in the text are in Appendix~\ref{app:proofs}; the scripts
+that reproduce every table and figure are listed in
+Appendix~\ref{app:repro}.

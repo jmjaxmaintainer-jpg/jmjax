@@ -1,0 +1,36 @@
+\begin{abstract}
+\noindent
+In a regression model with subject-level random effects, the likelihood
+identifies the sum of a subject-constant fixed effect and the matching
+combination of random effects, but not how that sum is split between them.
+Under the non-centred parameterization that Hamiltonian Monte Carlo (HMC)
+software uses by default, only the prior pins the split, and the result is
+a narrow ridge that slows the sampler on exactly the coefficients an
+analyst reports. We characterize the random-effect directions that fixed
+effects can absorb, for any design, give a construction that does not
+depend on how the design matrix happens to be parameterized, and state the
+condition a survival submodel adds in joint longitudinal-survival models.
+One fixed orthogonal rotation of the standardized random effects, the same
+for every random-effect column, turns these directions into a small block
+of sampling coordinates. It is exact for every value of the random-effect
+covariance: prior, posterior and every reported quantity are unchanged. A
+dense mass-matrix block over this block and the fixed effects then removes
+the ridge. In simulation the rotation raised the effective sample size per
+second of the intercept and the time slope by factors of 14 and 21
+(geometric means); on two standard joint-model datasets the intercept and
+subject-constant covariates gained 17--28 times; and the same coefficients
+gained 5--7 times per gradient evaluation in a linear and a logistic mixed
+model outside the joint-model setting. A second finding concerns the association parameter of a joint
+model. For an ideal two-block sampler that draws it exactly from its
+conditional distribution given the other parameters, the lag-1
+autocorrelation equals the fraction of its posterior variance those
+parameters explain. On real data that fraction is at least 0.85--0.87,
+mostly shared with the baseline hazard, which caps such a sampler at one
+effective draw in 13--15 and accounts for
+about three quarters of the measured gap between HMC and a
+Metropolis-within-Gibbs implementation.
+
+\medskip\noindent
+\textbf{Keywords:} Hamiltonian Monte Carlo; non-centred parameterization;
+identifiability; preconditioning; mixed models; joint models.
+\end{abstract}

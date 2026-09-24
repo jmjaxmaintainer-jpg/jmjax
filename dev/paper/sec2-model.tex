@@ -1,0 +1,90 @@
+\section{Model and the location degeneracy}\label{sec:model}
+
+\subsection{Mixed models and joint models}\label{sec:setup}
+
+Index subjects by $i = 1, \dots, N$ and subject $i$'s longitudinal
+observations by $j = 1, \dots, n_i$, taken at times $t_{ij}$. Subject $i$
+has a fixed-effects design $X_i \in \R^{n_i \times p}$ and a random-effects
+design $Z_i \in \R^{n_i \times q}$, and the linear predictor is
+\begin{equation}\label{eq:lp}
+\eta_{ij} = x_{ij}^{\top}\beta + z_{ij}^{\top} b_i ,
+\qquad b_i \sim \N_q(0, \Sigma), \quad \Sigma = L L^{\top},
+\end{equation}
+with $L = \operatorname{diag}(\sigma_b)\,L_{\mathrm{corr}}$ lower
+triangular; for a random intercept and slope, $\sigma_b = (\sigma_0,
+\sigma_1)$ and $\rho$ is their correlation. The response is Gaussian with mean $\eta_{ij}$ and variance
+$\sigma_e^2$, or follows a generalized linear model with linear predictor
+$\eta_{ij}$. Collect the random effects as the rows of $B \in \R^{N \times q}$.
+The non-centred parameterization samples
+\begin{equation}\label{eq:ncp}
+\Bstd \in \R^{N \times q}, \quad \text{entries iid } \N(0,1),
+\qquad B = \Bstd L^{\top},
+\end{equation}
+and $\theta$ collects every other parameter, including $\beta$,
+$\sigma_b$ and $L_{\mathrm{corr}}$.
+
+In a joint longitudinal-survival model the longitudinal submodel is
+Gaussian, and subject $i$'s current underlying marker value
+\begin{equation}\label{eq:traj}
+m_i(t) = x_i(t)^{\top}\beta + z_i(t)^{\top} b_i
+\end{equation}
+enters a proportional hazards model,
+\begin{equation}\label{eq:hazard}
+h_i(t) = h_0(t)\exp\{\gamma^{\top} w_i + \alpha\, m_i(t)\},
+\end{equation}
+with baseline covariates $w_i$ and association parameter $\alpha$. Here
+$x_i(t)$ and $z_i(t)$ are the longitudinal design rows evaluated at time
+$t$ with subject $i$'s baseline covariates. In \texttt{jmjax} the log baseline
+hazard is a cubic B-spline with a second-order random-walk smoothing prior,
+and the cumulative hazard is computed by Gauss--Legendre quadrature, so the
+random effects reach the likelihood through $\eta_{ij}$ and through
+$m_i(t)$ at each event time and each quadrature node. The priors on
+$\beta$, $\gamma$ and $\alpha$ are normal, the random-effect standard
+deviations have gamma or half-normal priors, and $L_{\mathrm{corr}}$ an LKJ
+prior; none of what follows depends on these choices beyond the prior on
+$\Bstd$ being iid standard normal.
+
+\subsection{The degeneracy}\label{sec:degeneracy}
+
+Take a random intercept and slope, $z_{ij} = (1, t_{ij})^{\top}$, and a
+fixed-effects design with an intercept, a time column and subject-constant
+covariates such as age and sex. Three kinds of shift leave every
+$\eta_{ij}$ and every $m_i(t)$ unchanged:
+\begin{itemize}
+\item $b_{i0} \mapsto b_{i0} + c$ for all $i$, with $\beta_0 \mapsto
+\beta_0 - c$;
+\item $b_{i0} \mapsto b_{i0} + c\,\mathrm{age}_i$ for all $i$, with
+$\beta_{\mathrm{age}} \mapsto \beta_{\mathrm{age}} - c$, and likewise for
+every subject-constant covariate;
+\item $b_{i1} \mapsto b_{i1} + c$ for all $i$, with $\beta_{\mathrm{time}}
+\mapsto \beta_{\mathrm{time}} - c$.
+\end{itemize}
+The second kind adds one direction for each subject-constant covariate.
+The third is present whenever there is a random slope, whatever the
+covariates.
+Along each shift the likelihood is exactly flat, and only the prior on the
+random effects locates the split, at scale $\sigma_0/\sqrt{N}$ for the
+mean intercept direction.
+
+In the coordinates HMC samples, a shift of this kind moves all $N$
+entries of one or both columns of $\Bstd$ together (for the mean intercept
+direction with uncorrelated random effects, each by $c/\sigma_0$), against
+one or a few coordinates of $\beta$. A diagonal mass matrix, which
+is what NUTS adapts by default, can only rescale coordinates one at a time
+and cannot align with such a direction. In a fit of the \texttt{pbc2} data
+(Section~\ref{sec:realdata}) with an intercept and one subject-constant
+covariate, the posterior correlation between $\beta_0$ and the mean random
+intercept was $-0.971$, and between the covariate's coefficient and the
+matching covariate-weighted combination $-0.972$. The two affected
+coefficients had minimum
+effective sample sizes of 441 and 526 from 4000 draws, against 2893 and
+more than 4000 for the identified sums. Stan's user's guide documents the
+same mechanism for a model with two intercepts under weak priors
+\citep{stanug}.
+
+The degeneracy is not a funnel. The funnel is a problem of curvature that
+changes with a scale parameter; here the curvature along the ridge is
+nearly constant and the problem is that the ridge is narrow in a direction
+the metric cannot see. It is also not the non-identifiability of an
+improper model: the prior on the random effects makes the posterior proper
+and the split identified, weakly.
