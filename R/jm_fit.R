@@ -832,6 +832,14 @@ jm_fit <- function(long_formula,
 
   method <- match.arg(method)
 
+  # Kept for predict(): the model as the USER specified it, before any
+  # internal rewriting (standardize_covariates edits data_long in place;
+  # scale_time substitutes I(time/c) into the formulas). The reported
+  # coefficients and draws are all back on this original scale, so
+  # prediction evaluates the original formulas on the original data.
+  .pred_orig <- list(long_formula = long_formula, data_long = data_long,
+                     data_surv = data_surv)
+
   response_var <- all.vars(long_formula)[1]
   assoc_types <- parse_functional_forms(functional_forms, response_var)
 
@@ -1091,6 +1099,7 @@ jm_fit <- function(long_formula,
     random_formula <- if (identical(random_effects, "intercept")) ~ 1 else
                       stats::as.formula(paste0("~", time_var))
   }
+  .pred_orig$random_formula <- random_formula   # materialised, still unscaled
 
   .scale_time_status <- "off"
   # DEFAULT: "auto". Time units are a computational artifact, not a
@@ -3049,7 +3058,23 @@ jm_fit <- function(long_formula,
              num_chains = .mcmc_n_chains(control),
              rw2_implementation = control$rw2_implementation %||% "vectorized")
       } else NULL,
-      posterior_samples = py_result$posterior_samples  # NULL unless MCMC
+      posterior_samples = py_result$posterior_samples,  # NULL unless MCMC
+      # What predict() needs to rebuild X(t), Z(t) and the hazard for a
+      # fitted subject, on the original (user) scale - see .pred_orig.
+      model_info = list(
+        id_var = id_var, time_var = time_var,
+        long_formula = .pred_orig$long_formula,
+        random_formula = .pred_orig$random_formula,
+        surv_formula = surv_formula,
+        assoc_types = assoc_types,
+        subj_ids = long_arr$subj_ids,
+        T_surv = as.numeric(surv_arr$T_surv),
+        event = as.numeric(surv_arr$event)
+      ),
+      # The data as supplied (JMbayes2 keeps it too); control$keep_data =
+      # FALSE drops it, and predict() then needs `newdata`.
+      data = if (isFALSE(control$keep_data)) NULL else
+        list(long = .pred_orig$data_long, surv = .pred_orig$data_surv)
     ),
     class = "jmjax"
   )

@@ -4,6 +4,7 @@ S3method(coef,jmjax)
 S3method(confint,jmjax)
 S3method(logLik,jmjax)
 S3method(nobs,jmjax)
+S3method(predict,jmjax)
 S3method(print,jmjax)
 S3method(print,summary.jmjax)
 S3method(ranef,jmjax)
@@ -19,5 +20,6 @@ importFrom(stats,
   confint,
   logLik,
   nobs,
+  predict,
   vcov
 )
