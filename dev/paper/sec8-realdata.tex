@@ -102,9 +102,4 @@ survival coefficient $\gamma$ & 1.2 & 2.8 & 2.1 & 1.8 \\
 The unrotated NUTS fit trailed JMbayes2 by a factor of 17--33 on the
 coefficients JMbayes2 centres (Table~\ref{tab:jmb}). Rotated, it is at
 parity on them (0.88--0.98) and ahead on the others: 1.9--7.7 times on
-the time slope, 1.8--2.8 on $\gamma$ and 7.2--7.9 on $\alpha$. The rotation
-thus recovers what hierarchical centring buys on the regression
-coefficients, while keeping the non-centred parameterization for the
-random-effect variances. The lead on $\alpha$ is present without the rotation, and Section~\ref{sec:blocked} attributes most of its per-draw part to blocked updating; the rotation added to it on \texttt{aids} (3.5 to 7.2) by shortening NUTS's trajectories. JMbayes2 draws
-4.6--7.3 times faster per second but keeps one effective draw in 31--40 for
-$\alpha$ (Figure~\ref{fig:alpha}).
+the time slope, 1.8--2.8 on $\gamma$ and 7.2--7.9 on $\alpha$. The rotated NUTS fit therefore achieves efficiency comparable to JMbayes2 on the regression coefficients that JMbayes2 centres, while retaining the non-centred parameterization for the random-effect variances. The lead on $\alpha$ is present without the rotation, and Section~\ref{sec:blocked} attributes most of its per-draw part to blocked updating; the rotation added to it on \texttt{aids} (3.5 to 7.2) by shortening NUTS's trajectories. JMbayes2 produces 4.6--7.3 times as many draws per second, but only one effective draw in 31--40 for $\alpha$ (Figure~\ref{fig:alpha}).

@@ -24,9 +24,7 @@ probabilistic programs. All of these choose between centred and
 non-centred coordinates for each random effect. The rotation does not: it
 keeps the non-centred parameterization, with its benefits for the
 variances, and changes only which linear combinations of the standardized
-effects are sampling coordinates. In the comparison with JMbayes2, which
-centres the coefficients it can, this recovered what centring buys on
-those coefficients (Section~\ref{sec:realdata}). \citet{browne2009}
+effects are sampling coordinates. In the comparison with JMbayes2, which centres the coefficients it can, the rotated fit achieved efficiency comparable to JMbayes2's on those coefficients (Section~\ref{sec:realdata}). \citet{browne2009}
 studied three reparameterizations for multilevel survival models under
 Gibbs sampling. Their orthogonal parameterization orthogonalizes the
 fixed-effect predictors among themselves, as Stan's QR reparameterization
