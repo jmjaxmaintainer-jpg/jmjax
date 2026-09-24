@@ -78,7 +78,7 @@ blocked sampler.
 Often it grows not at all, because in a joint model the step size is
 already set by some other narrow direction, such as the spline
 coefficients or the variance components. In a Gaussian check, comparing a
-simulated two-block Gibbs sampler with a stylised model of HMC (exact
+simulated two-block Gibbs sampler with a stylized model of HMC (exact
 Hamiltonian dynamics, random integration time), the two-block sampler's
 lag-1 autocorrelation
 matched $R^2$ to within 0.004, and its integrated autocorrelation time
@@ -96,7 +96,7 @@ sharply; marginally, $\alpha$ also carries the uncertainty in every
 trajectory. The second is the level of the hazard. Shifting $m_i(t)$ by a
 constant for every subject changes $\alpha\, m_i(t)$ by an amount the log
 baseline hazard absorbs, so $\alpha$ is correlated with the baseline-hazard
-level unless the marker is centred.
+level unless the marker is centered.
 
 We estimated the linear explained variance $R^2$ by an ordinary
 least-squares regression of the 20,000 draws of $\alpha$ from a long
@@ -135,7 +135,7 @@ the measured $R^2$ an ideal two-block sampler keeps at most 0.068
 (\texttt{aids}) and 0.079 (\texttt{pbc2}) effective draws per draw, one
 in 13--15.
 JMbayes2 achieved 0.032 and 0.025 (its draws, from the runs of
-Table~\ref{tab:jmb}, analysed with NumPyro's estimator; its own estimator
+Table~\ref{tab:jmb}, analyzed with NumPyro's estimator; its own estimator
 gives 0.035 and 0.028), and \texttt{jmjax}'s NUTS 1.05 and 1.72 in the long
 fit. On a log scale, the ideal benchmark accounts for 78\% of the measured
 ESS-per-draw gap on \texttt{aids} (15.4 of 33 times) and 73\% on

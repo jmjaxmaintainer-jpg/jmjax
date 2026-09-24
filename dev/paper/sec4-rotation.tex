@@ -20,7 +20,7 @@ parameter.
 For any fixed orthogonal $R$: (i) the map $(U, V) \mapsto \Bstd$ is linear
 and volume-preserving; (ii) the prior it induces on $\Bstd$ is the original
 iid $\N(0,1)$ prior; (iii) the posterior of $(B, \theta)$ is identical to
-that of the non-centred parameterization (\ref{eq:ncp}), for every value of
+that of the non-centered parameterization (\ref{eq:ncp}), for every value of
 $L$; and (iv) $U = Q^{\top} \Bstd$.
 \end{proposition}
 
@@ -44,8 +44,8 @@ represent.
 Two choices in (\ref{eq:rot}) matter. First, the rotation acts on the
 sampled, standardized coordinates. Rotating the draws after sampling would
 change nothing about the sampler's geometry, and sampling rotated
-\emph{centred} effects $R^{\top} B$ would reintroduce the dependence on
-$\sigma_b$ that non-centring removes. Second, $R$ acts on the subject
+\emph{centered} effects $R^{\top} B$ would reintroduce the dependence on
+$\sigma_b$ that non-centering removes. Second, $R$ acts on the subject
 index, the same for every column, while $L$ acts on the column index. In
 vectorized form, $\operatorname{vec}(B) = (L \otimes I_N)
 \operatorname{vec}(\Bstd)$ and $\operatorname{vec}(\Bstd) = (I_q \otimes
@@ -61,7 +61,7 @@ exact, but those combinations depend on $L$, so a fixed rotation of that
 kind would align them only at one value of the correlation.
 
 For a random intercept alone ($q = 1$), \texttt{jmjax} samples the
-centred effects $b \sim \N(0, \sigma_b^2 I_N)$ directly, and the rotation
+centered effects $b \sim \N(0, \sigma_b^2 I_N)$ directly, and the rotation
 is applied to $b$. Because the covariance is a multiple of the identity,
 $R^{\top} b$ has the same prior for every $\sigma_b$ and
 Proposition~\ref{prop:exact} holds unchanged.
@@ -219,7 +219,7 @@ over $\sigma_0 (1 \pm \delta)$ was 1.76, 1.50 and 1.31 for $N = 150$, 300
 and 600 with 2--11 visits, and 2.71, 2.05 and 1.64 with 8--20 visits. The
 analysis does not cover the $\rho$ part, which grows as $|\rho| \to 1$.
 These are the two regimes Section~\ref{sec:stress} stress-tests. For $q =
-1$ in centred coordinates, the ridge's orientation does not involve
+1$ in centered coordinates, the ridge's orientation does not involve
 $\sigma_b$; only the scale of the rotated coordinate's prior does, a
 mismatch of order $\delta$ rather than $\delta\sqrt{\tau\kappa^2}$.
 

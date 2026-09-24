@@ -4,7 +4,7 @@ Mixed models with subject-level random effects are fitted by Hamiltonian
 Monte Carlo (HMC) and its adaptive variant, the No-U-Turn sampler
 \citep[NUTS;][]{hoffman2014}, in general-purpose software such as Stan
 \citep{carpenter2017}, brms \citep{burkner2017}, rstanarm and NumPyro
-\citep{phan2019}. brms and rstanarm generate the non-centred
+\citep{phan2019}. brms and rstanarm generate the non-centered
 parameterization of the random effects by default, and it is the standard
 recommendation for models written directly in Stan or NumPyro: $b =
 \Bstd L^{\top}$ with $\Bstd$ standard normal and $L$ a Cholesky factor of
@@ -30,8 +30,8 @@ posterior correlation between the fixed intercept and the mean random
 intercept was $-0.97$ (Section~\ref{sec:degeneracy}).
 
 The problem is old and well understood for Gibbs samplers. Hierarchical
-centring \citep{gelfand1995} removes it by sampling the centred effects,
-at the price of the funnel that non-centring was introduced to avoid, and
+centering \citep{gelfand1995} removes it by sampling the centered effects,
+at the price of the funnel that non-centering was introduced to avoid, and
 the choice between the two is the subject of a large literature
 \citep{papaspiliopoulos2003,papaspiliopoulos2007,yu2011}. A second route
 removes the directions: sum-to-zero constraints, whose effect on Gibbs and
@@ -40,7 +40,7 @@ restricted spatial regression \citep{reich2006,hodges2010}; and, exactly,
 the transformation of \citet{vines1996}, which integrates the grand-mean
 directions out. The covariate-weighted direction for a random intercept
 appears in the discussion of \citet{zanella2021} by \citet{yang2021} as a
-device for analysing Gibbs samplers, and \citet{browne2009} name the
+device for analyzing Gibbs samplers, and \citet{browne2009} name the
 problem directly, suggesting as future work that predictors be made
 orthogonal to the cluster indicators. Section~\ref{sec:related} places the
 present work among these.

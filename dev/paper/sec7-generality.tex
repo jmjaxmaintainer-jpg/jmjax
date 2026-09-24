@@ -9,7 +9,7 @@ classical mixed models, each with a subject-constant covariate:
 \item \texttt{Orthodont} \citep{potthoff1964,pinheiro2000}: a Gaussian
 linear mixed model for the distance measure of 27 children at 4 ages,
 $\text{distance} \sim \text{age} \times \text{male} + (1 + \text{age} \mid
-\text{child})$ with age centred. Sex is subject-constant, so both
+\text{child})$ with age centered. Sex is subject-constant, so both
 random-effect columns have absorbable directions $\{\mathbf{1},
 \mathrm{male}\}$, $k = 2$.
 \item The toenail onychomycosis trial \citep{debacker1998,lesaffre2001}: a
@@ -18,7 +18,7 @@ logistic mixed model for 1908 binary outcomes on 294 patients, $y \sim
 subject-constant, so the absorbable directions are $\{\mathbf{1},
 \mathrm{trt}\}$.
 \end{itemize}
-Both use the non-centred parameterization with $\N(0, 10^2)$ priors on
+Both use the non-centered parameterization with $\N(0, 10^2)$ priors on
 $\beta$, half-normal(5) priors on the standard deviations and an LKJ(2)
 prior on the correlation, which is the parameterization brms and rstanarm
 use by default. Five arms were run on each, with 4 chains of 1000 warm-up
@@ -32,7 +32,7 @@ U)$ only;
 \item \emph{unrotated, full dense}: no rotation, and a dense metric over
 every sampled coordinate, the obvious alternative way to let the sampler
 learn the ridge;
-\item \emph{centred}: the random effects themselves are sampled, $b_i \sim
+\item \emph{centered}: the random effects themselves are sampled, $b_i \sim
 \N(0, LL^{\top})$, with a diagonal metric, the classical remedy for the
 location degeneracy \citep{gelfand1995}.
 \end{itemize}
@@ -60,14 +60,14 @@ unrotated           & 1 & 1 & 1 & 30.7 & 1.9 & 0 \\
 rotated, diagonal   & 2.3--2.4 (2.6--2.7) & 0.9 (1.1)    & 0.9 (1.0--1.1)  & 30.9 & 1.6 & 0 \\
 rotated, dense block & 7.1 (4.7)       & 2.4--2.5 (1.6)  & 1.3--1.6 (0.8--1.0) & 16.5 & 1.5 & 0 \\
 unrotated, full dense & 5.5--5.6 (2.0--2.1) & 1.7--1.8 (0.6) & 1.2--2.0 (0.5--0.7) & 18.9 & 3.0 & 2 \\
-centred             & 0.4 (0.6--0.7)   & 0.4--0.5 (0.7)  & 0.1--1.7 (0.1--2.6) & 52.5 & 1.7 & 34 \\
+centered             & 0.4 (0.6--0.7)   & 0.4--0.5 (0.7)  & 0.1--1.7 (0.1--2.6) & 52.5 & 1.7 & 34 \\
 \midrule
 \multicolumn{7}{l}{toenail (logistic GLMM, $q = 1$, $N = 294$; subject-constant: trt; not absorbable: time, trt $\times$ time)} \\
 unrotated           & 1 & --- & 1 & 31.0 & 7.7 & 0 \\
 rotated, diagonal   & 2.5--2.8 (2.3--2.5) & --- & 0.9 (0.9) & 31.0 & 8.5 & 0 \\
 rotated, dense block & 5.5--6.7 (4.2--5.1) & --- & 1.1 (0.9) & 21.2 & 6.8 & 0 \\
 unrotated, full dense & 3.2--3.7 (0.2--0.3) & --- & 0.9 (0.07) & 47.6 & 166.8 & 0 \\
-centred             & 0.8--1.1 (0.5--0.8) & --- & 0.4 (0.2) & 30.6 & 10.8 & 0 \\
+centered             & 0.8--1.1 (0.5--0.8) & --- & 0.4 (0.2) & 30.6 & 10.8 & 0 \\
 \bottomrule
 \end{tabular}
 \end{table}
@@ -99,20 +99,20 @@ cost that grows with the number of coordinates. The rotation is what makes a
 dense metric affordable: it moves the ridge into $p + kq$ coordinates (8 and
 6 here), whatever $N$ is.
 
-\paragraph{Why not centre?} In these two configurations the centred
+\paragraph{Why not center?} In these two configurations the centered
 parameterization did not remove the degeneracy's cost: per gradient it gave 0.4 on the
 \texttt{Orthodont} intercept and male coefficients and 0.8--1.1 on toenail's.
-It also brought back the funnel that non-centring avoids. In
+It also brought back the funnel that non-centering avoids. In
 \texttt{Orthodont}, with 4 observations per child, it produced 34
 divergent transitions over the 3 seeds, $\hat R$ up to 1.047 and 52.5
 leapfrog steps per draw, and the slope standard deviation mixed at 0.06
 times the unrotated rate; in toenail, with binary outcomes, the random-effect
 standard deviation mixed at 0.35 times. Both carry little information per
-subject, the regime in which centring is known to do poorly
-\citep{gelfand1995,browne2009}; where subjects are informative, centring
-can work well, as JMbayes2's centred coefficients do on the joint-model data
-of Section~\ref{sec:realdata}. The rotation needs no choice between the two parameterizations: it keeps the non-centred one and, in every design tested here, from these low-information settings to the information-dense designs of Section~\ref{sec:stress}, reduced the location cost within it.
+subject, the regime in which centering is known to do poorly
+\citep{gelfand1995,browne2009}; where subjects are informative, centering
+can work well, as JMbayes2's centered coefficients do on the joint-model data
+of Section~\ref{sec:realdata}. The rotation needs no choice between the two parameterizations: it keeps the non-centered one and, in every design tested here, from these low-information settings to the information-dense designs of Section~\ref{sec:stress}, reduced the location cost within it.
 
 Across all arms, posterior means agreed with the unrotated fit's to within
-0.14 posterior standard deviations. Apart from the centred arm, $\hat R
+0.14 posterior standard deviations. Apart from the centered arm, $\hat R
 \leq 1.011$ and there were at most 2 divergences (full dense, \texttt{Orthodont}).

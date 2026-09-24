@@ -63,10 +63,10 @@ draw from 0.05 to 0.88 and from 0.06 to 0.78.
 \subsection{A blocked sampler}
 
 JMbayes2 \citep{jmbayes2} fits the same models by Metropolis-within-Gibbs
-and hierarchically centres the coefficients it can, which is the classical
+and hierarchically centers the coefficients it can, which is the classical
 remedy for the location degeneracy \citep{gelfand1995}. It therefore
-offers two comparisons: on the centred coefficients, of the rotation with
-centring; on the rest, and on $\alpha$ in particular, of HMC with a blocked
+offers two comparisons: on the centered coefficients, of the rotation with
+centering; on the rest, and on $\alpha$ in particular, of HMC with a blocked
 sampler (Section~\ref{sec:blocked}). JMbayes2 was run with 4 chains of
 16,000 iterations and 4,000 burn-in, well above its defaults, and its time
 is the whole model-fitting call. To keep the ESS estimator from driving the
@@ -100,6 +100,6 @@ survival coefficient $\gamma$ & 1.2 & 2.8 & 2.1 & 1.8 \\
 \end{table}
 
 The unrotated NUTS fit trailed JMbayes2 by a factor of 17--33 on the
-coefficients JMbayes2 centres (Table~\ref{tab:jmb}). Rotated, it is at
+coefficients JMbayes2 centers (Table~\ref{tab:jmb}). Rotated, it is at
 parity on them (0.88--0.98) and ahead on the others: 1.9--7.7 times on
-the time slope, 1.8--2.8 on $\gamma$ and 7.2--7.9 on $\alpha$. The rotated NUTS fit therefore achieves efficiency comparable to JMbayes2 on the regression coefficients that JMbayes2 centres, while retaining the non-centred parameterization for the random-effect variances. The lead on $\alpha$ is present without the rotation, and Section~\ref{sec:blocked} attributes most of its per-draw part to blocked updating; the rotation added to it on \texttt{aids} (3.5 to 7.2) by shortening NUTS's trajectories. JMbayes2 produces 4.6--7.3 times as many draws per second, but only one effective draw in 31--40 for $\alpha$ (Figure~\ref{fig:alpha}).
+the time slope, 1.8--2.8 on $\gamma$ and 7.2--7.9 on $\alpha$. The rotated NUTS fit therefore achieves efficiency comparable to JMbayes2 on the regression coefficients that JMbayes2 centers, while retaining the non-centered parameterization for the random-effect variances. The lead on $\alpha$ is present without the rotation, and Section~\ref{sec:blocked} attributes most of its per-draw part to blocked updating; the rotation added to it on \texttt{aids} (3.5 to 7.2) by shortening NUTS's trajectories. JMbayes2 produces 4.6--7.3 times as many draws per second, but only one effective draw in 31--40 for $\alpha$ (Figure~\ref{fig:alpha}).
