@@ -112,7 +112,26 @@ correction; the list of `dev/` scripts that reproduce each table.
 
 ## 6. Work still needed before drafting
 
-1. **Generality example (Section 7).** The strongest thing a referee will
+1. **Generality example (Section 7): DONE 23 Sep.** Results in
+   `dev/generality/results_orthodont_toenail.csv` (4 chains x (1000 + 1000),
+   3 seeds). Rotated + dense block over unrotated, geometric mean over seeds,
+   per 1000 gradient evaluations (per second in brackets; each run is 1-8 s
+   including JIT compilation, so per gradient is the fair measure):
+
+   | parameter | Orthodont (LMM, q = 2) | toenail (logistic GLMM, q = 1) |
+   |---|---:|---:|
+   | intercept | 7.1x (4.4x) | 5.5x (4.1x) |
+   | subject-constant covariate | 7.1x (4.4x), `male` | 6.7x (5.1x), `trt` |
+   | within-subject coefficients | 2.4-2.5x | 1.3x |
+   | variance components | 1.3-1.6x | 1.1x |
+
+   The rotation with a diagonal metric alone gives 2.3-2.8x on the
+   targeted coefficients; the dense block supplies the rest. Posterior
+   means agree to 0.14 posterior SDs; R-hat <= 1.011 everywhere; no
+   divergences. The unrotated arm is the parameterization brms and
+   rstanarm use by default. **Title 1 is supported.**
+
+   Original plan, kept for the record: The strongest thing a referee will
    ask is whether this is a trick for joint models only. Plan: standalone
    NumPyro code, not jmjax, on two classic mixed-model datasets with a
    subject-constant covariate:
@@ -138,9 +157,8 @@ correction; the list of `dev/` scripts that reproduce each table.
 
 - **Journal (decided 23 Sep):** JCGS first; then Statistics and Computing,
   Communications in Statistics - Simulation and Computation, or similar.
-- **Title (decided, conditional):** title 1 if the generality example
-  (Section 6, item 1) reproduces the gains outside joint models; otherwise
-  title 3.
+- **Title (decided):** title 1 - the generality example (Section 6, item 1)
+  reproduced the gains outside joint models.
 - **Authors:** Changbin Guo, sole author for now.
 - **JMbayes2 comparison (proposed, awaiting confirmation):** keep a narrow
   version here, framed as blocked Metropolis-within-Gibbs against HMC
