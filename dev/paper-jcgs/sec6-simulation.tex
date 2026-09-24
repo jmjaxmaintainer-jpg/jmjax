@@ -1,0 +1,150 @@
+\section{Simulation}\label{sec:simulation}
+
+\subsection{Design}
+
+Data were simulated from a joint model with a random intercept and slope,
+longitudinal mean $\beta_0 + \beta_{\mathrm{time}} t +
+\beta_{\mathrm{age}}\mathrm{age}_i + \beta_{\mathrm{sex}}\mathrm{sex}_i$
+with $\beta_0 = 2$ and $\beta_{\mathrm{time}} = 0.5$, $\mathrm{age}_i \sim \N(0, 10^2)$ and $\mathrm{sex}_i \sim
+\mathrm{Bernoulli}(0.5)$, $(\sigma_0, \sigma_1) = (0.8, 0.3)$, $\sigma_e = 0.3$, and a
+Weibull hazard (shape 1.3) with $\alpha = 0.5$ and a treatment effect
+$\gamma = -0.3$, calibrated to an event rate of about one half. Visits
+were scheduled at regular intervals up to $t = 10$ and stopped at the event
+or censoring time. All fits used the spline baseline hazard of
+Section~\ref{sec:setup}, so the fitted model does not contain the true
+hazard exactly. Each design was simulated with three seeds, each
+fitted unrotated and with the rotation and its dense block. ESS is NumPyro's (version 0.15) multi-chain
+autocorrelation estimator, truncated by Geyer's initial monotone sequence
+and without rank normalization \citep{geyer1992,gelman2013}, and $\hat R$
+is its split-chain version. ESS per second divides by the wall time of the
+whole run, warm-up and compilation included; ESS per gradient divides by
+the number of leapfrog steps in the sampling phase. Ratios are rotated over
+unrotated, paired by seed, with geometric means over seeds.
+
+The core grid crossed about 9 against about 17 visits per subject with
+$\rho \in \{0, 0.3, 0.6, 0.9\}$ at $N = 300$, and added $N \in \{150,
+600\}$ at 9 visits and $\rho = 0.3$: ten designs, 2 chains of 500 warm-up
+and 1000 sampling iterations.
+
+\subsection{Efficiency}
+
+\begin{table}[t]
+\centering
+\caption{Core grid: ESS per second for the intercept and the time slope
+(means over 3 seeds), and the rotated/unrotated ratio (geometric mean of
+the paired per-seed ratios).}
+\label{tab:core}
+\small
+\begin{tabular}{rrr rrr rrr r}
+\toprule
+& & & \multicolumn{3}{c}{intercept} & \multicolumn{3}{c}{time slope} & $\alpha$ \\
+\cmidrule(lr){4-6}\cmidrule(lr){7-9}\cmidrule(lr){10-10}
+visits & $\rho$ & $N$ & unrot. & rotated & ratio & unrot. & rotated & ratio & ratio \\
+\midrule
+9  & 0.0 & 300 & 25.9 & 354.4 & 14.2 &  9.1 & 304.9 & 36.4 & 0.85 \\
+17 & 0.0 & 300 & 12.1 & 229.4 & 19.3 &  4.0 & 234.9 & 59.2 & 1.32 \\
+9  & 0.3 & 300 & 30.0 & 253.3 &  8.6 & 19.0 & 251.1 & 13.4 & 0.72 \\
+17 & 0.3 & 300 & 11.3 & 248.5 & 22.2 &  6.4 & 262.5 & 41.9 & 1.33 \\
+9  & 0.6 & 300 & 26.1 & 245.7 &  9.4 & 29.9 & 229.3 &  7.7 & 1.00 \\
+17 & 0.6 & 300 &  9.6 & 231.6 & 24.0 & 10.0 & 251.2 & 24.9 & 1.59 \\
+9  & 0.9 & 300 & 20.4 & 220.7 & 11.1 & 20.3 & 250.3 & 12.8 & 0.90 \\
+17 & 0.9 & 300 &  8.9 & 218.9 & 24.9 &  8.6 & 217.7 & 25.6 & 1.59 \\
+9  & 0.3 & 150 & 41.8 & 323.7 &  7.6 & 32.6 & 420.4 & 13.1 & 0.76 \\
+9  & 0.3 & 600 & 15.9 & 132.0 &  8.2 &  8.8 & 151.7 & 17.7 & 0.77 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+Over all 30 paired fits of Table~\ref{tab:core}, the geometric-mean gain
+in ESS per second was 13.5 for the intercept (per seed 4.5--31.6) and 21.1
+for the time slope (5.1--70.8). Wall time was essentially unchanged (ratio
+1.03, range 0.83--1.10) and the rotated fit took 0.89 times as many
+leapfrog steps per iteration, so per gradient the gains were 15.6 and
+24.3. Almost all of the gain is in ESS per draw: a median of about 1.7 rotated
+against 0.1 unrotated. There were no divergences, and the worst $\hat R$ on a
+reported coefficient was 1.002 rotated and 1.044 unrotated. Posterior
+means agreed to a median of 0.027 posterior standard deviations (largest
+paired difference 2.7 Monte Carlo standard errors over 90 pairs), and
+posterior standard deviations to within Monte Carlo error (ratios 1.01 for
+the intercept and 0.98 for the time slope).
+
+The pattern follows Proposition~\ref{prop:ridge}. The gain is largest with
+dense visits, where each subject carries the most information about its
+own random effects (19--25 times for the intercept, 25--59 for the slope),
+and does not grow with $N$ (7.6 at $N = 150$, 8.2 at $N = 600$).
+Figure~\ref{fig:gain} shows all three grids against the per-subject
+information $\bar n\,\sigma_0^2/\sigma_e^2$. The association parameter,
+which the degeneracy does not involve, split by design: 0.72--1.00 in the
+six designs with about 9 visits and 1.32--1.59 in the four with about 17
+(geometric mean 1.04). We have no established explanation; on real data
+(Section~\ref{sec:realdata}) the effect on $\alpha$ tracked whether the
+degeneracy had been setting NUTS's trajectory length, a plausible reading
+here too that was not measured.
+
+\begin{figure}[t]
+\centering
+\includegraphics[width=\textwidth]{fig2_gain.pdf}
+\caption{ESS per second of the reported coefficient, rotated over unrotated
+fit on the same simulated data, against the per-subject information
+$\bar n\,\sigma_0^2/\sigma_e^2$ ($\sigma_0 = 0.8$). Large markers:
+geometric mean over three seeds in one design; small: single seeds. Core
+and stress grids have a random intercept and slope ($q = 2$); the $q = 1$
+grid has a random intercept only. In (b), open triangles are the $q = 1$
+time slope, which has no random effect and so nothing to rotate. The $q =
+1$ intercept ratios are at the standard run length, where most unrotated
+fits had not converged; Section~\ref{sec:q1} compares converged fits.}
+\label{fig:gain}
+\end{figure}
+
+\subsection{Random intercept only}\label{sec:q1}
+
+The same simulator with $\sigma_1 = 0$, fitted with a random intercept
+only, gave seven designs (about 9, 17 and 35 visits, $N \in \{100, 300\}$,
+and one with $\sigma_e = 0.8$). The intercept gained 6.5--282 times and the
+coefficient of age 6.6--207 times, but at this run length 17 of the 21
+unrotated fits had some $\hat R$ above 1.05, while every rotated fit had
+$\hat R \leq 1.004$. For a comparison between converged fits we reran three
+designs ($N = 300$; about 9, 17 and 35 visits), extending the unrotated
+fit to up to 32 times the standard length, with a criterion fixed in
+advance: $\hat R \leq 1.01$ on every monitored parameter and ESS $\geq 400$
+for the intercept, age, the time slope and $\alpha$. Every rotated fit met
+it at the standard length. The unrotated fit met it first at 16 times the
+standard length with 9 visits, at 16 and 32 times with 17 visits, and not
+by 32 times with 35 visits. Its ESS per draw for the intercept did not
+change with run length, and the rotated fit's was of order 100 times
+larger, so the advantage is a property of the stationary chains, not of
+short runs. In wall time to the criterion the unrotated fit needed 3.5 and
+6.5--6.6 times as long in the first two designs, and more than 10--14 times
+in the third (\suppref{sec:longrun}).
+
+\subsection{Stress grid}\label{sec:stress}
+
+Section~\ref{sec:residual} names two regimes where the rotation should be
+weakest: few subjects each carrying a lot of information, and strongly
+correlated random effects. A stress grid of six designs targeted both
+(about 35 visits with $N \in \{50, 100\}$ and $\rho \in \{0.3, 0.95\}$,
+plus two designs with $\rho = 0.95$), with the criterion, fixed in
+advance, that the rotation must not fall below the unrotated fit on the
+intercept or time slope in any design. It did not: the lowest design gained
+5.5 times and the lowest single seed 3.2 times, and per gradient the
+geometric-mean gains were 16.7 for the intercept and 22.0 for the time
+slope (\suppref{sec:stressgrid}). The design with the fewest subjects and
+the most information per subject gained least, as the fixed-metric
+residual predicts, and strong correlation did not reduce the gains. The
+predicted weakness is visible only against a variant that removes the
+absorbable directions and restores the reported coefficients with an
+exact correction (Section~\ref{sec:related}), which has no fixed-metric
+residual: in the 35-visit designs it was 1.4--2 times more efficient than
+the rotation, and about equal with 9 visits.
+
+\subsection{Calibration}\label{sec:calibration}
+
+Proposition~\ref{prop:exact} says the rotation cannot change the
+posterior, so a calibration study checks the implementation. With $N =
+300$ and 100 replicates, none excluded, coverage of 95\% intervals agreed
+between the two fits within 0.01 and the ratio of mean posterior standard
+deviation to the standard deviation of posterior means within 0.015 for
+$\beta_0$, $\beta_{\mathrm{time}}$, $\alpha$ and $\sigma_0$
+(\suppref{sec:calib}). Both fits showed an upward bias of about 3 Monte
+Carlo standard errors (2.8\%) in $\alpha$, which fell to 1.1\% at $N =
+1200$, consistent with ordinary finite-sample bias.

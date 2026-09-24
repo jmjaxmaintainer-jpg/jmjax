@@ -1,0 +1,189 @@
+\section{A Gaussian check of the blocked-sampler comparison}\label{sec:gausscheck}
+
+Section~\mref{sec:blocked} states two things about $\alpha$: that the
+lag-1 autocorrelation of an exact two-block sampler equals $R^2$ for a
+Gaussian posterior (Proposition~\mref{prop:blocked}(iii)), and,
+heuristically, that HMC pays for the same correlation at most in
+integration steps. We checked both in a Gaussian model, comparing a
+simulated two-block Gibbs sampler with a stylized model of HMC (exact
+Hamiltonian dynamics, random integration time). The two-block sampler's
+lag-1 autocorrelation matched $R^2$ to within 0.004, and its integrated
+autocorrelation time went 3.0, 9.0, 27.6, 39.0 and 199 as $R^2$ went 0.5,
+0.8, 0.93, 0.95 and 0.99. The HMC model's stayed between 1.6 and 2.1, at a
+cost of 4.8 to 46.8 gradient evaluations per independent draw. With an
+unrelated narrow ridge already present (such as, in a joint model, the
+spline coefficients or variance components might provide), the step count was 22.2 at
+every $R^2$ from 0 to 0.99.
+
+\section{Random intercept only: runs to convergence}\label{sec:longrun}
+
+The same simulator as in Section~\mref{sec:simulation} with $\sigma_1 =
+0$, fitted with a random intercept only, gave seven designs: about 9, 17
+and 35 visits, $N \in \{100, 300\}$, and one noisier design with $\sigma_e
+= 0.8$. The intercept gained 6.5--282 times and the subject-constant
+coefficient of age 6.6--207 times; the time slope, which has no absorbable
+direction when there is no random slope, moved only through the step size
+(0.79--3.4 times). At this run length, however, 17 of the 21 unrotated fits
+had some parameter with $\hat R$ above 1.05, the intercept's reaching 1.27,
+while every rotated fit had $\hat R \leq 1.004$, so these ratios compare a
+converged fit with unconverged ones. Posterior means agreed to a median of
+0.025 posterior standard deviations (maximum 0.175).
+
+To obtain a comparison between converged fits, we reran three designs
+($N = 300$ with about 9, 17 and 35 visits) and extended the unrotated fit
+to 2, 4, 8, 16 and 32 times the standard length, with two seeds taken to
+the longest runs. A convergence criterion was fixed in advance: split $\hat
+R \leq 1.01$ on every monitored parameter and ESS $\geq 400$ for the
+intercept, age, the time slope and $\alpha$. Every rotated fit met it at
+the standard length. The unrotated fit met it first at 16 times the
+standard length with 9 visits, at 16 and 32 times with 17 visits, and not
+by 32 times with 35 visits, where its intercept had an ESS of 304--377 from
+64,000 draws with $\hat R = 1.002$. Its ESS per draw for the intercept did
+not change with run length: 0.009--0.023, 0.007--0.020 and 0.002--0.008 in
+the three designs over runs from 1 to 32 times the standard length, against
+2.1--2.5, 0.9--1.9 and 1.1--2.4 for the rotated fit. The per-draw advantage,
+of order 100 times, is therefore a property of the stationary chains, not
+of short runs. In wall time, the unrotated fit needed 3.5 and 6.5--6.6
+times as long as the rotated fit to meet the criterion in the first two
+designs, and more than 10--14 times in the third. These ratios are much
+smaller than the per-draw ones because the rotated fit's time at the
+standard length is mostly warm-up and compilation, and it exceeded the ESS
+target by a factor of 5 to 12. Between the first fits of each arm to meet
+the criterion, posterior means agreed to a median of 0.02 posterior
+standard deviations (maximum 0.11) and standard deviations to within 6\%.
+
+\section{Stress grid}\label{sec:stressgrid}
+
+The stress grid of Section~\mref{sec:stress} crossed about 35 visits with
+$N \in \{50, 100\}$ and $\rho \in \{0.3, 0.95\}$, and added $\rho = 0.95$
+at 9 visits ($N = 100$) and at 17 visits ($N = 300$). The criterion fixed before the
+run was that the rotation must not fall below the unrotated fit on the
+intercept or time slope in any design. It did not (Table~\ref{tab:stress});
+the lowest design was 5.5 times and the lowest single seed 3.2 times. Per
+gradient evaluation the gains were 16.7 for the intercept and 22.0 for the
+time slope (geometric means over all designs), and the rotated fit took
+0.81 times as many leapfrog steps per iteration.
+
+\begin{table}[ht]
+\centering
+\caption{Stress grid: ESS-per-second ratios, rotated over unrotated
+(geometric means over 3 seeds).}
+\label{tab:stress}
+\small
+\begin{tabular}{rrr rrr}
+\toprule
+visits & $N$ & $\rho$ & intercept & time slope & $\alpha$ \\
+\midrule
+35 &  50 & 0.30 &  5.5 & 10.3 & 1.60 \\
+35 &  50 & 0.95 & 21.1 & 21.6 & 2.42 \\
+35 & 100 & 0.30 & 14.5 & 27.1 & 1.58 \\
+35 & 100 & 0.95 & 26.0 & 28.6 & 1.73 \\
+ 9 & 100 & 0.95 &  7.0 &  7.5 & 0.74 \\
+17 & 300 & 0.95 & 24.6 & 29.7 & 1.09 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+The design with the fewest subjects and the most information per subject
+gained least, as the fixed-metric residual predicts. Strong correlation
+did not reduce the rotation's advantage: at $\rho = 0.95$ the gains were
+as large as or larger than at $\rho = 0.3$, partly because the unrotated
+fit degrades faster. Nor did it hurt the rotated fit in absolute terms:
+with 35 visits its ESS per draw for the intercept was 1.25 at $\rho = 0.95$
+against 0.68 at $\rho = 0.3$ with $N = 50$, and 1.50 against 1.18 with $N
+= 100$. The predicted weakness is visible only against a variant that
+removes the absorbable directions from the likelihood's coordinates and
+restores the reported coefficients with an exact correction
+(Section~\mref{sec:related}). That variant has no fixed-metric residual,
+and in the 35-visit designs it was 1.4--2 times more efficient than the
+rotation, while being about equal to it with 9 visits. Posterior means
+agreed with the unrotated fit's to a median of 0.029 posterior standard
+deviations (maximum 0.166, 90 pairs), there were no divergences, and wall
+time was 0.86--1.08 times the unrotated fit's (geometric means per
+design). $\alpha$, which the degeneracy does not involve, fell to 0.74 in
+the 9-visit design.
+
+\section{Calibration}\label{sec:calib}
+
+With $N = 300$ and 100 replicates, every one of which passed an $\hat R
+\leq 1.05$ check on the regression parameters (so none was excluded),
+coverage of 95\% intervals agreed between the unrotated and rotated fits
+within 0.01, and the ratio of mean posterior standard deviation to the
+standard deviation of posterior means within 0.015, for every estimand
+(Table~\ref{tab:cal}); the Monte Carlo standard error of a 95\% coverage is
+about 0.011. Two features appear in both arms and belong to the model and
+design: slightly wide intervals for $\beta_0$, and an upward bias of about
+3 Monte Carlo standard errors (2.8\%) in $\alpha$. The latter is consistent
+with ordinary finite-sample bias. In a separate study
+(\texttt{dev/study\_alpha\_bias.R}, Section~\ref{sec:repro}), neither the spline baseline hazard nor
+the simulator's hazard calibration explained it (paired changes of
+$-0.0011$ and $-0.0016$, standard error about 0.0025), and at $N = 1200$ it
+fell to 1.1\%, 1.7 Monte Carlo standard errors, with coverage 0.92.
+
+\begin{table}[ht]
+\centering
+\caption{Calibration, $N = 300$, 100 replicates: coverage of 95\%
+intervals, ratio of mean posterior SD to the SD of posterior means, and
+bias in Monte Carlo standard errors.}
+\label{tab:cal}
+\small
+\begin{tabular}{l rrr rrr}
+\toprule
+& \multicolumn{3}{c}{unrotated} & \multicolumn{3}{c}{rotated} \\
+\cmidrule(lr){2-4}\cmidrule(lr){5-7}
+estimand & cover & SD ratio & bias/se & cover & SD ratio & bias/se \\
+\midrule
+$\beta_0$           & 0.99 & 1.164 &  1.68 & 0.99 & 1.150 &  1.55 \\
+$\beta_{\mathrm{time}}$ & 0.97 & 1.027 & $-0.30$ & 0.96 & 1.038 & $-0.32$ \\
+$\alpha$            & 0.93 & 0.922 &  2.97 & 0.93 & 0.917 &  2.97 \\
+$\sigma_0$          & 0.94 & 0.914 &  0.63 & 0.95 & 0.906 &  0.68 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\section{Real data with a random intercept only}\label{sec:realq1}
+
+Fitted with a random intercept only, the two datasets of
+Section~\mref{sec:realdata} show the degeneracy more starkly. Unrotated,
+$\beta_0$ and the subject-constant coefficients mixed at 0.04--0.07 ESS per
+draw, and 91--95\% of their posterior variance was explained by the
+absorbable directions of the random effects; every other parameter mixed
+near one ESS per draw. The rotation raised the affected coefficients' ESS
+per second 51--53 times on \texttt{aids} and 19--20 times on \texttt{pbc2}
+(2 seeds each), and the slowest parameter's ESS per draw from 0.05 to 0.88
+and from 0.06 to 0.78.
+
+\section{Reproducibility}\label{sec:repro}
+
+All code is in the code archive, which contains the \texttt{jmjax} package
+source. The development scripts below reproduce each result; paths are
+relative to the package root.
+
+\begin{center}
+\footnotesize
+\begin{tabular}{p{0.36\textwidth}p{0.58\textwidth}}
+\toprule
+result & script (output) \\
+\midrule
+Figure~\mref{fig:ridge}, Section~\mref{sec:residual} numbers &
+\texttt{dev/theory\_rotation\_toy.py}; \texttt{dev/figures/make\_figures.py} \\
+Section~\ref{sec:gausscheck} & \texttt{dev/theory\_alpha\_toy.py} \\
+Section~\mref{sec:blocked}, $R^2$ and its split & \texttt{dev/alpha\_missing\_information.R} \\
+Figure~\mref{fig:alpha} & \texttt{dev/figures/make\_figures.py} \\
+Table~\mref{tab:core} & \texttt{dev/pilot\_rotate\_grid.R} (\texttt{dev/pilot\_rotate\_grid.csv}) \\
+Section~\mref{sec:q1} and Section~\ref{sec:longrun}, standard length & \texttt{ROT\_GRID=q1 dev/pilot\_rotate\_grid.R} (\texttt{dev/pilot\_rotate\_q1.csv}) \\
+Section~\ref{sec:longrun} & \texttt{dev/study\_q1\_longrun.R} (\texttt{dev/study\_q1\_longrun.csv}) \\
+Table~\ref{tab:stress} & \texttt{ROT\_GRID=stress dev/pilot\_rotate\_grid.R} (\texttt{dev/pilot\_rotate\_stress.csv}) \\
+Figure~\mref{fig:gain} & \texttt{dev/figures/make\_figures.py} \\
+Table~\ref{tab:cal} & \texttt{dev/study\_calibration.R} \\
+$\alpha$ bias, $N = 1200$ & \texttt{dev/study\_alpha\_bias.R} (\texttt{dev/alpha\_bias\_results.csv}) \\
+Table~\mref{tab:gen} & \texttt{dev/generality/mixed\_models.py} \\
+& (\texttt{dev/generality/results\_orthodont\_toenail\_ext.csv}) \\
+Table~\mref{tab:real} & \texttt{dev/study\_realdata\_rotate.R} \\
+Table~\mref{tab:jmb}; JMbayes2 in Figure~\mref{fig:alpha} & \texttt{dev/study\_common\_ess.R} (\texttt{dev/common\_ess.csv}) \\
+Section~\ref{sec:realq1} & \texttt{dev/pilot\_q1\_intercept.R} \\
+$\alpha$ against JMbayes2, 1--12 covariates & \texttt{dev/study\_orth\_vs\_jmbayes2.R} \\
+Example~\mref{ex:spline}, basis checks & \texttt{dev/verify\_absorbable\_basis.py} \\
+\bottomrule
+\end{tabular}
+\end{center}

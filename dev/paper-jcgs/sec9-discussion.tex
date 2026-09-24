@@ -1,0 +1,125 @@
+\section{Discussion}\label{sec:discussion}
+
+\subsection{Related work}\label{sec:related}
+
+Approaches to a location degeneracy remove the directions (constraints,
+projections, integration), reparameterize them (centering, non-centering,
+interweaving), or adapt the sampler's metric to them. The rotation is a
+reparameterization chosen so that the third becomes cheap, and unlike
+removal it keeps the original parameter space and posterior and returns
+the original parameters.
+
+\paragraph{Choosing a parameterization.} Centering
+\citep{gelfand1995,gelfand1996} removes the location degeneracy and
+non-centering the funnel \citep{papaspiliopoulos2003,papaspiliopoulos2007};
+partial non-centering interpolates, the ancillarity-sufficiency
+interweaving strategy \citep{yu2011} interweaves the
+two within a Gibbs sampler, and \citet{gorinova2020} automate the choice
+per variable. All of these choose between centered and non-centered
+coordinates for each random effect. The rotation
+keeps the non-centered parameterization, with its benefits for the
+variances, and changes only which linear combinations of the standardized
+effects are sampling coordinates; against JMbayes2, which centers the
+coefficients it can, it achieved comparable efficiency on those
+coefficients (Section~\ref{sec:realdata}). \citet{browne2009} studied
+reparameterizations for multilevel survival models under Gibbs sampling.
+Their orthogonal parameterization orthogonalizes the fixed-effect
+predictors among themselves, as Stan's QR reparameterization does
+\citep{stanug}, but they observe that predictors correlated with the
+cluster indicator vectors make fixed and random effects ``play similar
+roles'' and suggest orthogonality to those indicators as future work. The
+absorbable subspace is that span, handled by rotating the random effects
+rather than the predictors.
+
+\paragraph{Removing the directions.} \citet{zanella2021} show that
+sum-to-zero constraints always improve the Gibbs sampler for crossed
+random effects, and that they also help NUTS dramatically on a Poisson
+crossed model (minimum ESS from 3.7 to 4977). Their construction samples
+the posterior conditioned on the constraint, and Stan's
+\texttt{sum\_to\_zero\_vector} likewise changes the prior unless
+compensated. Restricted spatial regression \citep{reich2006,hughes2013}
+projects spatial random effects off the fixed-effect design, and is known
+to affect inference on the fixed effects
+\citep{hodges2010,hanks2015,khan2022}. An earlier version of
+\texttt{jmjax} swept the absorbable directions out of the sampled
+random-effect coordinates: without a correction this miscalibrated the
+intervals for the swept coefficients, and with an exact correction it was
+about as efficient as the rotation in ordinary designs and up to twice as
+efficient in the most information-dense ones (Section~\ref{sec:stress}),
+at the price of the correction step.
+The closest precedent is \citet{vines1996}, whose transformation is exact:
+for independent Gaussian random effects and a Gaussian prior on the grand
+mean, the directions that shift the grand mean against the mean of each
+factor appear in no likelihood term and can be integrated out. Their
+method covers the grand-mean direction only, reports sum-to-zero contrasts
+rather than the original parameters, and leaves correlated random effects
+to further work; they also warn that recentering the effects inside each
+iteration has an unknown effect on the stationary distribution. The
+rotation extends the exact approach to every absorbable direction,
+including covariate-weighted and random-slope ones, to correlated random
+effects and to any prior on the fixed effects.
+
+\paragraph{Analyzing the directions.} In the discussion of
+\citet{zanella2021}, \citet{yang2021} decompose the Gibbs sampler for a
+random-intercept model with covariates using the subject-level covariate
+means, which span the covariate-weighted absorbable subspace for the
+intercept column, and show that the convergence rate is governed by the
+correlation between $\beta$ and the random effects along it; they note
+that the decomposition breaks down for general designs, and do not treat
+random slopes. In the same discussion \citet{robert2021} asked whether
+these parameterization choices had been studied for HMC, and the
+rejoinder \citep{zanella2021} called that open. Lemma~\ref{lem:local} and
+Proposition~\ref{prop:ridge} are an analysis on the HMC side for the
+absorbable directions. They complement general results on linear
+preconditioning for Markov chain Monte Carlo \citep{hirdlivingstone2025}: the block the
+rotation creates is small enough to precondition densely because the model
+says where the ridge is.
+
+\paragraph{Joint-model software.} JMbayes2 \citep{jmbayes2} uses
+Metropolis-within-Gibbs; \texttt{stan\_jm} in rstanarm
+\citep{brilleman2018} uses NUTS with non-centered random effects and so,
+we expect, meets the same ridge, which we have not tested; INLAjoint
+\citep{rustand2024} uses integrated nested Laplace approximations. We have
+not found a previous treatment that applies the data-augmentation
+autocorrelation identity \citep{liu1994} to the association parameter
+together with a measurement of how its shared variance divides between the
+random effects and the baseline hazard.
+
+\subsection{Limits and extensions}
+
+With about 9 visits per subject the rotation gave $\alpha$ 0.72--1.00 of
+the unrotated fit's ESS per second, though it gained with denser follow-up;
+the mechanism is not established. In the most information-dense designs
+the swept variant was up to twice as efficient, as the fixed-metric
+residual of Section~\ref{sec:residual} predicts, although the rotation was
+still 5--30 times ahead of the unrotated fit there. The simulation
+evidence comes from one design family with a spline baseline hazard. The
+basis construction's rank decision is a tolerance judgment when
+absorbable and identified directions are nearly collinear, although every
+returned direction is verified before use, and Condition~\ref{cond:S} can
+fail for very flexible time bases with few observations per subject.
+
+A metric that follows the sampled $\sigma_0$, for example by rescaling the
+dense block with the current $L$, is the obvious way to remove the
+residual and has not been tried. The construction needs only the fixed-
+and random-effects designs, so it applies to any model whose random
+effects enter through a linear predictor, including the GLMMs of brms and
+rstanarm. Crossed random effects need one basis per grouping factor, each
+rotating that factor's own index; the argument of
+Proposition~\ref{prop:exact} carries over unchanged.
+
+\subsection{Conclusion}
+
+The location degeneracy between fixed and random effects is shared by
+every regression with a random intercept and subject-constant fixed-effect
+columns, and it recurs for the time slope in every model with a random
+slope; this much is algebra. In the models studied here it slowed HMC
+substantially on the coefficients an analyst reports. Rotating the
+standardized random effects so that the absorbable directions become a
+small block of coordinates, and giving that block and the fixed effects
+one dense metric block, largely whitens the resulting ridge without
+changing the model. The association parameter of a joint model is a
+separate matter: in the two joint models measured, its posterior variance
+was largely shared with the survival parameters, a sharing that a
+sampler updating it conditionally pays for in autocorrelation, whereas HMC,
+heuristically, pays for it, if at all, in integration steps.

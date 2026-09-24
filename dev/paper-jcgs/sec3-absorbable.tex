@@ -1,0 +1,156 @@
+\section{Absorbable directions}\label{sec:absorbable}
+
+The rotation of Section~\ref{sec:rotation} is exact for any fixed
+orthogonal matrix; whether it helps depends on the basis it is built from.
+The basis should contain every direction the fixed effects can absorb,
+and only such directions. This section characterizes them.
+
+Fix a random-effect column $c$ and write $z_i = Z_i e_c \in \R^{n_i}$ for
+subject $i$'s entries of it; in this section only, $z_i(t)$ denotes the
+scalar entry of column $c$ in the design row at time $t$, rather than the
+whole row of (\ref{eq:traj}).
+
+\begin{definition}[Absorbable direction]\label{def:abs}
+A vector $v \in \R^N$ is absorbable for column $c$ if there is a witness
+$d \in \R^p$ such that the shift $B e_c \mapsto B e_c + v$, $\beta \mapsto
+\beta + d$ leaves every linear predictor and every marker trajectory, and
+hence the likelihood, unchanged:
+\begin{align}
+X_i d + v_i z_i &= 0 \quad \text{for every } i, \tag{L}\label{eq:L}\\
+x_i(t)^{\top} d + v_i\, z_i(t) &= 0 \quad \text{for every } i
+\text{ and every } t \in [0, \tau]. \tag{T}\label{eq:T}
+\end{align}
+Write $\A_c$ for the set of absorbable directions and $\A_c^{\mathrm{long}}$
+for the set satisfying (\ref{eq:L}) alone, which is the whole requirement
+in a mixed model without a survival submodel.
+\end{definition}
+
+Both sets are linear subspaces of $\R^N$. The likelihood uses $m_i(t)$
+only up to each subject's event or censoring time, so requiring
+(\ref{eq:T}) on all of $[0, \tau]$ is slightly more than likelihood
+invariance needs; it makes $\A_c$ a structural property of the model
+rather than of the observed follow-up. It is sufficient for likelihood
+invariance, not necessarily the largest set of shifts that leaves a
+particular observed likelihood unchanged. The prior on the random effects is
+not invariant under these shifts, and that asymmetry is what identifies
+the split at all.
+
+\subsection{Characterization and construction}
+
+Let $\T: \R^p \to \bigoplus_i \R^{n_i}$, $(\T d)_i = X_i d$, map a shift
+of $\beta$ to its effect on the stacked linear predictor, and $\U_c: \R^N
+\to \bigoplus_i \R^{n_i}$, $(\U_c v)_i = v_i z_i$, do the same for a shift
+of random-effect column $c$. Let $P_{\T}$ be the orthogonal projector onto
+$\range \T$ and, for $z_i \neq 0$, $P_{z_i}$ the projector onto
+$\spn(z_i)$. Let $S_c = \{i : z_i \neq 0\}$ be the subjects with at least
+one observation at which column $c$ is nonzero, and let $M_c \in
+\R^{(\sum_i n_i) \times p}$ stack $(I - P_{z_i}) X_i$ for $i \in S_c$ and
+$X_i$ for $i \notin S_c$.
+
+\begin{proposition}[Characterization]\label{prop:char}
+\begin{enumerate}
+\item[(a)] $\A_c^{\mathrm{long}} = \{v : \U_c v \in \range \T\}$, the
+preimage of $\range \T$ under $\U_c$, and equals $\ker\{(I -
+P_{\T})\,\U_c\}$. It depends on the fixed-effects design only
+through its column space.
+\item[(b)] A vector $d$ witnesses some $v \in \A_c^{\mathrm{long}}$ if and
+only if $d \in \ker M_c$. The witnessed $v$ then has $v_i = -z_i^{\top}
+X_i d / z_i^{\top} z_i$ for $i \in S_c$, and $v_i$ is unrestricted for
+$i \notin S_c$.
+\end{enumerate}
+\end{proposition}
+
+\begin{proof}
+(a) Condition (\ref{eq:L}) says $\T d = -\U_c v$ for some $d$, that is,
+$\U_c v \in \range \T$, which is equivalent to $(I - P_{\T})\U_c v = 0$.
+(b) For $i \in S_c$, $X_i d = -v_i z_i$ holds for some scalar $v_i$ if and
+only if $X_i d \in \spn(z_i)$, that is, $(I - P_{z_i}) X_i d = 0$, and then
+$v_i = -z_i^{\top} X_i d / z_i^{\top} z_i$. For $i \notin S_c$,
+(\ref{eq:L}) reads $X_i d = 0$ whatever $v_i$ is.
+\end{proof}
+
+Part (b) is the construction used in practice. In a mixed model without
+a survival submodel, a subject with $z_i = 0$ has no random effect in
+column $c$ in the likelihood, so we may take $S_c$ to be every subject.
+One singular value decomposition of the $(\sum_i n_i) \times
+p$ matrix $M_c$ gives a basis of $\ker M_c$, each basis vector $d$ gives one
+direction $v(d)$, and, if $X$ has full column rank, $d \mapsto v(d)$ is
+injective, so $\dim \A_c^{\mathrm{long}} = \dim \ker M_c \leq p$. The
+computation is done once, before sampling. In the
+implementation every returned direction is also checked against
+(\ref{eq:L}) before use, so a loose rank tolerance cannot admit a direction
+that is not absorbable.
+
+\subsection{The survival submodel}
+
+In a joint model the requirement (\ref{eq:T}) quantifies over all
+$t \in [0, \tau]$, while $M_c$ sees only the observation times.
+
+\begin{condition}[Structural extension]\label{cond:S}
+For every $d \in \ker M_c$ and every subject $i$ there is a scalar
+$v_i(d)$, equal to $-z_i^{\top} X_i d / z_i^{\top} z_i$ when $i \in S_c$,
+such that $x_i(t)^{\top} d + v_i(d)\, z_i(t) = 0$ for every $t \in [0,
+\tau]$. (Under the assumption of Proposition~\ref{prop:joint}, $v_i(d)$ is
+then unique for every $i$.)
+\end{condition}
+
+\begin{proposition}[Joint model]\label{prop:joint}
+Suppose every subject $i \notin S_c$ has some $t \in [0, \tau]$ with
+$z_i(t) \neq 0$. Under Condition~\ref{cond:S}, $\A_c = \{v(d) : d \in \ker
+M_c\}$. For a subject $i \notin S_c$, $v_i(d)$ is determined by
+(\ref{eq:T}) at any $t$ with $z_i(t) \neq 0$; in particular it is not
+free, although the longitudinal data alone leave it free.
+\end{proposition}
+
+The proof is in Appendix~\ref{app:proofs}. Condition~\ref{cond:S}
+holds for subject-constant columns (absorbed by the intercept column
+$z_i(t) \equiv 1$), the time column (absorbed by a random slope $z_i(t) =
+t$) and covariate-by-time interactions: in each, the identity holds as a
+function of $t$, not by coincidence at the observed times. More generally
+it holds when the functions $t \mapsto x_i(t)^{\top} d$ and $t \mapsto
+z_i(t)$ are known to lie in a finite-dimensional function space
+determined by its values at the subject's
+distinct observation times, such as polynomials of degree below $n_i$
+(Appendix~\ref{app:proofs}). For spline bases it can fail for subjects
+with few observations relative to the flexibility of the basis. It is
+cheap to check: \texttt{jmjax} evaluates the identity at the event times
+and quadrature nodes at every fit and warns if the worst relative residual
+exceeds $10^{-6}$. Proposition~\ref{prop:joint} also settles the entry of
+a subject with no observation at which the column is nonzero, such as a
+baseline-only subject for the slope column: it is forced by the survival
+submodel, and setting it to zero would produce a direction the likelihood
+does identify.
+
+\subsection{A design where the natural check fails}
+
+A natural construction, and the one \texttt{jmjax} originally used, looks
+for columns of $X$ that are \emph{individually} subject-constant multiples
+of $z$: column $j$ is kept if $X_i e_j = s_i z_i$ for every $i$, and the
+basis is the span of the resulting vectors $s$. This finds a subspace of
+$\A_c^{\mathrm{long}}$, but not always all of it.
+
+\begin{example}\label{ex:spline}
+Let every subject be observed at the same $m \geq 3$ distinct times, let
+$Z_i = [\,1,\ t\,]$ with $c$ the slope column, and let $X_i = [\,1,\ t +
+\tfrac12 t^2,\ t^2\,]$. The ratios of the three columns to $t$ are $1/t$,
+$1 + t/2$ and $t$, none constant, so the column-by-column search returns
+nothing. Yet $d = (0, 1, -\tfrac12)$ gives $X_i d = t$, so $v =
+-\mathbf{1}_N$ satisfies (\ref{eq:L}) and (\ref{eq:T}), and $\A_c
+\neq \{0\}$.
+\end{example}
+
+The column space in Example~\ref{ex:spline} is $\spn\{1, t, t^2\}$,
+what an orthogonal-polynomial or natural-spline mean in time produces (the
+monomial spelling \texttt{time + I(time\^{}2)} is caught, because the
+time column appears on its own). With such a mean and a random slope, the
+column-by-column search silently leaves the slope degeneracy in place. By
+Proposition~\ref{prop:char}(a) the absorbable set depends only on the
+column space, and the null-space construction of
+Proposition~\ref{prop:char}(b), which \texttt{jmjax} now uses, does not
+depend on how that space is spanned.
+
+Finally, let $Q_c$ be an orthonormal basis of $\A_c$ and $Q \in \R^{N
+\times k}$ an orthonormal basis of $\spn\bigcup_c \A_c$. In the simulation
+design of Section~\ref{sec:simulation} (an intercept, time, age and sex,
+with a random intercept and slope) $\A_0 = \spn\{\mathbf{1}, \mathrm{age},
+\mathrm{sex}\}$ and $\A_1 = \spn\{\mathbf{1}\}$, so $k = 3$.

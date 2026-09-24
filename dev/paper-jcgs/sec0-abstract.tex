@@ -1,0 +1,28 @@
+\begin{abstract}
+In regression models with subject-level random effects, the likelihood
+identifies the sum of a subject-constant fixed effect and the matching
+combination of random effects, but not its split. Under the
+non-centered parameterization that Hamiltonian Monte Carlo (HMC) software
+uses by default, only the prior locates the split, and the resulting ridge
+can slow sampling of the reported coefficients. We
+characterize every random-effect direction the fixed effects can absorb,
+and the condition a survival submodel adds in joint
+longitudinal-survival models. One fixed orthogonal rotation of the
+standardized random effects gathers these directions into a small block of
+sampling coordinates. It is exact for any random-effect covariance, and a dense mass-matrix block over this block and the fixed
+effects largely whitens the ridge. The effective sample size per second of
+the intercept and time slope rose 14- and 21-fold in simulation
+(geometric means), and that
+of the intercept and subject-constant coefficients 17- to 28-fold on two
+joint-model datasets. For the association parameter of a joint model, an
+ideal two-block sampler's lag-1 autocorrelation equals the share of its
+posterior variance explained by the other parameters, which on real data
+was at least 0.85. Supplementary materials for this article are available
+online.
+\end{abstract}
+
+\noindent%
+{\it Keywords:} Identifiability; Longitudinal and time-to-event data;
+Mixed models; No-U-Turn sampler; Non-centered parameterization;
+Preconditioning.
+\vfill

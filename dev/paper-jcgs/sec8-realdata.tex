@@ -1,0 +1,97 @@
+\section{Real data}\label{sec:realdata}
+
+\subsection{Rotated against unrotated}
+
+We fitted two standard joint-model datasets, both distributed with
+JMbayes2, unrotated and rotated from the same preliminary mixed-model and
+Cox fits and sampler seed, with 4 chains of 1000 warm-up and 1000 sampling
+iterations and 3 seeds per dataset. For \texttt{aids}
+\citep{abrams1994,guo2004}, 467 patients, the marker model is
+$\sqrt{\mathrm{CD4}} \sim \mathrm{obstime} + \mathrm{drug} +
+\mathrm{gender}$, with three absorbable intercept directions (constant,
+drug, gender) and one slope direction. For \texttt{pbc2}
+\citep{murtaugh1994}, 312 patients, it is $\log(\mathrm{serum\
+bilirubin}) \sim \mathrm{year} + \mathrm{age}$, with two absorbable
+intercept directions (constant, age) and one slope direction. Both have a
+random intercept and slope on time and a hazard for death depending on
+drug.
+
+\begin{table}[t]
+\centering
+\caption{Real data: ESS per second, rotated over unrotated, mean over 3
+seeds (per-seed range in brackets), and sampler statistics.}
+\label{tab:real}
+\small
+\begin{tabular}{lll}
+\toprule
+& \texttt{aids} & \texttt{pbc2} \\
+\midrule
+intercept & 26.9 [21--34] & 17.2 [12--25] \\
+subject-constant covariates & 24.8, 28.5 [21--33] & 16.6 [12--23] \\
+time slope & 2.3 [2.0--2.7] & 4.4 [4.0--4.6] \\
+$\alpha$ & 2.0 [1.8--2.4] & 0.95 [0.88--1.01] \\
+$\sigma_e$, $\sigma_b$, $\rho$, $\gamma$ & 1.4--2.4 & 0.82--1.28 \\
+sampling time (s), rotated / unrotated & 10.8 / 17.6 & 12.4 / 11.7 \\
+leapfrog steps per iteration & 31 / 92--111 & 60--63 / 63 \\
+maximum $\hat R$, all parameters & 1.010 / 1.010 & 1.007 / 1.018 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+The intercept and subject-constant coefficients gained 17--28 times, and the time slope, also on an absorbable direction, 2.3--4.4 times (Table~\ref{tab:real}). Every posterior mean agreed
+between the two fits within Monte Carlo error (largest paired difference
+1.65 Monte Carlo standard errors over 19 parameter-dataset pairs). The two
+datasets differ in one instructive way. On \texttt{aids} the unrotated
+trajectories were three times longer: the degeneracy was what set NUTS's
+trajectory length, and removing it made every iteration cheaper, so every
+parameter gained, $\alpha$ included, and sampling time fell by 40\%. On
+\texttt{pbc2} the trajectory length was set by something else, and the
+parameters the degeneracy does not involve changed by 0.82--1.28 times ($\alpha$ 0.95).
+
+With a random intercept only, the same datasets show the degeneracy more
+starkly: the rotation raised the affected coefficients' ESS per second
+51--53 times on \texttt{aids} and 19--20 times on \texttt{pbc2}
+(\suppref{sec:realq1}).
+
+\subsection{A blocked sampler}
+
+JMbayes2 \citep{jmbayes2} fits the same models by Metropolis-within-Gibbs
+and hierarchically centers the coefficients it can, the classical remedy
+for the location degeneracy \citep{gelfand1995}. It therefore offers two
+comparisons: on the centered coefficients, of the rotation with
+centering; on the rest, and on $\alpha$ in particular, of HMC with a
+blocked sampler
+(Section~\ref{sec:blocked}). JMbayes2 was run with 4 chains of 16,000
+iterations and 4,000 burn-in, well above its defaults, timing the whole
+model-fitting call. We saved the draws of all three fits (a separate run
+from Table~\ref{tab:real}, same settings) and computed every ESS in
+Table~\ref{tab:jmb} with NumPyro's estimator. With the rank-normalized
+bulk ESS of the \texttt{posterior} package the ratios were within 5\% of
+those in the table, and with each package's own estimator within 18\%
+(JMbayes2's own estimator is somewhat more generous to it).
+
+\begin{table}[t]
+\centering
+\caption{ESS per second relative to JMbayes2 (same data, geometric means
+over 3 seeds; one ESS estimator, NumPyro's, for all fits).}
+\label{tab:jmb}
+\small
+\begin{tabular}{l rr rr}
+\toprule
+& \multicolumn{2}{c}{\texttt{aids}} & \multicolumn{2}{c}{\texttt{pbc2}} \\
+\cmidrule(lr){2-3}\cmidrule(lr){4-5}
+& unrotated & rotated & unrotated & rotated \\
+\midrule
+intercept & 0.04 & 0.97 & 0.05 & 0.93 \\
+subject-constant covariates & 0.03--0.04 & 0.88--0.98 & 0.06 & 0.98 \\
+time slope & 3.3 & 7.7 & 0.42 & 1.9 \\
+$\alpha$ & 3.5 & 7.2 & 8.2 & 7.9 \\
+survival coefficient $\gamma$ & 1.2 & 2.8 & 2.1 & 1.8 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+The unrotated NUTS fit trailed JMbayes2 by a factor of 17--33 on the
+coefficients JMbayes2 centers (Table~\ref{tab:jmb}). Rotated, it is at
+parity on them (0.88--0.98) and ahead on the others: 1.9--7.7 times on
+the time slope, 1.8--2.8 on $\gamma$ and 7.2--7.9 on $\alpha$. The rotated NUTS fit therefore achieves efficiency comparable to JMbayes2 on the regression coefficients that JMbayes2 centers, while retaining the non-centered parameterization for the random-effect variances. The lead on $\alpha$ is present without the rotation, and Section~\ref{sec:blocked} attributes most of its per-draw part to blocked updating; the rotation added to it on \texttt{aids} (3.5 to 7.2) by shortening NUTS's trajectories. JMbayes2 produces 4.6--7.3 times as many draws per second, but only one effective draw in 31--40 for $\alpha$ (Figure~\ref{fig:alpha}).
