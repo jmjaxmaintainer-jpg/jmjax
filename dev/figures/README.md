@@ -30,9 +30,9 @@ over 3 seeds in a design cell; small: single seeds. Core q = 2 grid
 (Section 6.2), stress q = 2 grid (Section 6.4) and the random-intercept
 (q = 1) grid (Section 5.3). In (b), open triangles are the q = 1 time slope,
 which has no random effect and hence nothing to rotate; it moves only
-through the step size. The q = 1 intercept ratios compare against
-unrotated fits that had mostly not converged at this run length, so only
-their order of magnitude is meaningful.
+through the step size. The q = 1 intercept ratios are at the standard run length, where most
+unrotated fits had not converged; paper Section 6.3 (dev/study_q1_longrun.R)
+gives the comparison between converged fits.
 
 **Figure 3. Why a blocked sampler mixes alpha slowly.** Curve: ESS per draw
 of an ideal two-block sampler, (1 - R^2)/(1 + R^2) (Proposition 8). R^2 of

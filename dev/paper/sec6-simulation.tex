@@ -102,9 +102,9 @@ geometric mean over three seeds in one design; small: single seeds. Core
 and stress grids have a random intercept and slope ($q = 2$); the $q = 1$
 grid has a random intercept only. In (b), open triangles are the $q = 1$
 time slope, which has no random effect and so nothing to rotate. The $q =
-1$ intercept ratios compare against unrotated fits that had mostly not
-converged at this run length (Section~\ref{sec:q1}), so only their order
-of magnitude is meaningful.}
+1$ intercept ratios are at the standard run length, where most unrotated
+fits had not converged; Section~\ref{sec:q1} gives a comparison between
+converged fits.}
 \label{fig:gain}
 \end{figure}
 
@@ -115,14 +115,35 @@ only, gave seven designs: about 9, 17 and 35 visits, $N \in \{100, 300\}$,
 and one noisier design with $\sigma_e = 0.8$. The intercept gained 6.5--282
 times and the subject-constant coefficient of age 6.6--207 times; the time
 slope, which has no absorbable direction when there is no random slope,
-moved only through the step size (0.79--3.4 times). These large ratios
-overstate the typical gain: in 17 of the 21 unrotated fits some parameter
-had $\hat R$ above 1.05, the intercept's reaching 1.27, and the intercept
-mixed at 0.002--0.04 ESS per draw everywhere except the noisy design.
-Every rotated fit had $\hat R \leq 1.004$. The comparison is between a
-converged fit and one that had not converged at the standard run length,
-so its order of magnitude is the finding. Posterior means agreed to a
-median of 0.025 posterior standard deviations (maximum 0.175).
+moved only through the step size (0.79--3.4 times). At this run length,
+however, 17 of the 21 unrotated fits had some parameter with $\hat R$ above
+1.05, the intercept's reaching 1.27, while every rotated fit had $\hat R
+\leq 1.004$, so these ratios compare a converged fit with unconverged ones.
+Posterior means agreed to a median of 0.025 posterior standard deviations
+(maximum 0.175).
+
+To obtain a comparison between converged fits, we reran three designs
+($N = 300$ with about 9, 17 and 35 visits) and extended the unrotated fit
+to 2, 4, 8, 16 and 32 times the standard length, with two seeds taken to
+the longest runs. A convergence criterion was fixed in advance: split $\hat
+R \leq 1.01$ on every monitored parameter and ESS $\geq 400$ for the
+intercept, age, the time slope and $\alpha$. Every rotated fit met it at
+the standard length. The unrotated fit met it first at 16 times the
+standard length with 9 visits, at 16 and 32 times with 17 visits, and not
+by 32 times with 35 visits, where its intercept had an ESS of 304--377 from
+64,000 draws with $\hat R = 1.002$. Its ESS per draw for the intercept did
+not change with run length: 0.009--0.023, 0.007--0.020 and 0.002--0.008 in
+the three designs over runs from 1 to 32 times the standard length, against
+2.1--2.5, 0.9--1.9 and 1.1--2.4 for the rotated fit. The per-draw advantage,
+of order 100 times, is therefore a property of the stationary chains, not
+of short runs. In wall time, the unrotated fit needed 3.5 and 6.5--6.6
+times as long as the rotated fit to meet the criterion in the first two
+designs, and more than 10--14 times in the third. These ratios are much
+smaller than the per-draw ones because the rotated fit's time at the
+standard length is mostly warm-up and compilation, and it exceeded the ESS
+target by a factor of 5 to 12. Between the first fits of each arm to meet
+the criterion, posterior means agreed to a median of 0.02 posterior
+standard deviations (maximum 0.11) and standard deviations to within 6\%.
 
 \subsection{Stress grid}\label{sec:stress}
 
