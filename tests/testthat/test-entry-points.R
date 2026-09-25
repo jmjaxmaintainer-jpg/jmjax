@@ -20,6 +20,13 @@ test_that("jm_mle() is jm_fit() with the matching MLE method", {
 
   f_sp <- do.call(jm_mle, c(a, baseline = "spline"))
   expect_identical(f_sp$method, "spline-PH-aGH")
+
+  # Warm start of a spline fit from Weibull estimates: those have no spline
+  # coefficients, which used to leave init_theta too short (a backend
+  # shape error) instead of starting the coefficients at zero.
+  f_ws <- do.call(jm_mle, c(a, list(baseline = "spline",
+                                    init_theta = f_new$estimates)))
+  expect_true(is.finite(f_ws$loglik))
 })
 
 test_that("jm_mle() warns about, and ignores, Bayesian-only control options", {

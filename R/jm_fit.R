@@ -2427,7 +2427,17 @@ jm_fit <- function(long_formula,
       } else {
         .wn <- grep("^W[0-9]+$", names(.e), value = TRUE)
         .wn <- .wn[order(as.integer(sub("^W", "", .wn)))]
-        if (length(.wn)) .th <- c(.th, as.numeric(.e[.wn]))
+        .ns <- as.integer(spline_info$n_splines)
+        if (length(.wn) == .ns) {
+          .th <- c(.th, as.numeric(.e[.wn]))
+        } else {
+          # Estimates from a Weibull fit (or a spline fit with other knots)
+          # have no usable W: start the spline coefficients at zero, as
+          # before this accepted named estimates. Leaving them out made
+          # the vector too short, and the backend failed with a shape
+          # error ("dot_general requires contracting dimensions ...").
+          .th <- c(.th, rep(0, .ns))
+        }
       }
       .gn <- grep("^gamma_[0-9]+$", names(.e), value = TRUE)
       .gn <- .gn[order(as.integer(sub("^gamma_", "", .gn)))]
