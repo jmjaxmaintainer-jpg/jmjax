@@ -22,3 +22,4 @@
 ^warm_start_
 ^warm\.log$
 ^n8000.*\.log$
+^CITATION\.cff$

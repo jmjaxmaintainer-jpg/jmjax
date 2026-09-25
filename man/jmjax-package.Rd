@@ -13,10 +13,12 @@ providing the formula interface and Python providing the numerical
 fitting via \pkg{reticulate}.
 }
 \section{Getting started}{
- See \code{\link{jm_fit}} for the main
-  fitting function, and \code{vignette("jmjax-introduction")} for a
-  worked walkthrough covering all four fitting methods, diagnostics, and
-  how to choose between them.
+ Fit by maximum likelihood with
+  \code{\link{jm_mle}()} or by Bayesian MCMC with \code{\link{jm_bayes}()};
+  \code{\link{jm_fit}()} is the general interface behind both. See
+  \code{vignette("jmjax-introduction")} for a worked walkthrough covering
+  the fitting functions, diagnostics, predictions, and how to choose
+  between them.
 }
 
 \section{Validation}{
@@ -24,9 +26,13 @@ fitting via \pkg{reticulate}.
   cross-validated against R's \pkg{JM} and \pkg{JMbayes2} packages
   during development - see \code{vignette("jmjax-validation")} for the
   full methodology, bugs found and fixed along the way, and benchmark
-  results (including a 13.5x sampling-efficiency advantage over
-  \pkg{JMbayes2} on the spline-baseline MCMC path, at statistically
-  indistinguishable estimation accuracy).
+  results.
+}
+
+\section{Citation}{
+ If you use jmjax, please cite the software release
+  (\doi{10.5281/zenodo.22950084}); \code{citation("jmjax")} gives the
+  reference.
 }
 
 \section{One-time setup}{
@@ -37,12 +43,21 @@ fitting via \pkg{reticulate}.
   both paths, including Windows-specific notes).
 }
 
+\seealso{
+Useful links:
+\itemize{
+  \item \url{https://github.com/jmjaxmaintainer-jpg/jmjax}
+  \item \doi{10.5281/zenodo.22950084}
+  \item Report bugs at \url{https://github.com/jmjaxmaintainer-jpg/jmjax/issues}
+}
+
+}
 \author{
-\strong{Maintainer}: Changbin Guo \email{jmjax.maintainer@gmail.com} [copyright holder]
+\strong{Maintainer}: Changbin Guo \email{jmjaxmaintainer@gmail.com} [copyright holder]
 
 Authors:
 \itemize{
-  \item Changbin Guo \email{jmjax.maintainer@gmail.com} [copyright holder]
+  \item Changbin Guo \email{jmjaxmaintainer@gmail.com} [copyright holder]
 }
 
 }

@@ -1,0 +1,13 @@
+bibentry(
+  bibtype = "Manual",
+  title   = "{jmjax}: Joint Models for Longitudinal and Survival Data via {JAX}",
+  author  = person("Changbin", "Guo"),
+  year    = "2026",
+  note    = "R package version 0.3.0",
+  doi     = "10.5281/zenodo.22950084",
+  url     = "https://github.com/jmjaxmaintainer-jpg/jmjax",
+  textVersion = paste(
+    "Guo, C. (2026). jmjax: Joint Models for Longitudinal and Survival",
+    "Data via JAX. R package version 0.3.0.",
+    "https://doi.org/10.5281/zenodo.22950084")
+)

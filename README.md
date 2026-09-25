@@ -1,5 +1,7 @@
 # jmjax
 
+[![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.22950084.svg)](https://doi.org/10.5281/zenodo.22950084)
+
 Joint models for longitudinal and time-to-event data, fitted with a
 [JAX](https://github.com/jax-ml/jax)/[NumPyro](https://num.pyro.ai)
 backend. You write the model with ordinary R formulas; jmjax builds the
@@ -101,6 +103,15 @@ subjects is planned. See `NEWS.md` for the changes in this release.
 Run the tests with `devtools::test()`. Tests that need the Python backend
 or `JM`/`JMbayes2` are skipped when those are missing. Notes on how the
 R and Python sides divide the work are in `dev/notes/architecture.md`.
+
+## How to cite
+
+If you use jmjax, please cite the software release:
+
+> Guo, C. (2026). *jmjax: Joint Models for Longitudinal and Survival Data
+> via JAX* (version 0.3.0). https://doi.org/10.5281/zenodo.22950084
+
+`citation("jmjax")` gives the same reference, with a BibTeX entry.
 
 ## License
 

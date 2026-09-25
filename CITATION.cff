@@ -1,0 +1,24 @@
+cff-version: 1.2.0
+message: "If you use this software, please cite it as below."
+title: "jmjax: Joint Models for Longitudinal and Survival Data via JAX"
+type: software
+authors:
+  - family-names: Guo
+    given-names: Changbin
+    email: jmjaxmaintainer@gmail.com
+version: 0.3.0
+date-released: 2026-09-25
+doi: 10.5281/zenodo.22950084
+license: MIT
+repository-code: "https://github.com/jmjaxmaintainer-jpg/jmjax"
+abstract: >-
+  Shared-parameter joint models for longitudinal and time-to-event data,
+  fitted in R with a JAX/NumPyro backend: maximum likelihood with adaptive
+  Gauss-Hermite quadrature, and Bayesian estimation with the No-U-Turn
+  sampler.
+keywords:
+  - joint models
+  - survival analysis
+  - longitudinal data
+  - Hamiltonian Monte Carlo
+  - R
