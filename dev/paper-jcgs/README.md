@@ -34,7 +34,7 @@ to Computer Modern.
   availability statement and supplementary material list
   (`declarations.tex`), plus references for LKJ and HSAUR3.
 
-## arXiv version
+## arXiv version (optional; not planned for now)
 
 `dev/paper-arxiv/` builds a preprint with the same text: it copies the
 section files from this folder, so edit them here. It uses an 11pt
@@ -54,6 +54,6 @@ note that the article was accepted in JCGS.
 - [ ] Upload the PDF, then the LaTeX sources as one zip: the `.tex` files,
       `refs.bib`, `jcgs-paper.bbl`, `agsm.bst` and the figures. Upload the
       supplement PDF and the code archive as supplementary files.
-- [ ] Cite the arXiv preprint in the manuscript once it has an identifier.
+- [ ] Only if a preprint is posted: cite it in the manuscript.
 - [ ] Anonymized version, only if choosing double-anonymous review: set
       `\anon` to 0. The name `jmjax` would still identify the author.
