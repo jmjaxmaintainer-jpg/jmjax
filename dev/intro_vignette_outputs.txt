@@ -1,0 +1,196 @@
+===== data
+> data("pbc2", "pbc2.id", package = "JM")
+> pbc2$log_bili <- log(pbc2$serBilir)
+> head(pbc2[, c("id", "year", "log_bili", "drug")], 4)
+  id      year    log_bili      drug
+1  1 0.0000000  2.67414865 D-penicil
+2  1 0.5256817  3.05870707 D-penicil
+3  2 0.0000000  0.09531018 D-penicil
+4  2 0.4983025 -0.22314355 D-penicil
+> head(pbc2.id[, c("id", "years", "status2", "drug")], 4)
+  id     years status2      drug
+1  1  1.095170       1 D-penicil
+2  2 14.152338       0 D-penicil
+3  3  2.770781       1 D-penicil
+4  4  5.270507       1 D-penicil
+
+===== mle
+> fit_w <- jm_mle(log_bili ~ year, Surv(years, status2) ~ drug, data_long = pbc2, 
++     data_surv = pbc2.id, id_var = "id", time_var = "year", baseline = "weibull")
+> fit_w
+Call:
+jm_mle(long_formula = log_bili ~ year, surv_formula = Surv(years, 
+    status2) ~ drug, data_long = pbc2, data_surv = pbc2.id, id_var = "id", 
+    time_var = "year", baseline = "weibull")
+
+Method: weibull-PH-aGH 
+Precision: float64
+Subjects: 312  | Longitudinal obs: 1945  | Events: 140 (44.9%) 
+
+Association (alpha): effect of the longitudinal marker on the hazard
+  alpha = 1.2797, 95% CI = [1.0709, 1.4884]
+  hazard ratio per unit of marker = 3.5954, 95% CI = [2.9181, 4.4299]
+
+Estimates by submodel:
+Longitudinal:
+        Estimate Std.Err z.value p.value
+beta_0    0.5775  0.0650  8.8894 <0.0001
+beta_1    0.0981  0.0043 22.7496 <0.0001
+sigma_e   0.4913  0.0086 57.2099 <0.0001
+
+Survival (baseline hazard):
+            Estimate Std.Err  z.value p.value
+log_lambda0  -4.5450  0.2933 -15.4953 <0.0001
+shape         1.1994  0.0873  13.7416 <0.0001
+
+Survival (baseline covariates):
+        Estimate Std.Err z.value p.value
+gamma_0   0.0219  0.1754  0.1247   0.901
+
+Variance components:
+        Estimate Std.Err z.value p.value
+sigma_b   1.1076  0.0471 23.5346 <0.0001
+
+
+Log-Likelihood: -2307.7 
+
+===== bayes
+> fit_s <- jm_bayes(log_bili ~ year, Surv(years, status2) ~ drug, data_long = pbc2, 
++     data_surv = pbc2.id, id_var = "id", time_var = "year", random_effects = "intercept_slope", 
++     random_formula = ~year, chains = 2, warmup = 500, samples = 1000, seed = 1)
+> fit_s
+Call:
+jm_bayes(long_formula = log_bili ~ year, surv_formula = Surv(years, 
+    status2) ~ drug, data_long = pbc2, data_surv = pbc2.id, id_var = "id", 
+    time_var = "year", random_effects = "intercept_slope", random_formula = ~year, 
+    chains = 2, warmup = 500, samples = 1000, seed = 1)
+
+Method: spline-PH-mcmc 
+Precision: float64
+Subjects: 312  | Longitudinal obs: 1945  | Events: 140 (44.9%) 
+
+Association (alpha): effect of the longitudinal marker on the hazard
+  alpha = 1.1756, 95% credible interval = [1.0145, 1.3482]
+  hazard ratio per unit of marker = 3.2401, 95% credible interval = [2.7579, 3.8505]
+
+Estimates by submodel:
+Longitudinal:
+        Estimate Std.Err CrI.lower CrI.upper   Rhat      ESS
+beta_0    0.4911  0.0594    0.3722    0.6063 0.9994 3525.527
+beta_1    0.1844  0.0137    0.1589    0.2112 0.9990 2691.163
+sigma_e   0.3473  0.0067    0.3345    0.3607 1.0035 1262.061
+
+Survival (baseline hazard): 9 spline coefficients (W0-W8); see summary(fit) for the full table
+
+Survival (baseline covariates):
+        Estimate Std.Err CrI.lower CrI.upper   Rhat      ESS
+gamma_0  -0.0037  0.1706   -0.3433    0.3107 0.9991 4300.545
+
+Variance components:
+         Estimate Std.Err CrI.lower CrI.upper   Rhat      ESS
+sigma_b0   1.0084  0.0427    0.9291    1.0989 1.0021 465.9280
+sigma_b1   0.1818  0.0122    0.1589    0.2081 1.0019 827.9985
+rho        0.4143  0.0734    0.2617    0.5439 1.0027 836.6772
+
+
+Convergence: max R-hat = 1.0035, min ESS = 466, divergences = 0 
+Sampler: 2 chains x 1000 samples (500 warmup), 9.4s 
+Rotation (control$rotate_absorbable): applied (1 direction)
+
+===== summary_bayes
+> summary(fit_s)
+Association:
+      Estimate Std.Err CrI.lower CrI.upper   Rhat     ESS
+alpha   1.1756  0.0857    1.0145    1.3482 0.9992 3331.16
+
+Longitudinal:
+        Estimate Std.Err CrI.lower CrI.upper   Rhat      ESS
+beta_0    0.4911  0.0594    0.3722    0.6063 0.9994 3525.527
+beta_1    0.1844  0.0137    0.1589    0.2112 0.9990 2691.163
+sigma_e   0.3473  0.0067    0.3345    0.3607 1.0035 1262.061
+
+Survival (baseline hazard):
+   Estimate Std.Err CrI.lower CrI.upper   Rhat      ESS
+W0  -3.9350  0.4602   -4.8874   -3.0654 1.0004 2477.930
+W1  -4.6575  0.5655   -5.7609   -3.5734 1.0000 3151.330
+W2  -3.8953  0.5861   -5.0931   -2.7744 1.0001 2737.323
+W3  -4.4589  0.4903   -5.4470   -3.4750 0.9995 2769.493
+W4  -4.3466  0.5322   -5.4562   -3.3771 0.9995 2701.711
+W5  -4.2239  0.5617   -5.3671   -3.1516 0.9994 2979.373
+W6  -2.5134  0.9340   -4.3857   -0.7591 0.9991 3216.938
+W7  -6.9916  1.5801  -10.2706   -4.0181 1.0001 3230.254
+W8  -3.1927  1.4529   -6.4550   -0.7004 1.0013 2454.241
+
+Survival (baseline covariates):
+        Estimate Std.Err CrI.lower CrI.upper   Rhat      ESS
+gamma_0  -0.0037  0.1706   -0.3433    0.3107 0.9991 4300.545
+
+Variance components:
+         Estimate Std.Err CrI.lower CrI.upper   Rhat      ESS
+sigma_b0   1.0084  0.0427    0.9291    1.0989 1.0021 465.9280
+sigma_b1   0.1818  0.0122    0.1589    0.2081 1.0019 827.9985
+rho        0.4143  0.0734    0.2617    0.5439 1.0027 836.6772
+
+
+===== ranef
+> head(ranef(fit_s), 3)
+  subject_index    b0_mean     b0_sd     b1_mean      b1_sd
+1             1  2.1849872 0.2492208  0.21313804 0.16088919
+2             2 -0.4583328 0.1798143 -0.01216079 0.03420319
+3             3 -0.2633982 0.2034698  0.01865051 0.12799940
+
+===== methods
+> coef(fit_s)
+      beta_0       beta_1      sigma_e        alpha           W0           W1 
+ 0.491081794  0.184368719  0.347289481  1.175598312 -3.934991408 -4.657481486 
+          W2           W3           W4           W5           W6           W7 
+-3.895322109 -4.458897922 -4.346577929 -4.223894530 -2.513442749 -6.991602263 
+          W8     sigma_b0     sigma_b1          rho      gamma_0 
+-3.192669246  1.008362724  0.181755895  0.414255192 -0.003684537 
+> confint(fit_s, "alpha")
+         2.5 %   97.5 %
+alpha 1.014478 1.348195
+> round(sqrt(diag(vcov(fit_s))), 4)
+  beta_0   beta_1  sigma_e    alpha       W0       W1       W2       W3 
+  0.0594   0.0137   0.0067   0.0857   0.4603   0.5656   0.5862   0.4904 
+      W4       W5       W6       W7       W8 sigma_b0 sigma_b1      rho 
+  0.5323   0.5619   0.9342   1.5805   1.4532   0.0427   0.0122   0.0735 
+ gamma_0 
+  0.1706 
+> logLik(fit_w)
+'log Lik.' -2307.705 (df=8)
+> AIC(fit_w)
+[1] 4631.41
+> BIC(fit_w)
+[1] 4661.354
+> nobs(fit_w)
+[1] 312
+
+===== predict
+> id_c <- pbc2.id$id[pbc2.id$status2 == 0 & pbc2.id$years < 8][1]
+> nd <- pbc2[pbc2$id == id_c, ]
+> predict(fit_s, newdata = nd, times = 0:4)
+  id time  estimate     lower    upper
+1  5    0 0.8220302 0.4525578 1.215670
+2  5    1 1.2058314 0.9259460 1.496839
+3  5    2 1.5896327 1.3186519 1.853007
+4  5    3 1.9734339 1.6362631 2.310022
+5  5    4 2.3572352 1.9107142 2.823388
+> predict(fit_s, newdata = nd, process = "event", times = nd$years[1] + 
++     0:3)
+  id   t_from     time  estimate      lower     upper
+1  5 4.120578 4.120578 1.0000000 1.00000000 1.0000000
+2  5 4.120578 5.120578 0.7504811 0.54933290 0.8834500
+3  5 4.120578 6.120578 0.4899600 0.18193443 0.7446028
+4  5 4.120578 7.120578 0.2612318 0.01870454 0.5766713
+
+===== warm_start
+> fit_spline_mle <- jm_mle(log_bili ~ year, Surv(years, status2) ~ drug, 
++     data_long = pbc2, data_surv = pbc2.id, id_var = "id", time_var = "year", baseline = "spline", 
++     init_theta = fit_w$estimates)
+> coef(fit_spline_mle)[c("alpha", "gamma_0")]
+     alpha    gamma_0 
+1.29438985 0.03051234 
+> fit_spline_mle$convergence$converged
+[1] TRUE
+
