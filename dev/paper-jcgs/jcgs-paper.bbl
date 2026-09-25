@@ -83,6 +83,13 @@ Gorinova, M.~I., Moore, D. \harvardand\ Hoffman, M.~D.  \harvardyearleft
   Machine Learning', Vol. 119 of {\em Proceedings of Machine Learning
   Research}, pp.~3648--3657.
 
+\harvarditem{Guo}{2026}{jmjax}
+Guo, C.  \harvardyearleft 2026\harvardyearright , `{jmjax}: Joint models for
+  longitudinal and survival data via {JAX}'.
+\newblock R package version 0.3.0,
+  \url{https://github.com/jmjaxmaintainer-jpg/jmjax},
+  doi:10.5281/zenodo.22950084.
+
 \harvarditem{Guo \harvardand\ Carlin}{2004}{guo2004}
 Guo, X. \harvardand\ Carlin, B.~P.  \harvardyearleft 2004\harvardyearright ,
   `Separate and joint modeling of longitudinal and event time data using
