@@ -34,6 +34,16 @@ to Computer Modern.
   availability statement and supplementary material list
   (`declarations.tex`), plus references for LKJ and HSAUR3.
 
+## arXiv version
+
+`dev/paper-arxiv/` builds a preprint with the same text: it copies the
+section files from this folder, so edit them here. It uses an 11pt
+single-column layout, with the supplement as Appendices B--G
+(`sh dev/paper-arxiv/build.sh`; upload `dev/paper-arxiv/arxiv-source.zip`).
+Taylor & Francis allows posting a preprint before submission and asks that
+the submitted manuscript cite it; after acceptance, the preprint should
+note that the article was accepted in JCGS.
+
 ## Before submission
 
 - [ ] Replace AFFILIATION and FUNDING on the title page (`jcgs-paper.tex`).
@@ -44,5 +54,6 @@ to Computer Modern.
 - [ ] Upload the PDF, then the LaTeX sources as one zip: the `.tex` files,
       `refs.bib`, `jcgs-paper.bbl`, `agsm.bst` and the figures. Upload the
       supplement PDF and the code archive as supplementary files.
+- [ ] Cite the arXiv preprint in the manuscript once it has an identifier.
 - [ ] Anonymized version, only if choosing double-anonymous review: set
       `\anon` to 0. The name `jmjax` would still identify the author.
