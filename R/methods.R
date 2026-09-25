@@ -115,7 +115,7 @@
 #' logLik(fit); AIC(fit); BIC(fit)
 #' nobs(fit)                 # subjects, not measurements
 #' @name jmjax-methods
-#' @importFrom stats coef vcov confint logLik nobs
+#' @importFrom stats coef vcov confint logLik nobs setNames
 NULL
 
 #' @rdname jmjax-methods

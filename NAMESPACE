@@ -23,5 +23,6 @@ importFrom(stats,
   logLik,
   nobs,
   predict,
+  setNames,
   vcov
 )
