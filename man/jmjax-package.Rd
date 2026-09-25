@@ -31,7 +31,7 @@ fitting via \pkg{reticulate}.
 
 \section{Citation}{
  If you use jmjax, please cite the software release
-  (\doi{10.5281/zenodo.22950084}); \code{citation("jmjax")} gives the
+  (\doi{10.5281/zenodo.22950083}); \code{citation("jmjax")} gives the
   reference.
 }
 
@@ -47,7 +47,7 @@ fitting via \pkg{reticulate}.
 Useful links:
 \itemize{
   \item \url{https://github.com/jmjaxmaintainer-jpg/jmjax}
-  \item \doi{10.5281/zenodo.22950084}
+  \item \doi{10.5281/zenodo.22950083}
   \item Report bugs at \url{https://github.com/jmjaxmaintainer-jpg/jmjax/issues}
 }
 

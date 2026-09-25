@@ -3,11 +3,25 @@ bibentry(
   title   = "{jmjax}: Joint Models for Longitudinal and Survival Data via {JAX}",
   author  = person("Changbin", "Guo"),
   year    = "2026",
-  note    = "R package version 0.3.0",
-  doi     = "10.5281/zenodo.22950084",
+  note    = paste("R package version", meta$Version),
+  doi     = "10.5281/zenodo.22950083",
   url     = "https://github.com/jmjaxmaintainer-jpg/jmjax",
+  textVersion = paste0(
+    "Guo, C. (2026). jmjax: Joint Models for Longitudinal and Survival ",
+    "Data via JAX. R package version ", meta$Version, ". ",
+    "https://doi.org/10.5281/zenodo.22950083")
+)
+
+bibentry(
+  bibtype = "Misc",
+  title   = "Rotating Away the Location Degeneracy: An Exact Reparameterization for {H}amiltonian {M}onte {C}arlo in Hierarchical and Joint Models",
+  author  = person("Changbin", "Guo"),
+  year    = "2026",
+  note    = "Preprint",
+  publisher = "Zenodo",
+  doi     = "10.5281/zenodo.22961412",
   textVersion = paste(
-    "Guo, C. (2026). jmjax: Joint Models for Longitudinal and Survival",
-    "Data via JAX. R package version 0.3.0.",
-    "https://doi.org/10.5281/zenodo.22950084")
+    "Guo, C. (2026). Rotating Away the Location Degeneracy: An Exact",
+    "Reparameterization for Hamiltonian Monte Carlo in Hierarchical and",
+    "Joint Models. Preprint. https://doi.org/10.5281/zenodo.22961412")
 )

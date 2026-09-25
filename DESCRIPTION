@@ -1,7 +1,7 @@
 Package: jmjax
 Type: Package
 Title: Joint Models for Longitudinal and Survival Data via 'JAX'
-Version: 0.3.0
+Version: 0.3.1
 Authors@R: person("Changbin", "Guo", email = "jmjaxmaintainer@gmail.com",
                   role = c("aut", "cre", "cph"))
 Description: Fits shared-parameter joint models (linear mixed-effects
@@ -15,7 +15,7 @@ Description: Fits shared-parameter joint models (linear mixed-effects
     results.
 License: MIT + file LICENSE
 URL: https://github.com/jmjaxmaintainer-jpg/jmjax,
-    https://doi.org/10.5281/zenodo.22950084
+    https://doi.org/10.5281/zenodo.22950083
 BugReports: https://github.com/jmjaxmaintainer-jpg/jmjax/issues
 Encoding: UTF-8
 Language: en-US

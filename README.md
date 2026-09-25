@@ -1,6 +1,6 @@
 # jmjax
 
-[![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.22950084.svg)](https://doi.org/10.5281/zenodo.22950084)
+[![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.22950083.svg)](https://doi.org/10.5281/zenodo.22950083)
 
 Joint models for longitudinal and time-to-event data, fitted with a
 [JAX](https://github.com/jax-ml/jax)/[NumPyro](https://num.pyro.ai)
@@ -94,7 +94,7 @@ and, for `jm_bayes()` fits, `ranef()` and `predict()`.
 
 ## Status
 
-Version 0.3.0. `predict()` currently covers `jm_bayes()` fits, subjects in
+Version 0.3.1. `predict()` currently covers `jm_bayes()` fits, subjects in
 the fitted data and the `value` association; dynamic prediction for new
 subjects is planned. See `NEWS.md` for the changes in this release.
 
@@ -109,9 +109,20 @@ R and Python sides divide the work are in `dev/notes/architecture.md`.
 If you use jmjax, please cite the software release:
 
 > Guo, C. (2026). *jmjax: Joint Models for Longitudinal and Survival Data
-> via JAX* (version 0.3.0). https://doi.org/10.5281/zenodo.22950084
+> via JAX*. https://doi.org/10.5281/zenodo.22950083
 
-`citation("jmjax")` gives the same reference, with a BibTeX entry.
+That DOI always resolves to the latest release. To cite the exact version
+you used, take its own DOI from the Zenodo record (version 0.3.0 is
+https://doi.org/10.5281/zenodo.22950084).
+
+For the rotation of the random effects that jmjax uses by default for
+NUTS, please also cite the method:
+
+> Guo, C. (2026). Rotating Away the Location Degeneracy: An Exact
+> Reparameterization for Hamiltonian Monte Carlo in Hierarchical and Joint
+> Models. Preprint. https://doi.org/10.5281/zenodo.22961412
+
+`citation("jmjax")` gives both references, with BibTeX entries.
 
 ## License
 

@@ -1,3 +1,27 @@
+# jmjax 0.3.1
+
+## Bug fixes
+
+* `jm_mle(baseline = "spline", init_theta = fit$estimates)` with the
+  estimates of a Weibull fit failed with a shape error from the backend,
+  because a Weibull fit has no spline coefficients. They now start at zero.
+  Only this use of `init_theta` is affected; no fit that ran before gives a
+  different result.
+
+## Documentation
+
+* `citation("jmjax")`, `CITATION.cff` and the README cite the software
+  (DOI) and the preprint describing the random-effects rotation.
+* The introduction vignette uses the `pbc2` data throughout, with output
+  from a real run, and shows `init_theta = fit_w$estimates` for a warm
+  start.
+* The maintainer address is now jmjaxmaintainer@gmail.com.
+
+## Packaging
+
+* The methods-paper manuscript has moved out of the repository. The
+  development studies behind it stay in `dev/`.
+
 # jmjax 0.3.0
 
 The full development record behind this release - measurements, failed

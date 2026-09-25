@@ -6,9 +6,16 @@ authors:
   - family-names: Guo
     given-names: Changbin
     email: jmjaxmaintainer@gmail.com
-version: 0.3.0
+version: 0.3.1
 date-released: 2026-09-25
-doi: 10.5281/zenodo.22950084
+identifiers:
+  - type: doi
+    value: 10.5281/zenodo.22950083
+    description: "All versions (resolves to the latest release)."
+  - type: doi
+    value: 10.5281/zenodo.22950084
+    description: "Version 0.3.0."
+doi: 10.5281/zenodo.22950083
 license: MIT
 repository-code: "https://github.com/jmjaxmaintainer-jpg/jmjax"
 abstract: >-
@@ -16,6 +23,15 @@ abstract: >-
   fitted in R with a JAX/NumPyro backend: maximum likelihood with adaptive
   Gauss-Hermite quadrature, and Bayesian estimation with the No-U-Turn
   sampler.
+references:
+  - type: article
+    title: "Rotating Away the Location Degeneracy: An Exact Reparameterization for Hamiltonian Monte Carlo in Hierarchical and Joint Models"
+    authors:
+      - family-names: Guo
+        given-names: Changbin
+    year: 2026
+    doi: 10.5281/zenodo.22961412
+    notes: "Preprint (Zenodo). The method behind the default rotation of the random effects."
 keywords:
   - joint models
   - survival analysis
