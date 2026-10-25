@@ -7,7 +7,7 @@ authors:
     given-names: Changbin
     email: jmjaxmaintainer@gmail.com
 version: 0.4.0
-date-released: 2026-10-24
+date-released: 2026-10-25
 identifiers:
   - type: doi
     value: 10.5281/zenodo.22950083
