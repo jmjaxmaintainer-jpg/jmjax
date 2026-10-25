@@ -1,3 +1,78 @@
+# jmjax 0.4.0
+
+## The absorbable directions are defined jointly across random-effect columns
+
+* The rotation (`control$rotate_absorbable`, on by default) is now built
+  on the absorbable subspace defined jointly across random-effect columns,
+  as in the revised Section 3 of the methods paper. Up to 0.3.x it was the
+  union of per-column subspaces, which misses a fixed-effect shift that has
+  to be offset in several random-effect columns at once: with
+  `X = [1, t, x(1 + t)]` and `Z = [1, t]`, each column alone gives
+  `span{1}`, but `span{1, x}` is absorbable. The new construction
+  (`_absorbable_basis_joint()` in `absorbable.py`) takes `ker M` of the
+  stacked `(I - P_Z) X` by one SVD, solves each subject's shift from the
+  trajectory identity on its observation times, event time, quadrature
+  nodes and any `delta`/`area`/`area_avg` rows, verifies every generator
+  before use, and builds `Q` from a second SVD. It depends on the
+  fixed-effects design only through its column space.
+* Subjects whose `Z_i` is rank-deficient on their own observation rows
+  (typically baseline-only subjects) now get the shift the survival
+  submodel forces. The 0.3.x per-column construction filled them with the
+  median of the other subjects' ratios, which is right for uniform
+  directions but admitted a non-absorbable direction for a covariate-by-time
+  column (`y ~ time * x`) with baseline-only subjects.
+* Condition (S) is still checked at every fit (worst relative residual,
+  warning above 1e-6). A direction that fails it is now left out of the
+  rotation instead of only warned about.
+* `fit$convergence$orthogonalize$rotation` gains `construction`,
+  `dim_ker_M`, `n_witnesses`, `n_rejected_condition_s`,
+  `n_rejected_verify`, and, for comparison with 0.3.x, `k_columnwise` and
+  `columnwise_subspace_distance`.
+* Every fit is exact either way (any fixed rotation is), so posteriors do
+  not change. For designs in which every fixed-effect column is a
+  subject-constant covariate times one random-effect basis function - all
+  the designs in the vignettes and the methods paper - the two
+  constructions give the same subspace. The orthonormal basis chosen
+  inside it can differ, so draws from a given seed are not bit-for-bit
+  those of 0.3.x, but the explicit block spans the same directions and
+  mixing is equivalent. Otherwise the block can hold different directions
+  and mixing can differ. To reproduce 0.3.x draws exactly, use 0.3.x.
+
+## Bug fixes
+
+* A user-supplied `control$beta_prior_mean`, `beta_prior_sd`,
+  `sigma_e_prior_mean` or `sigma_b_prior_mean` now takes precedence over
+  the empirical-Bayes pre-fit, as `?jm_fit` documented. Before, the
+  pre-fit silently overwrote them whenever it ran (the default).
+
+## Documentation
+
+* `?jm_fit` states that, with `standardize_covariates = TRUE` (the
+  default), the empirical-Bayes `beta` prior is placed on the standardized
+  (and, for MCMC, time-rescaled) scale while coefficients are reported on
+  the original scale.
+* `q`: the docs said "`q >= 2`" where they meant `q = 2`. `jmjax` fits at
+  most two random effects per subject; this is now stated under
+  `random_formula`.
+* The vignettes agree with each other, with the code's defaults and with
+  the methods paper: `spline_prior = "independent"` and
+  `rw2_implementation = "vectorized"` are the defaults; a 13.9 to 27.9
+  ESS/sec improvement is about 2x, not 5x; the comparisons with `JMbayes2`
+  use one ESS estimator for both packages (`dev/study_common_ess.R`); the
+  Monte Carlo SE of 95% coverage from 100 replicates is 0.022; and the
+  validation vignette's list of next steps records what has since been
+  done. `vignette("jmjax-reparameterization")`, Section 4, describes the
+  joint construction.
+
+## Tests
+
+* `tests/testthat/python/check_joint_construction.py` (numpy only) checks
+  the construction against the methods paper's reference implementation:
+  the coupled example, a baseline-only subject, a rank-deficient `Z_i`, a
+  Condition (S) failure, `q = 3`, column-space invariance and 80 randomized
+  designs. `dev/verify_joint_vs_columnwise.R` compares the two
+  constructions on fits of the paper's designs.
+
 # jmjax 0.3.1
 
 ## Bug fixes

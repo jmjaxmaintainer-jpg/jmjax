@@ -31,6 +31,7 @@ from numpyro.contrib.control_flow import scan as numpyro_scan
 # recommended; kept runnable for reproducibility). Re-exported names keep
 # existing callers such as dev/verify_absorbable_basis.py working.
 from .absorbable import (_absorbable_basis, _absorbable_basis_exact,  # noqa: F401
+                         _absorbable_basis_joint,
                          _structural_extension_residual, _union_basis,
                          _householder_reflectors, _apply_reflectors)
 from . import sweep as _sweep
@@ -883,32 +884,82 @@ def fit_nuts(X_long, y_long, n_obs, X_time_surv, X_time_quad,
         if not _rot_scope:
             raise ValueError(
                 "control$rotate_absorbable = TRUE requires "
-                "random_effects_method = 'nuts' and, for q >= 2, "
+                "random_effects_method = 'nuts' and, for q = 2, "
                 "random_effects_corr = TRUE.")
-        _nb = []
-        _s_resid = 0.0
-        for _qq in range(q):
-            _Qq, _gq = _absorbable_basis_exact(X_long, Z_long, n_obs, _qq)
-            _nb.append(_Qq)
-            # Condition (S): the directions are found on the longitudinal
-            # grid, but b also enters the hazard through m_i(t) at the event
-            # times and quadrature nodes, so absorbability must hold there
-            # too. The legacy sweep (sweep.py) always checked this; the
-            # rotation path, which became the default, did not.
-            if Z_time_surv is not None and Z_time_quad is not None:
-                _s_resid = max(_s_resid, _structural_extension_residual(
-                    _gq, _qq, X_time_surv, Z_time_surv, X_time_quad, Z_time_quad))
+        # The absorbable subspace is defined JOINTLY across random-effect
+        # columns (absorbable._absorbable_basis_joint; methods paper,
+        # Section 3): a fixed-effect shift may need offsetting in several
+        # columns at once, which the per-column union used up to 0.3.x
+        # misses (X = [1, t, x(1+t)], Z = [1, t]: span{1} instead of
+        # span{1, x}). delta_i is solved from the trajectory identity on
+        # the event-time and quadrature grid, and on every functional-form
+        # channel the hazard uses, so subjects whose Z_i is rank-deficient
+        # on their observation rows (baseline-only) get the shift the
+        # survival submodel forces, not the minimum-norm one.
+        _extra = []
+        for _xs, _xq, _zs, _zq, _kind in (
+                (X_delta_surv, X_delta_quad, Z_delta_surv, Z_delta_quad, "delta"),
+                (X_area_surv, X_area_quad, Z_area_surv, Z_area_quad, "area"),
+                (X_area_avg_surv, X_area_avg_quad, Z_area_avg_surv, Z_area_avg_quad, "area_avg")):
+            if _xs is None:
+                continue
+            if _zs is None and q == 1:
+                # q = 1 shortcuts of build_model(): delta has no b term,
+                # area's Z is t, area_avg's is 1.
+                _Ts = np.asarray(T_surv, dtype=float)
+                _tq = np.asarray(t_quad, dtype=float)
+                if _kind == "delta":
+                    _zs, _zq = np.zeros((N_sub, 1)), np.zeros(_tq.shape + (1,))
+                elif _kind == "area":
+                    _zs, _zq = _Ts[:, None], _tq[:, :, None]
+                else:
+                    _zs, _zq = np.ones((N_sub, 1)), np.ones(_tq.shape + (1,))
+            if _zs is not None:
+                _extra.append((_xs, _zs, _xq, _zq))
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore", RuntimeWarning)
+            _Qu, _jinfo = _absorbable_basis_joint(
+                X_long, Z_long, n_obs, X_time_surv, Z_time_surv,
+                X_time_quad, Z_time_quad, extra_pairs=_extra)
+        _s_resid = float(_jinfo["condition_s_residual"])
         if _s_resid > 1e-6:
             warnings.warn(
-                "rotate_absorbable: the absorbable directions do not extend "
-                "to the survival/quadrature time grid (worst relative "
-                "residual %.2e). Condition (S) of "
-                "vignette('jmjax-reparameterization') Section 4.4 fails, so "
-                "the rotation is NOT guaranteed to leave the joint likelihood "
-                "unchanged for this design. Refit with "
-                "control$rotate_absorbable = FALSE." % _s_resid,
+                "rotate_absorbable: Condition (S) fails for %d of the %d "
+                "candidate direction(s) (worst relative residual %.2e): the "
+                "trajectory identity cannot be solved on the survival/"
+                "quadrature grid, so those directions are not absorbable in "
+                "the joint model and were left out of the rotation basis. "
+                "The fit is exact either way (any fixed rotation is); see "
+                "vignette('jmjax-reparameterization'), Section 4.4."
+                % (_jinfo["n_rejected_s"], _jinfo["dim_ker_M"], _s_resid),
                 RuntimeWarning, stacklevel=2)
-        _Qu = _union_basis(_nb)
+        # The pre-0.4.0 construction (union of per-column bases), kept as a
+        # diagnostic only: its dimension and the distance between the two
+        # subspaces, max |Q Q' - Q_old Q_old'|, are reported so a fit can
+        # show whether the two agree for its design.
+        try:
+            with warnings.catch_warnings():
+                warnings.simplefilter("ignore", RuntimeWarning)
+                _Qold = _union_basis([_absorbable_basis_exact(X_long, Z_long, n_obs, _qq)[0]
+                                      for _qq in range(q)])
+            _k_old = 0 if _Qold is None else int(_Qold.shape[1])
+            if _Qold is None and _Qu is None:
+                _old_diff = 0.0
+            elif _Qold is None or _Qu is None:
+                _old_diff = 1.0
+            else:
+                # Largest principal-angle sine, ||(I - Qo Qo') Q||_2, which
+                # equals ||Q Q' - Qo Qo'||_2 when the dimensions agree and
+                # avoids forming N x N matrices. 1 when they differ.
+                if _Qu.shape[1] == _Qold.shape[1]:
+                    _res = _Qu - _Qold @ (_Qold.T @ _Qu)
+                    _old_diff = float(np.linalg.norm(_res, 2))
+                else:
+                    _old_diff = 1.0
+        except Exception:  # diagnostic only; never fail a fit over it
+            # NaN, not None: reticulate turns None into NULL, which breaks
+            # comparisons on the R side; NaN arrives as NA.
+            _k_old, _old_diff = float("nan"), float("nan")
         if _Qu is not None:
             _gen_reflectors = _householder_reflectors(_Qu)
         if _gen_reflectors is None and not _rot_auto:
@@ -924,8 +975,17 @@ def fit_nuts(X_long, y_long, n_obs, X_time_surv, X_time_quad,
                 "mode": "all_columns_no_sweep",
                 "applied": _gen_reflectors is not None,
                 "k": 0 if _gen_reflectors is None else int(_gen_reflectors.shape[1]),
-                # worst relative residual of Condition (S); > 1e-6 warned
+                # worst relative residual of Condition (S) over ker M,
+                # before the failing directions are dropped; > 1e-6 warned
                 "condition_s_residual": float(_s_resid),
+                "construction": "joint",
+                "dim_ker_M": int(_jinfo["dim_ker_M"]),
+                "n_witnesses": int(_jinfo["n_witnesses"]),
+                "n_rejected_condition_s": int(_jinfo["n_rejected_s"]),
+                "n_rejected_verify": int(_jinfo["n_rejected_verify"]),
+                # pre-0.4.0 per-column construction, for comparison
+                "k_columnwise": _k_old,
+                "columnwise_subspace_distance": _old_diff,
             },
         }
 

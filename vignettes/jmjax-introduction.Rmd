@@ -257,23 +257,20 @@ Standardizing removed it, cutting mean leapfrog steps from 228 to 50 and
 raising sampling efficiency ~2.3x. Set
 `control$standardize_covariates = FALSE` to disable.
 
-**A related practical note on `time_var`'s numerical scale**: when using
-`random_effects = "intercept_slope"` or `random_formula` together with a
-nonlinear `long_formula` (e.g. `y ~ time + I(time^2)`), the current
-adaptive-GH and NUTS backends can be sensitive to the raw numerical range
-of `time_var`. If you encounter a convergence failure
-(`fit$convergence$converged == FALSE`, `n_iter == 0`, or a very high
-R-hat) in this configuration, try rescaling `time_var` to a moderate
-range (roughly single digits - e.g. dividing "days since baseline" by
-365 to get "years", or dividing "years" by 10) before refitting. This
-mirrors standard practice for gradient-based optimization generally, and
-is a normal part of working with adaptive-GH/HMC joint models on real
-data - `JM`'s own documentation similarly notes that "difficult
-datasets" for this model class may need troubleshooting (e.g. checking
-sensitivity to the number of quadrature points; see
-`?JM::jointModel`'s notes). See `vignette("jmjax-validation")`'s
-"Time-scale sensitivity" section for a worked real-data example of
-diagnosing and resolving this.
+**A related practical note on `time_var`'s numerical scale**: the NUTS
+backend is sensitive to the raw numerical range of `time_var` when there
+is a random slope, so the MCMC methods rescale it internally by default
+(`control$scale_time = "auto"`) and report coefficients in the original
+units; the MLE methods use `control$parscale` instead. If a fit with a
+nonlinear `long_formula` (e.g. `y ~ time + I(time^2)`) and a random slope
+still fails to converge (`fit$convergence$converged == FALSE`,
+`n_iter == 0`, or a very high R-hat), rescale `time_var` to a moderate
+range yourself (roughly single digits - e.g. dividing "days since
+baseline" by 365) before refitting. `JM`'s own documentation similarly
+notes that "difficult datasets" for this model class may need
+troubleshooting (see `?JM::jointModel`). See
+`vignette("jmjax-validation")`'s "Time-scale sensitivity" section for a
+worked real-data example.
 
 By default, `"spline-PH-mcmc"` uses:
 

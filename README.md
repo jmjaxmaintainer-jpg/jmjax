@@ -94,7 +94,7 @@ and, for `jm_bayes()` fits, `ranef()` and `predict()`.
 
 ## Status
 
-Version 0.3.1. `predict()` currently covers `jm_bayes()` fits, subjects in
+Version 0.4.0. `predict()` currently covers `jm_bayes()` fits, subjects in
 the fitted data and the `value` association; dynamic prediction for new
 subjects is planned. See `NEWS.md` for the changes in this release.
 

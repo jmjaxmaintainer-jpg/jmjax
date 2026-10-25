@@ -78,7 +78,8 @@ silently assumes the first columns of \code{X} ARE "intercept" and
 I(time^2)} or \code{y ~ splines::ns(time, 3)}), supply
 \code{random_formula} explicitly so \code{Z} is evaluated
 independently and correctly, the same way \code{X} is evaluated from
-\code{long_formula}.}
+\code{long_formula}. At most two random-effect columns are supported
+(\code{q = 1} or \code{q = 2}); a formula giving more raises an error.}
 
 \item{functional_forms}{Optional one-sided formula selecting which
 features of the longitudinal trajectory enter the hazard, e.g.

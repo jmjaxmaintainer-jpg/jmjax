@@ -72,7 +72,8 @@
 #'   I(time^2)} or \code{y ~ splines::ns(time, 3)}), supply
 #'   \code{random_formula} explicitly so \code{Z} is evaluated
 #'   independently and correctly, the same way \code{X} is evaluated from
-#'   \code{long_formula}.
+#'   \code{long_formula}. At most two random-effect columns are supported
+#'   (\code{q = 1} or \code{q = 2}); a formula giving more raises an error.
 #' @param init_theta Optional named list of initial values, e.g. from a
 #'   prior \code{method = "weibull-PH-aGH"} fit's \code{$estimates}, used to
 #'   warm-start a spline or MCMC fit.
@@ -325,7 +326,7 @@
 #'       \code{b_0} lies in a column space \code{beta} already spans, so
 #'       for any draw there is a shift of \code{beta} giving identical
 #'       fitted values - the set of achievable mean structures is the
-#'       same. Currently requires \code{q >= 2},
+#'       same. Currently requires \code{q = 2},
 #'       \code{random_effects_corr = TRUE} and the default
 #'       \code{random_effects_method = "nuts"}; other combinations raise
 #'       an error rather than silently doing nothing.
@@ -393,7 +394,7 @@
 #'     \item{\code{rotate_absorbable}, \code{dense_mass_generator_beta}}{Both
 #'       logical, default \code{NULL} (automatic), which means \strong{on}
 #'       wherever the rotation applies: \code{random_effects_method =
-#'       "nuts"}, \code{random_effects_corr = TRUE} when \code{q >= 2}
+#'       "nuts"}, \code{random_effects_corr = TRUE} when \code{q = 2}
 #'       (any \code{q = 1} random-intercept model qualifies), and no legacy
 #'       sweep option requested. Elsewhere the
 #'       automatic default is silently off. \code{TRUE} insists and raises
@@ -426,9 +427,20 @@
 #'       seed below 3x). The one parameter it can cost is
 #'       \code{alpha}: about 0.7x-1.0x the unrotated fit's ESS/sec in
 #'       simulated designs with about 9 visits per subject, against
-#'       1.1x-2.4x with 17 or more. What was rotated is
-#'       reported in \code{fit$convergence$orthogonalize$rotation}. See
-#'       \code{vignette("jmjax-reparameterization")}.}
+#'       1.1x-2.4x with 17 or more.
+#'
+#'       From 0.4.0 the directions are defined jointly across the
+#'       random-effect columns, since a shift of the fixed effects may
+#'       have to be offset in several of them at once, and each
+#'       subject's shift is solved from its trajectory at the event time
+#'       and quadrature nodes. A direction for which that fails
+#'       (Condition (S)) raises a warning and is left out of the rotation.
+#'       What was rotated is reported in
+#'       \code{fit$convergence$orthogonalize$rotation}: \code{k},
+#'       \code{dim_ker_M}, \code{condition_s_residual},
+#'       \code{n_rejected_condition_s}, and, for comparison with 0.3.x,
+#'       \code{k_columnwise} and \code{columnwise_subspace_distance}. See
+#'       \code{vignette("jmjax-reparameterization")}, Section 4.}
 #'     \item{\code{dense_mass_beta}, \code{seed_mass_matrix}}{Both logical,
 #'       both default \code{FALSE}. \strong{Tested and not adopted} -
 #'       retained only to document the negative results.
@@ -463,9 +475,25 @@
 #'   centres and scales the baseline covariates in
 #'   \code{long_formula} before any design matrix is built, then
 #'   back-transforms \code{beta} so the reported coefficients are on the
-#'   ORIGINAL scale. It is a pure reparameterization - \code{X \%*\% beta}
-#'   is identical either way, so \code{alpha}, \code{sigma_b}, \code{rho}
-#'   and \code{sigma_e} are unaffected.
+#'   ORIGINAL scale. The likelihood is unchanged by it - \code{X \%*\%
+#'   beta} is identical either way, so \code{alpha}, \code{sigma_b},
+#'   \code{rho} and \code{sigma_e} are unaffected.
+#'
+#'   \strong{The prior on \code{beta} is on the standardized scale.} The
+#'   empirical-Bayes prior (\code{empirical_bayes_prior = TRUE}, the
+#'   default) is centred and scaled by an \code{lme()} pre-fit run on the
+#'   standardized data, and its independent normal components are placed
+#'   on the coefficients of the standardized covariates (and the intercept
+#'   at their mean); for MCMC fits the time variable is also rescaled
+#'   first (\code{control$scale_time}, \code{"auto"} by default). A
+#'   user-supplied \code{control$beta_prior_mean} or
+#'   \code{control$beta_prior_sd} is read on that same scale. Coefficients,
+#'   posterior draws, \code{vcov()} and intervals are reported on the
+#'   original scale. So turning standardization off changes the prior on
+#'   the original-scale coefficients (from independence on the
+#'   standardized scale to independence on the raw scale), not the
+#'   likelihood; with a weakly informative prior and a moderate sample the
+#'   difference is negligible.
 #'
 #'   \strong{Why it exists.} With an uncentred covariate the posterior
 #'   correlation between the intercept and that covariate's coefficient is
@@ -1856,6 +1884,12 @@ jm_fit <- function(long_formula,
         error = function(e) NULL
       )
       if (!is.null(lme_prefit)) {
+        # A user-supplied value takes precedence (as documented); before
+        # 0.4.0 the pre-fit silently overwrote it.
+        .prior_nms <- c("beta_prior_mean", "beta_prior_sd",
+                        "sigma_e_prior_mean", "sigma_b_prior_mean")
+        .user_prior <- lapply(stats::setNames(.prior_nms, .prior_nms),
+                              function(.n) control[[.n]])
         control$beta_prior_mean <- unname(nlme::fixef(lme_prefit))
         # Matches JMbayes2's weak_informative_Tau(), read directly from the
         # installed package's source:
@@ -1917,6 +1951,9 @@ jm_fit <- function(long_formula,
           control$sigma_e_prior_mean <- NULL
         }
         control$sigma_b_prior_mean <- sqrt(diag(nlme::getVarCov(lme_prefit)))
+        for (.nm in names(.user_prior)) {
+          if (!is.null(.user_prior[[.nm]])) control[[.nm]] <- .user_prior[[.nm]]
+        }
       } else {
         warning("empirical-Bayes prior centering: the internal lme() pre-fit ",
                 "failed, so uninformative priors are used instead. Set ",

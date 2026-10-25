@@ -33,8 +33,10 @@ mean random slope, for any model with a random slope, whatever the number
 of covariates.
 
 Section 4 characterizes exactly which random-effect directions are
-absorbable, gives a basis-independent construction, and states the
-condition the survival submodel imposes. Section 5 uses that basis
+absorbable, defining them jointly across random-effect columns (a shift of
+the fixed effects may have to be offset in several at once), gives a
+construction that depends only on the column space of the fixed-effects
+design, and states the condition the survival submodel imposes. Section 5 uses that basis
 for an exact rotation (`control$rotate_absorbable`). Every random-effect
 column is rotated by one fixed orthogonal matrix, so the absorbable
 directions become an explicit, small block of sampling coordinates. The
@@ -63,7 +65,7 @@ measures how the longitudinal marker relates to the hazard. Studying that
 association is the reason to fit a joint model at all, so `alpha` is the
 parameter a joint-model analysis is chiefly run to estimate and draw
 inferences about. `jmjax` mixes it 3x-8x faster than `JMbayes2` with no
-option enabled, and 6.5x-7.3x faster on real data with the rotation.
+option enabled, and 7x-8x faster on real data with the rotation.
 
 - **Why (Proposition 8).** Consider a sampler that updates `alpha`
   conditional on the other parameters. Its lag-1 autocorrelation for
@@ -79,8 +81,9 @@ option enabled, and 6.5x-7.3x faster on real data with the rotation.
   conditional exactly, would keep at most one effective draw in 13-15.
 - **How much of the gap it explains.** On a log scale, that structural
   limit accounts for about three quarters of `jmjax`'s ESS-per-draw
-  advantage over `JMbayes2` on `alpha` (75%-80%). The rest is `JMbayes2`'s
-  implementation (Section 8.1).
+  advantage over `JMbayes2` on `alpha` (73%-78%). The rest is a
+  difference between the two transition kernels that this comparison does
+  not decompose further (Section 8.1).
 
 This advantage is a property of the joint model and of how the sampler
 updates it, not of any `jmjax` option. It is generic to gradient
@@ -376,353 +379,312 @@ the basis controls is whether the rotation does anything useful. It should
 contain every absorbable direction (completeness), so that none is left
 spread across the per-subject coordinates. And it should contain only
 absorbable directions (soundness), so that it does not spend the explicit
-block on directions the data already pin down. This section states and
-proves both properties for the joint model, gives a natural design where
-the obvious column-wise construction is *not* complete, together with its
-basis-independent repair (Section 4.5), and settles how subjects whose own
-data do not determine their direction should be treated (Section 4.6).
+block on directions the data already pin down. A shift of the fixed effects
+may have to be offset in several random-effect columns at once, so the
+directions are defined jointly across columns. This section gives the
+definition, its characterization, the condition the survival submodel adds,
+two designs where checking one column at a time misses directions, and the
+construction `jmjax` uses from version 0.4.0. It follows Section 3 of the
+methods paper.
 
 ### 4.1 Notation
 
 Index subjects by $i = 1, \dots, N$ and subject $i$'s longitudinal
 observations by $j = 1, \dots, n_i$, taken at times $t_{ij}$. Write
-$X_i \in \mathbb{R}^{n_i \times p}$ for subject $i$'s longitudinal
-fixed-effects design and $Z_i \in \mathbb{R}^{n_i \times q}$ for its
-random-effects design, and let $z_i \in \mathbb{R}^{n_i}$ denote the
-column $Z_i[\,\cdot\,, q_\ast]$ of the particular random-effect column
-$q_\ast$ under consideration (the index is suppressed from here on).
-Let $b \in \mathbb{R}^{N \times q}$ collect the random effects and
-$\beta \in \mathbb{R}^{p}$ the fixed effects.
+$X_i \in \mathbb{R}^{n_i \times p}$ for subject $i$'s fixed-effects design
+and $Z_i \in \mathbb{R}^{n_i \times q}$ for its random-effects design, and
+$x_i(t)$, $z_i(t)$ for the design rows at time $t$. Let
+$B \in \mathbb{R}^{N \times q}$ collect the random effects, with rows
+$b_i^{\top}$, and $\beta \in \mathbb{R}^{p}$ the fixed effects.
 
 The random effects enter the joint likelihood in exactly two ways: through
-the longitudinal mean
-
-$$\mu_{ij} = x_{ij}^{\top}\beta + z_{ij}^{\top} b_i,$$
-
+the longitudinal mean $\mu_{ij} = x_{ij}^{\top}\beta + z_{ij}^{\top} b_i$,
 and through the shared trajectory $m_i(t) = x_i(t)^{\top}\beta +
 z_i(t)^{\top} b_i$, which enters the hazard through $\alpha$ and is
 evaluated at the event time $T_i$ and at the Gauss-Legendre quadrature
-nodes used for the cumulative hazard. This second channel matters for what
-follows and is easy to overlook: `_absorbable_basis` inspects `X_long` and
-`Z_long` only, while `b` also reaches the likelihood through
-`X_time_surv`/`Z_time_surv` and `X_time_quad`/`Z_time_quad`. Both of those
-are built by `build_time_design()` from the *same* `long_formula` and
-`random_formula`, evaluated at new time points with the subject's baseline
-covariates, so each design column is a fixed function of time,
-$f_j(t; c_i)$ for $X$ and $g(t; c_i)$ for the random-effect column, with
-$c_i$ subject $i$'s baseline covariates.
+nodes used for the cumulative hazard (and, with a `delta`, `area` or
+`area_avg` association, through the corresponding transforms of
+$m_i$). The second channel is easy to overlook: `X_long` and `Z_long` are
+not the only arrays through which `b` reaches the likelihood, since
+`X_time_surv`/`Z_time_surv` and `X_time_quad`/`Z_time_quad` carry it too.
+All of them are built from the *same* `long_formula` and `random_formula`,
+evaluated at different times with the subject's baseline covariates.
 
 ### 4.2 What "absorbable" means
 
-**Definition 1.** A vector $v \in \mathbb{R}^{N}$ is an *absorbable
-direction* for random-effect column $q_\ast$ if there exists
-$d \in \mathbb{R}^{p}$ such that, for every $c \in \mathbb{R}$, the
-simultaneous shift
+**Definition 1 (invariant shift; absorbable subspace).** A pair
+$(d, \Delta)$, with $d \in \mathbb{R}^{p}$ and $\Delta \in
+\mathbb{R}^{N \times q}$ with rows $\delta_i^{\top}$, is an *invariant
+shift* if $\beta \mapsto \beta + d$, $B \mapsto B + \Delta$ leaves every
+longitudinal mean and every trajectory, and hence the likelihood,
+unchanged:
 
-$$b[\,\cdot\,, q_\ast] \;\leftarrow\; b[\,\cdot\,, q_\ast] + c\,v,
-\qquad \beta \;\leftarrow\; \beta + c\,d$$
+$$X_i\, d + Z_i\, \delta_i = 0 \qquad \text{for every } i, \tag{L}$$
 
-leaves $\mu_{ij}$ unchanged for every $(i,j)$ and $m_i(t)$ unchanged for
-every $i$ and every $t \in [0, \tau]$. Write $\mathcal{A}$ for the set of
-absorbable directions.
-
-Because both shifts are linear in $c$, it suffices to check $c = 1$, and
-$\mathcal{A}$ is a linear subspace of $\mathbb{R}^{N}$. Two remarks fix
-the scope of the definition. First, invariance of $\mu$ and $m$ implies
-invariance of the whole joint likelihood, since the likelihood depends on
-$b$ only through those two quantities; the definition is therefore about
-*likelihood* invariance. Second, it is emphatically not about invariance
-of the prior or the posterior - the prior on $b$ is not invariant under
-these shifts, and that asymmetry is the entire point of the
-reparameterization. Section 4.7 returns to this.
-
-Definition 1 splits into a longitudinal requirement,
-
-$$X_i\,d \;=\; -\,v_i\,z_i \qquad \text{for every } i, \tag{L}$$
-
-and a trajectory requirement,
-
-$$x_i(t)^{\top} d \;=\; -\,v_i\, g(t; c_i)
+$$x_i(t)^{\top} d + z_i(t)^{\top} \delta_i = 0
 \qquad \text{for every } i \text{ and every } t \in [0, \tau]. \tag{T}$$
+
+In a mixed model without a survival submodel, (L) is the whole requirement.
+A shift with $d = 0$ is *null*: then $\delta_i \in K_i$, where
+$K_i = \ker Z_i$ in a mixed model and
+$K_i = \{a : z_i(t)^{\top} a = 0 \text{ for all } t \in [0, \tau]\}$ in a
+joint model. For each *witness* $d$ (a $d$ for which some invariant shift
+exists), let $\Delta(d)$ be the invariant shift whose rows are orthogonal
+to the $K_i$; it is unique, because two solutions for subject $i$ differ by
+an element of $K_i$. The *absorbable subspace*
+$\mathcal{A} \subseteq \mathbb{R}^{N}$ is the span of the columns of
+$\Delta(d)$ over all witnesses $d$.
+
+Three remarks fix the scope. First, invariance of $\mu$ and $m$ implies
+invariance of the whole joint likelihood, so the definition is about
+*likelihood* invariance. It is emphatically not about the prior: the prior
+on $b$ is not invariant under these shifts, and that asymmetry is what
+pins the split at all (Section 4.7). Second, a null shift moves only
+random-effect coordinates the likelihood never sees, such as the slope of
+a subject observed only at baseline in a mixed model. The prior alone sets
+their scale and they involve no fixed effect, so they create no ridge and
+need no treatment. Third, the likelihood uses $m_i(t)$ only up to each
+subject's event or censoring time, so requiring (T) on all of $[0, \tau]$
+is slightly more than likelihood invariance needs. It makes $\mathcal{A}$
+a structural property of the model rather than of the observed follow-up.
+
+Up to version 0.3.x, `jmjax` defined absorbable directions one
+random-effect column at a time: a vector $v$ for column $c$, with
+$X_i d = -v_i\, Z_i e_c$. That is the special case of Definition 1 in which
+$\Delta$ is nonzero in a single column, and Section 4.5 shows it can miss
+directions.
 
 ### 4.3 Exact characterization
 
-Let $\bigoplus_i \mathbb{R}^{n_i}$ denote the space of stacked
-per-subject observation vectors, and define two linear maps into it:
+Let $P_{Z_i} = Z_i Z_i^{+}$ be the orthogonal projector onto the range of
+$Z_i$, with $Z_i^{+}$ the Moore-Penrose inverse, and let
+$M \in \mathbb{R}^{(\sum_i n_i) \times p}$ stack the matrices
+$(I - P_{Z_i}) X_i$.
 
-$$\mathcal{T}: \mathbb{R}^{p} \to \bigoplus_i \mathbb{R}^{n_i},
-\quad (\mathcal{T}d)_i = X_i d,
-\qquad
-\mathcal{U}: \mathbb{R}^{N} \to \bigoplus_i \mathbb{R}^{n_i},
-\quad (\mathcal{U}v)_i = v_i z_i .$$
+**Proposition 1 (characterization).** In a mixed model, $d$ is a witness
+if and only if $d \in \ker M$, and then $\delta_i(d) = -Z_i^{+} X_i d$ for
+every $i$. Hence $\mathcal{A}$ is spanned by the columns of $\Delta(d)$ for
+$d$ in any basis of $\ker M$, $\dim \mathcal{A} \le q \dim \ker M \le qp$,
+and $\mathcal{A}$ depends on the fixed-effects design only through its
+column space.
 
-$\mathcal{T}$ is the map from a shift in $\beta$ to its effect on the
-fitted longitudinal means; $\mathcal{U}$ is the map from a shift in the
-random-effect column to its effect on the same quantity.
+*Proof.* Equation (L) has a solution $\delta_i$ if and only if
+$X_i d \in \operatorname{range} Z_i$, that is, $(I - P_{Z_i}) X_i d = 0$.
+Its solutions are $-Z_i^{+} X_i d + \ker Z_i$, and $Z_i^{+}$ maps into
+$(\ker Z_i)^{\perp}$, so $-Z_i^{+} X_i d$ is the one orthogonal to
+$K_i = \ker Z_i$. Replacing $X$ by $XG$ with $G$ invertible maps $\ker M$
+to $G^{-1}\ker M$ and leaves each $X_i d$, hence each $\Delta(d)$,
+unchanged. $\square$
 
-**Proposition 1 (characterization).** Under requirement (L) alone - that
-is, for the longitudinal submodel in isolation - the set of absorbable
-directions is
+So one singular value decomposition of $M$ gives a basis of $\ker M$; each
+basis vector $d$ gives an $N \times q$ matrix $\Delta(d)$; and a second
+decomposition of the $N \times (q \dim \ker M)$ matrix of their columns
+gives an orthonormal basis $Q \in \mathbb{R}^{N \times k}$ of
+$\mathcal{A}$.
 
-$$\mathcal{A}^{\mathrm{long}}
-= \mathcal{U}^{-1}\!\big(\operatorname{range}\mathcal{T}\big)
-= \{\, v \in \mathbb{R}^{N} : \mathcal{U}v \in \operatorname{range}
-\mathcal{T} \,\}.$$
+### 4.4 The survival submodel: Condition (S)
 
-*Proof.* Condition (L) says precisely that $\mathcal{T}d = -\mathcal{U}v$
-for some $d$, i.e. that $-\mathcal{U}v \in \operatorname{range}
-\mathcal{T}$. Since $\operatorname{range}\mathcal{T}$ is a subspace it is
-closed under negation, so this holds if and only if $\mathcal{U}v \in
-\operatorname{range}\mathcal{T}$. $\square$
+In a joint model, requirement (T) quantifies over all $t \in [0, \tau]$,
+while $M$ sees only the observation times.
 
-Proposition 1 is worth stating because it makes the target of the
-construction a property of the *column space* of $X$ - not of any
-particular basis for it. That observation is what Section 4.5 turns on.
+**Condition (S) - structural extension.** For every $d \in \ker M$ and
+every subject $i$, the function $t \mapsto x_i(t)^{\top} d$ on
+$[0, \tau]$ is a linear combination of the random-effect basis functions
+$t \mapsto z_i(t)^{\top} e_c$, $c = 1, \dots, q$; that is, (T) has a
+solution $\delta_i$.
 
-### 4.4 Soundness, and the condition the survival submodel imposes
+**Proposition 2 (joint model).** In a joint model every witness lies in
+$\ker M$; under (S) the witnesses are exactly $\ker M$, and $\delta_i(d)$
+is the solution of (T) orthogonal to $K_i$. If $Z_i$ has full column rank,
+$\delta_i(d) = -Z_i^{+} X_i d$, as in a mixed model. If it does not,
+$\delta_i(d)$ is fixed by (T) and in general is not the minimum-norm
+solution of (L).
 
-`_absorbable_basis` computes, in the notation above, the index set
+*Proof.* The observation rows are $x_i(t_{ij})^{\top}$ and
+$z_i(t_{ij})^{\top}$, so (T) implies (L) and every witness lies in
+$\ker M$; (S) gives the converse. Two solutions of (T) differ by an element
+of $K_i$, so the one orthogonal to $K_i$ is unique. If $Z_i$ has full
+column rank, (L) has the single solution $-Z_i^{+} X_i d$, which every
+solution of (T) satisfies. $\square$
 
-$$K = \{\, j : \exists\, s^{(j)} \in \mathbb{R}^{N}
-\text{ with } X_i e_j = s^{(j)}_i z_i \text{ for every } i \,\}$$
+(S) holds for subject-constant columns (absorbed by the intercept,
+$z_i(t) \equiv 1$), the time column (absorbed by a random slope),
+covariate-by-time interactions, and combinations of them: in each,
+$x_i(t)^{\top} d$ is a combination of $1$ and $t$ as a function of $t$,
+not by coincidence at the observed times. For a polynomial random-effect
+basis such as $(1, t)$, $K_i = \{0\}$, so the survival submodel pins every
+coordinate, including those the longitudinal data leave free (Section 4.6).
 
-- the columns of $X$ that are *individually* subject-constant multiples of
-the random-effect column - and returns an orthonormal basis $Q$ of
-$\operatorname{span}\{ s^{(j)} : j \in K \}$, obtained by QR with a
-rank-revealing tolerance on $|\mathrm{diag}(R)|$.
+**Proposition 3 (a sufficient condition).** Suppose that, for subject $i$
+and every $d \in \ker M$, the function
+$t \mapsto x_i(t)^{\top} d + z_i(t)^{\top} \delta_i$, with $\delta_i$ the
+solution of (L) orthogonal to $\ker Z_i$, lies in a linear space of
+functions of dimension at most the number of distinct observation times of
+subject $i$ that contains no nonzero function vanishing at all of them
+(polynomials of degree below that number, for instance). Then (S) holds for
+subject $i$.
 
-**Proposition 2 (soundness, longitudinal).**
-$\operatorname{span}(Q) \subseteq \mathcal{A}^{\mathrm{long}}$.
+*Proof.* The function vanishes at every observation time by (L), and the
+only such function in the space is zero. $\square$
 
-*Proof.* For $j \in K$ we have $X e_j = \mathcal{U}s^{(j)}$ by
-construction, so $\mathcal{U}s^{(j)} \in \operatorname{range}\mathcal{T}$,
-hence $s^{(j)} \in \mathcal{A}^{\mathrm{long}}$ by Proposition 1. Since
-$\mathcal{A}^{\mathrm{long}}$ is a subspace it contains the span of the
-$s^{(j)}$, and $\operatorname{span}(Q)$ is that span. $\square$
+(S) can fail for spline bases in time with few observations per subject,
+where a relation may hold at the observed points by coincidence. It is
+cheap to check, and `jmjax` checks it at every fit (Section 4.8).
 
-Soundness for the *joint* model requires more, because the ratio test is
-evaluated only on the observed grid $\{t_{ij}\}$ while requirement (T)
-quantifies over all $t \in [0,\tau]$.
+### 4.5 Designs where one-at-a-time checks fail
 
-**Condition (S) - structural extension.** For each $j \in K$, the
-grid identity $f_j(t_{ij}; c_i) = s^{(j)}_i\, g(t_{ij}; c_i)$,
-$j = 1,\dots,n_i$, extends to $f_j(t; c_i) = s^{(j)}_i\, g(t; c_i)$ for
-all $t \in [0,\tau]$.
+Two natural shortcuts each find a subspace of $\mathcal{A}$, but not always
+all of it. The first looks for columns of $X$ that are *individually*
+subject-constant multiples of a random-effect column. An early
+development version of `jmjax` used it.
 
-**Proposition 3 (soundness, joint model).** If (S) holds, then
-$\operatorname{span}(Q) \subseteq \mathcal{A}$.
+**Example 1 (a spline or orthogonal-polynomial longitudinal mean).** Let
+every subject be observed at the same $m \geq 3$ distinct times, let
+$Z_i = [\,1,\ t\,]$, and let
 
-*Proof.* Proposition 2 gives (L). Under (S), $x_i(t)^{\top}e_j =
-f_j(t; c_i) = s^{(j)}_i g(t; c_i)$ for all $t$, so taking $d = -e_j$
-satisfies (T) for the direction $s^{(j)}$; linearity extends this to the
-span. $\square$
+$$X_i = [\,1,\ \ t + \tfrac{1}{2}t^{2},\ \ t^{2}\,].$$
 
-(S) is not automatic, but it holds for every column type that arises in
-practice: a subject-constant column has $f_j \equiv c$ and $g \equiv 1$,
-a `time` column has $f_j(t) = t = 1 \cdot g(t)$, and a covariate-by-time
-interaction has $f_j(t) = c_i t = c_i\, g(t)$ - all identities in $t$,
-not coincidences on a grid. In general, if $f_j - s_i g$ lies in a linear
-function space of dimension at most $n_i$ that is determined by its values
-at $n_i$ distinct points (polynomials of degree $< n_i$, for instance),
-then (S) follows from the grid identity. It can fail for subjects with few
-observations relative to the dimension of the spanning basis, where the
-relation may hold at the observed points by coincidence.
+The ratios of the three columns of $X_i$ to $t$ are $1/t$,
+$1 + \tfrac12 t$ and $t$, none constant, so a search over the columns of
+$X$ finds no slope direction. Yet $d = (0, 1, -\tfrac12)$ gives
+$X_i d = t$ and $\Delta(d) = [\,\mathbf{0},\ -\mathbf{1}_N\,]$, an
+absorbable direction in the slope column.
 
-(S) is also *checkable* rather than merely assumable, at negligible cost:
-`X_time_quad` and `Z_time_quad` are already constructed and passed to the
-backend, so running the same ratio test on the quadrature grid and
-confirming the same $s^{(j)}$ would verify (S) directly instead of
-resting on the argument above. Section 4.8 describes the check as implemented.
-
-### 4.5 Completeness, and a design where it fails
-
-Soundness says nothing is wrongly treated as absorbable. Completeness - that nothing
-absorbable is *missed* - is a separate claim, and it is the one that does
-not hold in general.
-
-Assume for this subsection that $z_i \neq 0$ for every $i$ (every subject
-has at least one observation at which the random-effect column is
-nonzero); Section 4.6 treats the remaining case. Then $\mathcal{U}$ is
-injective, and Proposition 1 gives
-$\mathcal{A}^{\mathrm{long}} = \mathcal{U}^{-1}(\operatorname{range}
-\mathcal{T} \cap \operatorname{range}\mathcal{U})$.
-
-**Proposition 4 (completeness criterion).**
-$\operatorname{span}(Q) = \mathcal{A}^{\mathrm{long}}$ if and only if
-
-$$\operatorname{range}\mathcal{T} \cap \operatorname{range}\mathcal{U}
-= \operatorname{span}\{\, X e_j : j \in K \,\}. \tag{C}$$
-
-*Proof.* $\mathcal{U}$ is injective, so it is a bijection from
-$\mathbb{R}^N$ onto $\operatorname{range}\mathcal{U}$, and it carries
-$\mathcal{A}^{\mathrm{long}}$ onto $\operatorname{range}\mathcal{T} \cap
-\operatorname{range}\mathcal{U}$ and $\operatorname{span}(Q)$ onto
-$\operatorname{span}\{X e_j : j \in K\}$. Equality of the two subspaces
-upstairs is therefore equivalent to equality downstairs. The inclusion
-$\subseteq$ of the right side in the left always holds, by Proposition 2.
-$\square$
-
-Condition (C) says that every vector lying in both the column space of $X$
-and the image of $\mathcal{U}$ is a combination of those *individual*
-columns of $X$ that lie in the image of $\mathcal{U}$. This is a
-restriction on the basis, not on the model, and it can fail.
-
-**Example 1 (completeness fails for a spline or orthogonal-polynomial
-longitudinal mean).** Let every subject be observed at the same
-$m \geq 3$ distinct times, let $Z = [\,1,\ t\,]$ with $q_\ast$ the slope
-column, and let
-
-$$X = [\,1,\ \ t + \tfrac{1}{2}t^{2},\ \ t^{2}\,].$$
-
-No single column of $X$ is a subject-constant multiple of $t$: the ratios
-are $1/t_{ij}$, $1 + \tfrac12 t_{ij}$ and $t_{ij}$ respectively, none
-constant in $j$. So $K = \emptyset$ and the construction returns no basis
-for the slope column. Yet $d = (0, 1, -\tfrac12)$ gives $Xd = t$ exactly,
-so the uniform direction $v = -\mathbf{1}_N$ satisfies (L) and (T), and
-$\mathbf{1}_N \in \mathcal{A}$. Hence
-$\operatorname{span}(Q) = \{0\} \subsetneq \mathcal{A}$.
-
-This was confirmed directly against the shipped implementation (extracted
-and run on constructed designs; `dev/verify_absorbable_basis.py`): on
-$X = [1, t, x]$ the slope column correctly yields one direction from
-column 1, while on the $X$ above it yields `None`, with the compensating
-$\beta$ shift verified to reproduce $t$ to machine precision.
-
-The example is not contrived. The column space in Example 1 is
-$\operatorname{span}\{1, t, t^2\}$ - exactly what `y ~ poly(time, 2)` or a
+The example is not contrived. Its column space is
+$\operatorname{span}\{1, t, t^2\}$, exactly what `y ~ poly(time, 2)` or a
 natural-spline longitudinal mean produces. The raw monomial spelling
-`y ~ time + I(time^2)` *is* caught, because there `time` appears as its
-own column; the orthogonalized or spline basis for the very same function
-space is not. By Proposition 1 the absorbable set depends only on
-$\operatorname{span}(X)$, whereas the construction's answer depends on
-which basis of that span `model.matrix()` happens to emit. That gap is the
-precise statement of the limitation.
+`y ~ time + I(time^2)` is caught, because there `time` appears as its own
+column. With the column search, the $\beta_1 \leftrightarrow
+\overline{b_{i1}}$ degeneracy of Section 3.3 went untreated, and silently,
+because the intercept column still yielded a basis.
 
-Its practical consequence is sharper than a generic caution. With a spline or orthogonal-polynomial longitudinal mean and a
-random slope, the column-wise construction silently failed to remove the
-$\beta_1 \leftrightarrow \overline{b_{i1}}$ degeneracy that Section 3.3
-identifies as the one present in every model with a random slope - and the
-existing no-op warning would not fire, because the intercept column still
-yields a basis (verified: in Example 1 the intercept column returns one
-direction). The user would see the option accepted, a basis reported for
-`b[:,0]`, and no indication that the slope column was left untreated.
+The second shortcut asks, one random-effect column at a time, which shifts
+of that column alone the fixed effects can absorb (a null-space
+computation over the column space of $X$, so it handles Example 1), and
+takes the union of the resulting spaces. `jmjax` used it in versions 0.3.x
+(`_absorbable_basis_exact()`).
 
-There is a constructive repair, and it follows directly from
-Proposition 1. Writing $P_{\mathcal{T}}$ for the orthogonal projector onto
-$\operatorname{range}\mathcal{T}$,
+**Example 2 (a coupled shift).** Let $Z_i = [\,1,\ t\,]$, let every
+subject have at least two distinct observation times, and let
+$X_i = [\,1,\ t,\ x_i(1 + t)\,]$ for a nonconstant subject covariate
+$x_i$. A shift confined to the intercept column needs $X_i d$ constant in
+$t$, which forces $d \propto e_1$; one confined to the slope column needs
+$X_i d \propto t$, which forces $d \propto e_2$. Both give only
+$\mathbf{1}_N$. But $d = e_3$ is a witness with
+$\delta_i(d) = (-x_i, -x_i)$, so
+$\mathcal{A} = \operatorname{span}\{\mathbf{1}, x\}$: the shift
+$\beta_x \mapsto \beta_x + c$, $b_{i0} \mapsto b_{i0} - c\,x_i$,
+$b_{i1} \mapsto b_{i1} - c\,x_i$ leaves every trajectory unchanged but is
+invisible column by column.
 
-$$\mathcal{A}^{\mathrm{long}}
-= \ker\!\big( (I - P_{\mathcal{T}})\,\mathcal{U} \big),$$
+**Proposition 4 (when the shortcuts are enough).** Suppose every column of
+$X$ is a subject-constant covariate times one random-effect basis function
+(an intercept, time, subject-constant covariates and their interactions
+with time), and each subject's shift is unique ($Z_i$ of full column rank,
+or $K_i = \{0\}$ in a joint model). Then $\ker M = \mathbb{R}^{p}$, each
+$\Delta(e_j)$ is nonzero only in the column of that basis function, and
+$\mathcal{A}$ is the union of the column-by-column spaces.
 
-so the correct basis is an orthonormal basis of the null space of the
-$\big(\sum_i n_i\big) \times N$ matrix $(I - P_{\mathcal{T}})\mathcal{U}$,
-computable with one SVD and no loop over columns. This is basis-independent
-by construction, recovers the column-wise answer whenever (C) holds, and
-costs a single decomposition performed once outside the sampler.
+*Proof.* Each $X_i e_j$ is a subject-constant multiple of one column of
+$Z_i$, so it lies in the range of $Z_i$, and $\delta_i(e_j)$ is that
+multiple, with a minus sign, in that column. $\square$
 
-This repair is no longer hypothetical: it ships as
-`_absorbable_basis_exact()` and is the basis the implementation actually
-uses, with the column-wise search retained alongside it for attribution
-and cross-checking. Section 4.8 describes what the implementation does with
-both.
+All the designs of Sections 5-8, and both designs of the methods paper's
+Section 7, are of this kind.
 
-### 4.6 Subjects whose own data does not determine their ratio
+### 4.6 Subjects whose own data do not determine their shift
 
-Drop the assumption that $z_i \neq 0$. If subject $i$ has $z_i = 0$ - no
-observation at which the random-effect column is nonzero, for instance a
-baseline-only trajectory when $q_\ast$ is the time-slope column - then
-$e_i \in \ker\mathcal{U}$, so requirement (L) places no constraint
-whatever on $v_i$. Read through the longitudinal submodel alone, *any*
-value of $v_i$ is absorbable, which is what the source comment at the
-imputation branch asserts.
+When $Z_i$ is rank-deficient on subject $i$'s observation rows, (L) leaves
+part of $\delta_i$ free. The typical case is a subject observed only at
+baseline: with $Z_i = (1, 0)$, the slope entry does not appear in (L) at
+all.
 
-For the joint model this is not so, and the distinction matters.
+**Proposition 5.** In a joint model with $K_i = \{0\}$ (for example a
+polynomial random-effect basis), $\delta_i(d)$ is determined by (T) for
+every subject, including those whose observation rows leave it free, and
+it can differ from the minimum-norm solution of (L).
 
-**Proposition 5.** Suppose $v \in \mathcal{A}$ with witness $d$, and let
-$i$ be a subject with $z_i = 0$. If $g(t; c_i) \neq 0$ for some
-$t \in \{T_i\} \cup \{\text{quadrature nodes for } i\}$, then $v_i$ is
-uniquely determined by $d$, namely $v_i = -x_i(t)^{\top}d / g(t; c_i)$.
+*Proof.* Immediate from Proposition 2. For a baseline-only subject and
+$d = e_{\text{time}}$: the minimum-norm solution of (L) is $(0, 0)$, while
+(T) requires $t + \delta_{i1} t = 0$ for all $t$, so
+$\delta_i = (0, -1)$. $\square$
 
-*Proof.* Immediate from requirement (T) at that $t$. $\square$
+So a baseline-only subject's slope entry is not free in the joint model:
+the survival submodel sees the subject's trajectory at its event time and
+quadrature nodes, and that pins it. Using the minimum-norm longitudinal
+solution, which can leave it at zero, gives a direction the likelihood does
+identify.
 
-Since $d$ is already pinned by the subjects whose data does determine the
-ratio, and since under (S) those subjects all agree on a single structural
-value, Proposition 5 says that a silent subject's entry is not free at all
-in the joint model: it must take that same consensus value. This gives a
-stronger justification for the implementation's behavior than the one
-recorded in the source. The `BUG FIX` comment in `_absorbable_basis`
-motivates imputing the median of the determined ratios on the grounds that
-the alternative left $Q[:,0]$ non-uniform and so projected out a
-subject-weighted quantity rather than the simple mean. Proposition 5 shows
-the imputation is not merely tidier: the previous fallback of $s_i = 0$
-produced a direction that is *not* in $\mathcal{A}$, so the old code treated as
-absorbable a direction the survival submodel does identify, while the median
-imputation is the unique choice consistent with joint-model invariance.
-The empirical symptom recorded in `dev/diag_slope_projection.R` -
-$\overline{b_{i1}}$ left at 0.04-0.07 instead of pinned near machine zero -
-is the visible trace of that. (Checked against the shipped code: with five
-baseline-only subjects among twenty-five, the returned basis vector is
-uniform to $2.7 \times 10^{-17}$.)
+Versions 0.3.x handled this subject by subject: a subject whose own data
+did not determine its ratio took the median of the determined subjects'
+ratios. That is right for uniform directions (the constant, `time`), where
+(T) forces the common value, and it fixed the earlier fallback of zero,
+which had left $\overline{b_{i1}}$ untreated
+(`dev/diag_slope_projection.R`). But it is wrong for a covariate-weighted
+direction, such as the one a `x:time` column gives a random slope: there
+(T) forces $x_i$, not the median, and the per-column construction admitted
+a direction that is not absorbable. The rotation stayed exact (any fixed
+rotation is), but the explicit block held a direction the data identify.
+From 0.4.0, (T) is solved directly.
 
 ### 4.7 What this establishes
 
-**Corollary 1 (model invariance).** Let $v \in \mathcal{A}$ with witness
-$d$. Then for any parameter values, replacing $(\beta, b)$ by
-$(\beta + c\,d,\; b + c\,v\,e_{q_\ast}^{\top})$ leaves $\mu_{ij}$,
-$m_i(t)$, the hazard, and hence the entire joint likelihood exactly
-unchanged. Consequently the set of achievable mean structures is identical
-with and without the reparameterization.
+**Corollary 1 (model invariance).** Let $(d, \Delta)$ be an invariant
+shift. Then for any parameter values, replacing $(\beta, B)$ by
+$(\beta + c\,d,\; B + c\,\Delta)$ leaves $\mu_{ij}$, $m_i(t)$, the hazard,
+and hence the entire joint likelihood exactly unchanged.
 
 Corollary 1 is the precise sense in which the degeneracy is a degeneracy:
-along an absorbable direction, paired with its witness shift of `beta`, the
-likelihood is exactly flat. Propositions 2, 3 and 5 establish that the
-directions the implementation finds are of this kind, given (S), and
-Proposition 4 with Section 4.5's repair establishes that it finds all of
-them. Nothing here involves the prior: the prior on the random effects is
-*not* invariant under these shifts, and that asymmetry is what pins the
-split at all (at scale $\sigma_b/\sqrt{N}$ for the intercept's mean
-direction).
+along an invariant shift the likelihood is exactly flat. Nothing here
+involves the prior. The prior on the random effects is *not* invariant
+under these shifts, and that asymmetry is what pins the split at all (at
+scale $\sigma_b/\sqrt{N}$ for the intercept's mean direction).
 
-### 4.8 What the implementation now does
+### 4.8 What the implementation does
 
-Three concrete items followed from the analysis above, in descending order
-of importance. All three have since been implemented; this subsection
-records what ships rather than what was recommended.
+From version 0.4.0 the rotation is built by `_absorbable_basis_joint()`
+(`inst/python/jmjax_backend/absorbable.py`), once, before sampling:
 
-1. **The completeness failure is closed, not merely detected.** The
-   column-wise search has been superseded by the null-space computation of
-   Section 4.5, implemented as `_absorbable_basis_exact()`: one SVD of a
-   $\left(\sum_i n_i\right) \times p$ matrix, basis-independent, and
-   provably exact by Proposition 4. It is now *authoritative* - the basis
-   actually used. The column-wise `_absorbable_basis()` is retained
-   alongside it for **attribution**, because it names *which* columns of
-   $X$ expose each direction, which is what makes the fit's report
-   diagnostic rather than a bare dimension count. The two are compared at
-   every fit and any disagreement raises a warning naming the extra
-   directions; the reverse disagreement (the exact construction finding
-   *fewer*) would contradict Proposition 2 and is reported as a bug.
-   Every returned
-   direction is verified against the defining identity before use, so the
-   basis is sound by construction rather than by choice of tolerance.
-2. **Condition (S) is checked, not assumed.**
-   `_structural_extension_residual()` evaluates the same proportionality
-   on `X_time_surv`/`Z_time_surv` and `X_time_quad`/`Z_time_quad` - arrays
-   the backend already builds - and warns when the worst relative residual
-   exceeds $10^{-6}$, stating explicitly that results from such a fit are
-   unvalidated. (S) has thus moved from an argument in this document to a
-   per-fit assertion.
-3. **Proposition 5's justification is recorded at the site.** The source
-   comment previously presented the median fallback as restoring
-   uniformity, which is the visible symptom rather than the reason; it now
-   states that the silent subject's entry is *forced* by joint-model
-   invariance, since the survival submodel identifies what the
-   longitudinal submodel alone does not.
+1. **$\ker M$.** One SVD of the stacked $(I - P_{Z_i}) X_i$, with the
+   columns of $X$ scaled to unit norm so that the rank decision is
+   unit-free.
+2. **$\Delta(d)$ from (T).** For each basis vector $d$, $\delta_i(d)$ is
+   the pseudoinverse solution of (T) on subject $i$'s grid: the observation
+   times, the event time, the quadrature nodes and any `delta`/`area`/
+   `area_avg` rows the hazard uses. That is the solution orthogonal to
+   the grid's null space of $Z_i$, which is $K_i$ (Proposition 2) for any
+   polynomial random-effect basis such as `~ 1` or `~ time`. With a
+   random-effect basis that vanishes on part of a subject's range (a
+   spline with a knot beyond the subject's event time), the grid leaves
+   that coordinate free where Definition 1, on $[0, \tau]$, would pin it,
+   and the two can differ.
+3. **Condition (S), checked and enforced.** The worst relative residual of
+   (T) over a basis of $\ker M$ is recorded. If it exceeds $10^{-6}$, the
+   fit warns, and only the subspace of $\ker M$ on which (T) holds is
+   admitted, so a direction that fails (S) is never rotated.
+4. **Verification.** Every admitted generator $(d, \Delta(d))$ is checked
+   against (L) and (T) before use, so a loose rank tolerance cannot admit a
+   direction that is not absorbable.
+5. **$Q$.** One SVD of the $N \times (q \dim \ker M)$ matrix of the
+   (normalized) columns of the $\Delta(d)$.
 
-Every design used in Section 6 spells `time` as its own column, so $K$
-contains it, (C) holds, and both constructions agree exactly there.
-`dev/verify_absorbable_basis.py` checks that agreement directly, across
-the canonical designs and a randomized sweep, so the claim is a test
-rather than an assurance.
+It costs about 0.2 seconds at $N = 8000$. What it did is reported in
+`fit$convergence$orthogonalize$rotation`: `k`, `dim_ker_M`,
+`condition_s_residual`, `n_rejected_condition_s`, and, for comparison, the
+0.3.x per-column construction's dimension (`k_columnwise`) and the
+distance between the two subspaces (`columnwise_subspace_distance`, the
+sine of the largest principal angle).
+
+`tests/testthat/python/check_joint_construction.py` checks the
+construction against the reference implementation of the methods paper:
+Examples 1 and 2, a baseline-only subject, a rank-deficient $Z_i$, a design
+where (S) fails, $q = 3$, invariance under $X \mapsto XG$, and 80
+randomized designs. `dev/verify_joint_vs_columnwise.R` reads the
+comparison fields off fits of the designs of Sections 5-8. By
+Proposition 4 they must agree there, so the numbers reported in this
+document, which used the 0.3.x construction, do not depend on the change.
+(The orthonormal basis chosen inside the same subspace can differ, so a
+rerun under 0.4.0 does not reproduce 0.3.x draws bit for bit.)
 
 ## 5. The rotation
 
@@ -733,9 +695,10 @@ $b = b_{\mathrm{std}} L^{\top}$, with the entries of
 $b_{\mathrm{std}} \in \mathbb{R}^{N \times q}$ independent $\mathcal{N}(0,1)$
 a priori and $L = \operatorname{diag}(\sigma_b) L_{\mathrm{corr}}$
 lower-triangular; write $\theta$ for every other parameter, including
-$\beta$, $\sigma_b$ and $L_{\mathrm{corr}}$. Let $Q_j$ be the orthonormal basis of absorbable
-directions for random-effect column $j$ (Section 4) and $Q_{\cup} \in
-\mathbb{R}^{N \times k}$ an orthonormal basis of the span of all of them.
+$\beta$, $\sigma_b$ and $L_{\mathrm{corr}}$. Let $Q_{\cup} \in
+\mathbb{R}^{N \times k}$ be an orthonormal basis of the absorbable
+subspace $\mathcal{A}$ (Section 4). (The subscript is historical: up to
+0.3.x it was the union of per-column bases.)
 Complete $Q_{\cup}$ to an orthogonal matrix $R = [\,Q_{\cup} \mid
 Q_{\perp}\,]$. `jmjax` uses the Householder completion, stored as $k$
 reflectors, so it costs $O(Nk)$ memory and work and needs no seed.
@@ -804,28 +767,33 @@ two-coordinate model with the variance components held fixed. Its
 predictions are then checked in the closed-form model of
 `dev/theory_rotation_toy.py` (Part 5) and against Section 6's fits.
 
-**Lemma 1 (localization).** Let $v \in \operatorname{span}(Q_j)$ be an
-absorbable direction for random-effect column $j$, with witness $d$
-(Corollary 1). In the sampled coordinates, the likelihood-invariant shift
-$(\beta, b[\,\cdot\,, j]) \mapsto (\beta + c\,d,\; b[\,\cdot\,, j] + c\,v)$ is
+**Lemma 1 (localization).** Let $(d, \Delta)$ be an invariant shift
+(Definition 1), and write $\Delta = \Delta(d) + \Delta_0$, where
+$\Delta_0$ has rows in the $K_i$ (a null shift). In the sampled
+coordinates, the likelihood-invariant shift
+$(\beta, B) \mapsto (\beta + c\,d,\; B + c\,\Delta(d))$ is
 
 $$\beta \mapsto \beta + c\,d, \qquad
-U \mapsto U + c\,(Q_{\cup}^{\top} v)\, e_j^{\top} (L^{\top})^{-1}, \qquad
+U \mapsto U + c\,Q_{\cup}^{\top} \Delta(d)\, (L^{\top})^{-1}, \qquad
 V \mapsto V,$$
 
 for every value of $\sigma_b$ and $L_{\mathrm{corr}}$. So every invariant
-direction of Corollary 1's form lies in the coordinate block
-$(\beta, U)$, of dimension $p + kq$ (given Condition (S), which makes the
-directions of $\operatorname{span}(Q_j)$ absorbable for the joint model,
-by Proposition 3). Without the rotation, the same
-directions have a component on every one of the $N$ subjects' coordinates.
+shift is a move in the coordinate block $(\beta, U)$, of dimension
+$p + kq$, plus a null shift, which involves no fixed effect and moves only
+coordinates the likelihood does not see. Without the rotation, the same
+moves have a component on every one of the $N$ subjects' coordinates.
 
-*Proof.* $b = b_{\mathrm{std}} L^{\top}$, so adding $c\,v$ to column $j$ of
-$b$ adds $\Delta = c\,v\, e_j^{\top} (L^{\top})^{-1}$ to $b_{\mathrm{std}}$.
-Every column of $\Delta$ is a multiple of $v \in \operatorname{span}(Q_{\cup})$,
-and $Q_{\perp}^{\top} Q_{\cup} = 0$, so $Q_{\perp}^{\top}\Delta = 0$ and
-$Q_{\cup}^{\top}\Delta = c\,(Q_{\cup}^{\top} v)\, e_j^{\top}(L^{\top})^{-1}$.
+*Proof.* $B = b_{\mathrm{std}} L^{\top}$, so adding $c\,\Delta(d)$ to $B$
+adds $c\,\Delta(d) (L^{\top})^{-1}$ to $b_{\mathrm{std}}$. Every column of
+that is a combination of the columns of $\Delta(d)$, which lie in
+$\mathcal{A} = \operatorname{span}(Q_{\cup})$, and
+$Q_{\perp}^{\top} Q_{\cup} = 0$, so the $V$ coordinates do not move.
 Invariance of the likelihood is Corollary 1. $\square$
+
+Example 2 of Section 4.5 shows why the joint definition matters here: its
+shift moves the intercept and slope columns together, along $x$. A basis
+built column by column omits $x$, so that shift keeps a component outside
+the block, on every subject's coordinates.
 
 Lemma 1 is why the rotation acts on every column with the same $Q_{\cup}$.
 The flat directions mix intercept and slope columns in proportions set by
@@ -892,10 +860,10 @@ the *sampled* $L$ (Lemma 1): on $\sigma_0$ through $\kappa \propto \sigma_0$,
 and, for directions shared between the intercept and slope columns, on
 $\rho$ through $\rho/\sqrt{1-\rho^{2}}$. NUTS adapts one fixed metric. The
 $\sigma_0$ part is analysed here; the $\rho$ part is not, and it grows as
-$\lvert\rho\rvert \to 1$. Let $\delta$ be the posterior coefficient of variation of
+$\lvert\rho\rvert \to 1$. Let $\nu$ be the posterior coefficient of variation of
 $\sigma_0$, roughly $1/\sqrt{2N}$. A metric that exactly whitens the plane
 at one value of $\sigma_0$ leaves a residual condition number of
-$1 + O\big(\delta\sqrt{\tau\kappa^{2}}\big)$ elsewhere in the posterior. In
+$1 + O\big(\nu\sqrt{\tau\kappa^{2}}\big)$ elsewhere in the posterior. In
 units of the design, that is $1 + O\big(\sqrt{\bar n\,\sigma_0^{2}/(\sigma_e^{2}N)}\big)$:
 small when there are many subjects relative to the information each one
 carries, which is the usual regime for joint-model data. Part 5(c)
@@ -950,12 +918,14 @@ not been tried.
 
 The rotation and its dense block are on by default for NUTS fits
 (`random_effects_method = "nuts"`) with either a random intercept only
-($q = 1$), or $q \ge 2$ and `random_effects_corr = TRUE`, as long as no
+($q = 1$), or a random intercept and slope ($q = 2$) with
+`random_effects_corr = TRUE`, as long as no
 legacy sweep option is requested. Elsewhere they are silently off.
 `control = list(rotate_absorbable = FALSE)` gives the unrotated fit.
 Setting `rotate_absorbable = TRUE` explicitly insists on the rotation and
 raises an error outside that scope. What was rotated is reported in
-`fit$convergence$orthogonalize$rotation` (`mode`, `applied`, `k`).
+`fit$convergence$orthogonalize$rotation` (`mode`, `applied`, `k`, and the
+construction's diagnostics of Section 4.8).
 
 **Random intercept only ($q = 1$).** For $q = 1$, `jmjax` samples $b$ directly, not non-centred, so the
 rotation acts on $b$ itself. Its prior is iid $N(0, \sigma_b^{2})$, so the
@@ -1100,8 +1070,8 @@ R-hat $\le 1.05$ (all 100 kept):
 | `alpha` | 0.93 | 0.922 | 2.97 | 0.93 | 0.917 | 2.97 |
 | `sigma_b0` | 0.94 | 0.914 | 0.63 | 0.95 | 0.906 | 0.68 |
 
-Coverage agrees to within 0.01 everywhere (the Monte Carlo SE on 95%
-coverage is about 0.011), and the ratio of mean posterior SD to the SD of
+Coverage agrees to within 0.01 everywhere (the Monte Carlo SE of a 95%
+coverage estimate from 100 replicates is about 0.022), and the ratio of mean posterior SD to the SD of
 posterior means to within 0.015 - agreement within Monte Carlo error. The two effects visible in *both* columns -
 slightly wide intervals for `beta_0`, and an upward bias in `alpha` of
 about 3 Monte Carlo SEs - belong to the model and this design, not to the
@@ -1247,9 +1217,10 @@ chain, well above its own defaults):
 | 8 | 6.22x |
 | 12 | 6.25x |
 
-On real data (`dev/study_realdata_rotate.R`, the designs of Section 7,
-3 seeds, `JMbayes2` at the same 16,000/4,000 iterations), the unrotated fit's
-`alpha` ESS/sec was 3.2x `JMbayes2`'s on `aids` and 7.6x on `pbc2`. This is the generic NUTS/HMC-versus-block-Gibbs distinction of
+On real data (`dev/study_common_ess.R`, the designs of Section 7,
+3 seeds, `JMbayes2` at the same 16,000/4,000 iterations, and NumPyro's ESS
+estimator for every fit), the unrotated fit's `alpha` ESS/sec was 3.5x
+`JMbayes2`'s on `aids` and 8.2x on `pbc2`. This is the generic NUTS/HMC-versus-block-Gibbs distinction of
 Sections 2.2 and 2.4 (Hoffman & Gelman 2014; Roberts & Sahu 1997; Betancourt
 2017). A gradient-based sampler moves the whole parameter vector jointly.
 It has no equivalent of "conditional on the other blocks' current values",
@@ -1343,17 +1314,18 @@ is worth.
 
 | | `aids` | `pbc2` |
 |---|---:|---:|
-| `JMbayes2`: draws/sec | 1721 | 2291 |
-| `JMbayes2`: `alpha` ESS per draw | 0.035 | 0.028 |
-| `jmjax` rotated: draws/sec | 370 | 322 |
-| `jmjax` rotated: `alpha` ESS per draw | 1.06 | 1.47 |
-| ESS-per-draw ratio x draws/sec ratio | 30.3 x 0.215 = 6.5 | 52.3 x 0.141 = 7.4 |
+| `JMbayes2`: draws/sec | 1726 | 2390 |
+| `JMbayes2`: `alpha` ESS per draw | 0.032 | 0.025 |
+| `jmjax` rotated: draws/sec | 373 | 327 |
+| `jmjax` rotated: `alpha` ESS per draw | 1.06 | 1.46 |
+| ESS-per-draw ratio x draws/sec ratio | 33.3 x 0.216 = 7.2 | 57.8 x 0.137 = 7.9 |
 
-(`dev/study_realdata_rotate.R`, 3 seeds; the last row reproduces the
-6.5x and 7.3x `alpha` ESS/sec of Section 8.3 up to rounding.) `JMbayes2`
-draws 4.7-7.1 times faster but keeps only one effective draw in 29-36.
-Under Proposition 8, an ESS per draw of 0.028-0.035 corresponds to
-$R^2 \approx 0.93$-$0.95$ for an ideal two-block sampler. `jmjax`'s ESS
+(`dev/study_common_ess.R`, 3 seeds, NumPyro's estimator for both
+packages, geometric means; the last row is the `alpha` ESS/sec of
+Section 8.3. `JMbayes2`'s own estimator gives it 0.035 and 0.028 ESS per
+draw.) `JMbayes2` draws 4.6-7.3 times faster but keeps only one effective
+draw in 31-40. Under Proposition 8, an ESS per draw of 0.025-0.032
+corresponds to $R^2 \approx 0.94$-$0.95$ for an ideal two-block sampler. `jmjax`'s ESS
 per draw on `alpha` is at or above 1 on both datasets, as the HMC argument
 predicts.
 
@@ -1364,7 +1336,7 @@ The same script measures that $R^2$ directly, with 960 regressors on
 |---|---:|---:|
 | $R^2$(`alpha` given everything else) | 0.873 | 0.853 |
 | ideal two-block sampler, predicted ESS per draw | 0.068 | 0.079 |
-| `JMbayes2`, measured ESS per draw | 0.035 | 0.028 |
+| `JMbayes2`, measured ESS per draw | 0.032 | 0.025 |
 | `jmjax` NUTS, measured ESS per draw (same long fit) | 1.05 | 1.72 |
 
 So `alpha` shares 85%-87% of its posterior variance with the other
@@ -1379,10 +1351,13 @@ $E[\alpha \mid R, y]$ does. So the true ideal benchmark can only be worse than
 the table's, and the 2-3x remainder is an upper bound on what
 `JMbayes2`'s implementation adds.
 
-On a log scale, the ideal benchmark accounts for 80% of the measured
-ESS-per-draw gap between `jmjax` and `JMbayes2` on `aids` (15.5x of
-30x) and 75% on `pbc2` (21.7x of 61x). Structure, not implementation,
-explains most of `alpha`'s gap. Any sampler that updates `alpha`
+On a log scale, the ideal benchmark is 78% of the measured ESS-per-draw
+gap between `jmjax` and `JMbayes2` on `aids` (15.4x of 33x) and 73% on
+`pbc2` (21.7x of 68x). This is a descriptive comparison of different
+transition kernels, not a causal decomposition: it says that the
+dependence of `alpha` on the other parameters is large enough to account
+for most of the gap, not how the remainder divides among implementation
+choices. Any sampler that updates `alpha`
 conditional on the survival parameters inherits it. A gradient sampler
 that moves them together does not.
 
@@ -1440,21 +1415,27 @@ the coefficients it can (its prior arguments distinguish "hierarchically
 centered" coefficients from the rest; `?JMbayes2::jm`). `jmjax` keeps the
 non-centred parameterization, which it needs for the random-effect
 variances (Section 2.2), and until now paid for it on these coefficients.
-The rotation removes that payment. Same fits as Section 7, ESS/sec,
-`JMbayes2`'s time being its whole `jm()` call:
+The rotation removes that payment. ESS/sec relative to `JMbayes2`, same
+data and settings as Section 7 (`dev/study_common_ess.R`: the draws of all
+three fits saved, and every ESS computed with NumPyro's estimator;
+geometric means over 3 seeds; `JMbayes2`'s time is its whole `jm()` call):
 
 | parameter | `aids`: unrotated / `JMbayes2` | rotated / `JMbayes2` | `pbc2`: unrotated / `JMbayes2` | rotated / `JMbayes2` |
 |---|---:|---:|---:|---:|
-| intercept | 0.04x | 0.97x | 0.05x | 0.89x |
-| subject-constant covariates | 0.03x-0.04x | 0.89x-0.95x | 0.06x | 0.92x |
-| time slope | 2.8x | 6.5x | 0.42x | 1.8x |
-| `alpha` | 3.2x | 6.5x | 7.6x | 7.3x |
-| survival coefficient `gamma` | 1.1x | 2.7x | 2.1x | 1.8x |
+| intercept | 0.04x | 0.97x | 0.05x | 0.93x |
+| subject-constant covariates | 0.03x-0.04x | 0.88x-0.98x | 0.06x | 0.98x |
+| time slope | 3.3x | 7.7x | 0.42x | 1.9x |
+| `alpha` | 3.5x | 7.2x | 8.2x | 7.9x |
+| survival coefficient `gamma` | 1.2x | 2.8x | 2.1x | 1.8x |
 
-With the rotation, `jmjax` is at parity with `JMbayes2` (0.89x-0.97x) on
+With the rank-normalized bulk ESS of the `posterior` package the ratios
+are within 5% of these, and with each package's own estimator within 18%
+(`JMbayes2`'s own estimator is somewhat more generous to it).
+
+With the rotation, `jmjax` is at parity with `JMbayes2` (0.88x-0.98x) on
 exactly the coefficients hierarchical centering is designed for. It is
-ahead on everything else: the time slope (1.8x-6.5x), the survival
-coefficient (1.8x-2.7x), and the association parameter (6.5x-7.3x). Before
+ahead on everything else: the time slope (1.9x-7.7x), the survival
+coefficient (1.8x-2.8x), and the association parameter (7.2x-7.9x). Before
 the rotation, the unrotated fit trailed by a factor of 17-33 on the first
 group (0.03x-0.06x).
 
@@ -1482,14 +1463,23 @@ quantity.
     Monte Carlo SEs), with coverage $0.92$ and $\mathrm{sd\_ratio}$
     $0.955$.
 - **Scope.** The rotation is implemented under the default NUTS sampler
-  for $q = 1$, and for $q \ge 2$ with correlated random effects. Elsewhere the default
+  for $q = 1$, and for $q = 2$ with correlated random effects (jmjax fits
+  at most two random effects). Elsewhere the default
   leaves it off, and an explicit `rotate_absorbable = TRUE` raises an
   informative error. The simulation evidence is one design
   family (Section 6.1), with a spline baseline hazard; the earlier sweep
   pilots also covered a Weibull hazard.
 - **Near-collinearity.** The basis construction's rank decision is a
   tolerance judgement when absorbable and identified directions are nearly
-  collinear (Section 4.8).
+  collinear, although every returned direction is verified before use
+  (Section 4.8).
+- **Condition (S).** It can fail for very flexible time bases with few
+  observations per subject. The fit then warns and leaves the failing
+  directions out of the rotation (Section 4.8).
+- **The construction behind the reported fits.** The fits in Sections 5-8
+  used the 0.3.x construction, column by column. For those designs it gives
+  the same subspace as the joint construction of Section 4 (Proposition 4),
+  so no reported number depends on the change.
 - **Known costs, left as they are.** Two small costs are recorded rather
   than tuned away. Neither stops a fit or biases it, and both were
   measured in simulation, not in real data.
@@ -1504,8 +1494,18 @@ quantity.
 
   A metric that follows the sampled $\sigma_0$ could recover the second.
   Both will be revisited if users meet them in real data.
-- **Next step.** The broader design checks: more covariates, a non-linear
-  time trend (Section 4.5's Example 1) and the `mixing` design.
+- **Next steps.** A metric that follows the sampled $\sigma_0$, for
+  example by rescaling the dense block with the current $L$, is the obvious
+  way to remove the residual of Section 5.2 and has not been tried. Broader
+  design checks: more covariates, a non-linear time trend (Section 4.5's
+  Example 1), a coupled design (Example 2) and the `mixing` design. The
+  construction needs only the fixed- and random-effects designs, so it
+  carries over to any model whose random effects enter through a linear
+  predictor, including generalized linear mixed models; crossed random
+  effects would need one basis per grouping factor, each rotating that
+  factor's own index. More than two random effects per subject ($q \ge 3$)
+  is not supported by `jmjax`'s fitting code, although the construction of
+  Section 4 is (it is tested at $q = 3$).
 
 ## 10. Related work summary
 
@@ -1557,9 +1557,9 @@ ridge's dependence on the sampled variance components.
 
 With the rotation, `jmjax` matches `JMbayes2` on the coefficients
 `JMbayes2` hierarchically centres, where the unrotated fit trailed by a
-factor of 17-33. It is 1.8x-7.3x ahead on the rest (Section 8.3). That includes the
+factor of 17-33. It is 1.8x-7.9x ahead on the rest (Section 8.3). That includes the
 association parameter `alpha`, the quantity a joint model exists to
-estimate, where the lead is 6.5x-7.3x. That advantage is generic to NUTS
+estimate, where the lead is 7.2x-7.9x. That advantage is generic to NUTS
 and needs none of this. Proposition 8 accounts for it: a sampler that
 updates `alpha` given the other parameters pays for their correlation
 with `alpha` in autocorrelation, while HMC pays for it, if at all, in

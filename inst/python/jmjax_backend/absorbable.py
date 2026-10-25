@@ -9,6 +9,12 @@ Condition (S) check on the survival/quadrature grid), and builds the fixed
 orthogonal rotation that jmjax uses to make them explicit sampling
 coordinates (control$rotate_absorbable; Householder reflectors, O(N k)).
 
+From 0.4.0 the rotation uses _absorbable_basis_joint(), which defines the
+absorbable subspace jointly across random-effect columns (methods paper,
+Section 3) and solves each subject's shift from the trajectory identity on
+the survival/quadrature grid. The per-column functions below remain for the
+legacy sweep (sweep.py) and as the comparison the fit report records.
+
 Split out of mcmc_model.py so that the absorbable-basis machinery, which the
 recommended rotation needs, is separate from the legacy sweep in sweep.py,
 which it does not. Depends only on NumPy; _apply_reflectors also works on
@@ -282,6 +288,253 @@ def _structural_extension_residual(gens, q_idx, X_time_surv, Z_time_surv,
             denom = max(float(np.abs(rhs).max()), float(np.abs(lhs).max()), 1.0)
             worst = max(worst, float(np.abs(lhs - rhs).max()) / denom)
     return worst
+
+
+def _absorbable_basis_joint(X_long, Z_long, n_obs,
+                            X_time_surv=None, Z_time_surv=None,
+                            X_time_quad=None, Z_time_quad=None,
+                            extra_pairs=(), tol=1e-8, s_tol=1e-6,
+                            verify_tol=1e-7, rcond=1e-10):
+    """Absorbable subspace defined JOINTLY across random-effect columns.
+
+    This is the construction the rotation (control$rotate_absorbable) uses
+    from jmjax 0.4.0 on. It replaces the union of the per-column bases of
+    _absorbable_basis_exact(), which misses fixed-effect shifts that must be
+    offset in several random-effect columns at once. Example: with
+    X_i = [1, t, x_i (1 + t)] and Z_i = [1, t], each column on its own gives
+    only span{1}, but beta_x + c, b_i0 - c x_i, b_i1 - c x_i leaves every
+    trajectory unchanged, so the absorbable subspace is span{1, x}.
+
+    DEFINITION (methods paper, Section 3). (d, Delta) is an invariant shift
+    if beta -> beta + d, b_i -> b_i + delta_i leaves every trajectory
+    unchanged:
+        (L)  X_i d + Z_i delta_i = 0              (observation rows)
+        (T)  x_i(t)' d + z_i(t)' delta_i = 0      (every t the hazard sees)
+    For a witness d, Delta(d) is the shift whose rows are orthogonal to
+    K_i = {a : z_i(t)' a = 0 for all t}. The absorbable subspace is the span
+    of the columns of Delta(d) over all witnesses d.
+
+    CONSTRUCTION.
+     1. M stacks (I - P_{Z_i}) X_i over subjects, P_{Z_i} = Z_i Z_i^+, on
+        the observation rows. Witnesses lie in ker M; one SVD gives a basis.
+     2. For each basis vector d, delta_i(d) solves (T) on subject i's grid:
+        the observation times, the event time, the quadrature nodes, and
+        any functional-form rows (extra_pairs). The pseudoinverse gives the
+        solution orthogonal to the grid null space of Z, which is K_i.
+        Solving (L) from the observation rows alone is NOT the same when
+        Z_i is rank-deficient: for a baseline-only subject with d = e_time
+        and Z_i = (1, 0), the minimum-norm solution of (L) is (0, 0), but
+        the trajectory forces (0, -1).
+        The grid is the set of times at which the
+        likelihood uses m_i(t), which is what invariance requires. The
+        paper's Definition 1 asks for (T) on all of [0, tau]; the two agree
+        whenever the grid null space of Z_i equals K_i on [0, tau] (any
+        polynomial basis of degree below the number of grid points, so
+        every design jmjax fits with ~ 1 or ~ time). They can differ when a
+        Z column vanishes on part of a subject's range (a truncated-power
+        or spline basis with a knot beyond the subject's event time): there
+        the grid leaves that coordinate free and the pseudoinverse sets it
+        to zero, where [0, tau] would pin it. Without survival arrays (a mixed
+        model), (L) is the whole requirement and delta_i = -Z_i^+ X_i d.
+     3. Condition (S): if (T) cannot be solved for some d in ker M (the
+        worst relative residual exceeds s_tol), that d is not a witness.
+        The residual is reported, and only the subspace of ker M on which
+        (T) holds is admitted (an SVD of the residual operator), so a
+        failing direction is never rotated.
+     4. Every admitted generator is verified against (L) and (T) before use,
+        so a loose rank tolerance cannot admit a non-absorbable direction.
+     5. The N x q matrices Delta(d) are collected into an N x (q dim ker M)
+        matrix, and one more SVD gives the orthonormal Q (N x k). Then
+        k <= q dim ker M <= q p, and Q depends on X only through its column
+        space (replacing X by X G maps ker M to G^{-1} ker M and leaves
+        every X_i d, hence every Delta(d), unchanged).
+
+    The rotation built on Q is exact whatever Q is (any fixed orthogonal
+    matrix is), so a missed or extra direction affects efficiency, not the
+    posterior.
+
+    Arguments: X_long [N, max_obs, p], Z_long [N, max_obs, q], n_obs [N];
+    X_time_surv [N, p], Z_time_surv [N, q]; X_time_quad [N, K, p],
+    Z_time_quad [N, K, q]; extra_pairs a sequence of (X_surv, Z_surv,
+    X_quad, Z_quad) for slope/area functional forms (any element may be
+    None).
+
+    Returns (Q, info). Q is [N, k] orthonormal, or None. info has
+    "dim_ker_M", "n_witnesses" (dimension of the admitted witness space),
+    "k", "condition_s_residual" (worst relative residual of (T) over a
+    basis of ker M, before restriction), "n_rejected_s" (dimensions of
+    ker M dropped because (T) fails), "n_rejected_verify" (generators that
+    failed the final check), "joint_model" (whether (T) was used) and
+    "generators" (list of (d, Delta) pairs, in the coordinates of X_long).
+    """
+    info = {"dim_ker_M": 0, "n_witnesses": 0, "k": 0,
+            "condition_s_residual": 0.0, "n_rejected_s": 0,
+            "n_rejected_verify": 0, "joint_model": False, "generators": []}
+    X = np.asarray(X_long, dtype=float)
+    Z = np.asarray(Z_long, dtype=float)
+    if X.ndim != 3 or Z.ndim != 3 or X.shape[:2] != Z.shape[:2]:
+        return None, info
+    N, mo, p = X.shape
+    q = Z.shape[2]
+    n = np.asarray(n_obs).astype(int).reshape(-1)
+    if n.shape[0] != N or N == 0 or p == 0 or q == 0:
+        return None, info
+
+    mask = (np.arange(mo)[None, :] < n[:, None]).astype(float)   # [N, mo]
+    Xo = X * mask[:, :, None]
+    Zo = Z * mask[:, :, None]
+    flat = mask.reshape(-1) > 0
+    if int(flat.sum()) < p:
+        return None, info
+
+    # ---- 1. ker M ---------------------------------------------------------
+    # Padded rows are zero in both Xo and Zo; pinv([A; 0]) = [A^+, 0], so
+    # they change nothing.
+    Zo_pinv = np.linalg.pinv(Zo, rcond=rcond)                     # [N, q, mo]
+    Mrows = Xo - Zo @ (Zo_pinv @ Xo)                               # [N, mo, p]
+    Mf = Mrows.reshape(N * mo, p)[flat]
+    X_f = Xo.reshape(N * mo, p)[flat]
+    colnorm = np.linalg.norm(X_f, axis=0)       # so the rank test is unit-free
+    scale = np.where(colnorm > tol, colnorm, 1.0)
+    # full_matrices=False: U stays [rows, p], not [rows, rows].
+    _, sv, Vt = np.linalg.svd(Mf / scale, full_matrices=False)
+    smax = float(sv.max()) if sv.size else 0.0
+    rank = int((sv > tol * max(smax, 1.0)).sum())
+    if rank >= p:
+        return None, info
+    D = Vt[rank:].T / scale[:, None]                               # [p, m]
+    info["dim_ker_M"] = int(D.shape[1])
+
+    # ---- 2. the grid on which delta_i(d) is solved -----------------------
+    def _rows(Xs, Zs, Xq, Zq):
+        out = []
+        if Xs is not None and Zs is not None:
+            out.append((np.asarray(Xs, float)[:, None, :],
+                        np.asarray(Zs, float)[:, None, :]))
+        if Xq is not None and Zq is not None:
+            out.append((np.asarray(Xq, float), np.asarray(Zq, float)))
+        return out
+
+    blocks = [(Xo, Zo)]
+    surv_blocks = _rows(X_time_surv, Z_time_surv, X_time_quad, Z_time_quad)
+    for pair in (extra_pairs or ()):
+        surv_blocks += _rows(*pair)
+    joint = len(surv_blocks) > 0
+    info["joint_model"] = bool(joint)
+    for bx, bz in surv_blocks:
+        if bx.shape[0] != N or bx.shape[2] != p or bz.shape[2] != q \
+                or bz.shape[:2] != bx.shape[:2]:
+            raise ValueError("absorbable: survival/quadrature design arrays "
+                             "do not match X_long/Z_long (%s vs %s)"
+                             % (bx.shape, bz.shape))
+        blocks.append((bx, bz))
+    GX = np.concatenate([b[0] for b in blocks], axis=1)           # [N, R, p]
+    GZ = np.concatenate([b[1] for b in blocks], axis=1)           # [N, R, q]
+    GZ_pinv = np.linalg.pinv(GZ, rcond=rcond)                     # [N, q, R]
+
+    def _solve(Dm):
+        """Delta for each column of Dm, and the relative (T) residuals."""
+        XD = np.einsum("nrp,pm->nrm", GX, Dm)                     # [N, R, m]
+        Delta = -GZ_pinv @ XD                                     # [N, q, m]
+        res = XD + GZ @ Delta
+        mag = np.abs(XD).reshape(-1, Dm.shape[1]).max(axis=0)
+        rel = np.abs(res).reshape(-1, Dm.shape[1]).max(axis=0) / np.maximum(mag, 1e-300)
+        return Delta, res, mag, rel
+
+    # Re-express ker M so that the trajectory changes X d on the grid are
+    # orthonormal (flattened over subjects and rows); directions with X d = 0
+    # everywhere (collinear X columns) are null shifts with Delta = 0 and
+    # are dropped. Orthonormality makes the residual operator below
+    # comparable across directions.
+    XD0 = np.einsum("nrp,pm->nrm", GX, D).reshape(-1, D.shape[1])
+    _, xs, xVt = np.linalg.svd(XD0, full_matrices=False)
+    live = xs > tol * max(float(xs.max()) if xs.size else 0.0, 1e-300)
+    if not live.any():
+        return None, info
+    D = D @ (xVt[live].T / xs[live])
+    n_rows = int(GX.shape[0] * GX.shape[1])
+
+    # ---- 3. Condition (S): restrict to the d for which (T) is solvable ---
+    _, res, _, rel = _solve(D)
+    info["condition_s_residual"] = float(rel.max()) if joint else 0.0
+    if joint and float(rel.max()) > s_tol:
+        # (T) is linear in d, so the admissible d form a subspace: the
+        # (near-)null space of the residual operator restricted to ker M.
+        # Only the right singular vectors are needed: an [m, m] SVD of the
+        # Gram matrix would square the condition number, so take the thin
+        # SVD of the [rows, m] operator (U stays [rows, m]).
+        # The columns of X D are orthonormal, so for a unit coefficient
+        # vector c, max|X D c| >= 1/sqrt(rows). A direction whose worst
+        # relative residual exceeds s_tol therefore has ||R c||_2 >
+        # s_tol/sqrt(rows); cutting there excludes every such direction,
+        # however few subjects it fails in, while genuine directions sit at
+        # rounding level (~1e-14), far below it.
+        R_op = res.reshape(-1, D.shape[1])
+        _, rs, rVt = np.linalg.svd(R_op, full_matrices=False)
+        rs_full = np.zeros(D.shape[1])
+        rs_full[:rs.size] = rs
+        keep = rs_full <= s_tol / np.sqrt(max(n_rows, 1))
+        D_adm = D @ rVt[keep].T
+        info["n_rejected_s"] = int(D.shape[1] - D_adm.shape[1])
+        D = D_adm
+        if D.shape[1] == 0:
+            return None, info
+
+    # ---- 4. verify every generator before use -----------------------------
+    Delta, _, _, rel_T = _solve(D)
+    gens = []
+    for j in range(D.shape[1]):
+        d = D[:, j]
+        Dj = Delta[:, :, j]                                       # [N, q]
+        lhs = np.einsum("nop,p->no", Xo, d)
+        resL = lhs + np.einsum("noq,nq->no", Zo, Dj)
+        magL = max(float(np.abs(lhs).max()), 1e-300)
+        okL = float(np.abs(resL).max()) / magL <= verify_tol
+        okT = (not joint) or float(rel_T[j]) <= s_tol
+        if joint and not okT:
+            info["n_rejected_s"] += 1            # a Condition (S) failure
+            continue
+        if not okL or float(np.abs(Dj).max()) <= 0.0:
+            info["n_rejected_verify"] += 1
+            continue
+        gens.append((d, Dj))
+    info["n_witnesses"] = len(gens)
+    info["generators"] = gens
+    if not gens:
+        return None, info
+
+    # ---- 5. Q from the columns of every Delta(d) -------------------------
+    # Each generator is scaled to unit Frobenius norm, but its columns keep
+    # their relative sizes, and the rank cut is tied to the verification
+    # tolerance: a generator passes verification with a relative residual
+    # up to s_tol, so anything smaller than that, relative to its
+    # generator, cannot be told apart from a residual and is treated as
+    # zero rather than promoted to a full direction.
+    col_tol = max(s_tol, verify_tol)
+    cols = []
+    for _, Dj in gens:
+        fro = float(np.linalg.norm(Dj))
+        for c in range(q):
+            v = Dj[:, c] / fro
+            if float(np.linalg.norm(v)) > col_tol:
+                cols.append(v)
+    if not cols:
+        return None, info
+    S = np.stack(cols, axis=1)
+    U, ssv, _ = np.linalg.svd(S, full_matrices=False)
+    r = int((ssv > col_tol * float(ssv.max())).sum())
+    if r == 0:
+        return None, info
+    Q = np.ascontiguousarray(U[:, :r])
+    # Q spans exactly the Delta columns: everything in it is absorbable,
+    # and nothing that is absorbable (per the generators) is left out.
+    miss = float(np.abs(S - Q @ (Q.T @ S)).max())
+    if miss > 10 * col_tol:
+        warnings.warn("absorbable: the joint basis does not reproduce its "
+                      "generators (residual %.1e); rank cut too aggressive."
+                      % miss, RuntimeWarning, stacklevel=2)
+    info["k"] = int(Q.shape[1])
+    return Q, info
 
 
 def _union_basis(bases, tol=1e-8):
