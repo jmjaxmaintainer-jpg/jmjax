@@ -112,7 +112,8 @@ If you use jmjax, please cite the software release:
 > via JAX*. https://doi.org/10.5281/zenodo.22950083
 
 That DOI always resolves to the latest release. To cite the exact version
-you used, take its own DOI from the Zenodo record (version 0.3.0 is
+you used, take its own DOI from the Zenodo record (version 0.4.0 is
+https://doi.org/10.5281/zenodo.23652569 and version 0.3.0 is
 https://doi.org/10.5281/zenodo.22950084).
 
 For the rotation of the random effects that jmjax uses by default for
