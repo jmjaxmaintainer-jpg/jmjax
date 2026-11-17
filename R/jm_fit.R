@@ -90,6 +90,10 @@
 #'   \code{~ value(y) + delta(y)}, \code{~ value(y) + area(y)} or
 #'   \code{~ value(y) + area_avg(y)}. Each term contributes its own
 #'   association coefficient.
+#' @param marker_var With several markers and \code{data_long} given as one
+#'   data frame, the name of its column saying which marker each row
+#'   measures (values matching the names of \code{long_formula}). Not needed
+#'   when \code{data_long} is a named list of data frames, one per marker.
 #' @param control List of backend-specific control arguments (n_interior_knots,
 #'   n_gh_nodes, maxiter, num_warmup, num_samples, num_chains, seed, ...).
 #'   For spline methods, also \code{knot_placement}: \code{"quantile"}
@@ -852,9 +856,25 @@ jm_fit <- function(long_formula,
                     random_formula = NULL,
                     functional_forms = NULL,
                     init_theta = NULL,
-                    control = list()) {
+                    control = list(),
+                    marker_var = NULL) {
 
   method <- match.arg(method)
+
+  # Several longitudinal markers: long_formula is a named list. Two or more
+  # go to the multi-marker path (R/jm_fit_multi.R, MCMC only); a list of one
+  # is unwrapped and fitted by the code below, exactly as the plain formula.
+  if (.jmjax_is_multi(long_formula)) {
+    if (length(long_formula) >= 2L) {
+      return(.jm_fit_multi(long_formula, surv_formula, data_long, data_surv,
+                           id_var, time_var, method, random_formula,
+                           functional_forms, marker_var, control))
+    }
+    .u <- .jmjax_unwrap_single(long_formula, random_formula, data_long,
+                               functional_forms, marker_var)
+    long_formula <- .u$long_formula; random_formula <- .u$random_formula
+    data_long <- .u$data_long; functional_forms <- .u$functional_forms
+  }
 
   # Kept for predict(): the model as the USER specified it, before any
   # internal rewriting (standardize_covariates edits data_long in place;

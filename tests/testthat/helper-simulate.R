@@ -393,3 +393,59 @@ simulate_joint_data_q3 <- function(n = 300, seed = 1,
        truth = list(beta = beta, beta_x = beta_x, sd_b = sd_b, corr = corr,
                     sigma_e = sigma_e, alpha = alpha))
 }
+
+#' Simulate a joint model with TWO longitudinal markers.
+#'
+#' Marker y1: (b10 + b_i0) + (b11 + b_i1) t + b12 age_i;  visits every 0.5.
+#' Marker y2: (b20 + b_i2) + (b21 + b_i3) t;               visits every 1.0,
+#'            starting at 0.25 (so the markers are observed at different times).
+#' b_i ~ N(0, D) with D = diag(sd_b) R diag(sd_b), R a full 4 x 4 correlation
+#' (cross-marker correlations included). Hazard
+#' h(t) = shape t^(shape-1) exp(log_lambda0 + alpha1 m_i1(t) + alpha2 m_i2(t)).
+#' Returns data_long as one data frame with a `marker` column, the same data
+#' as a named list, and data_surv.
+simulate_joint_data_2m <- function(n = 300, seed = 1,
+                                   beta1 = c(2.0, 0.4, 0.3), beta2 = c(-1.0, 0.2),
+                                   sd_b = c(0.7, 0.2, 0.6, 0.15),
+                                   corr = matrix(c(1, 0.2, 0.5, 0.1,
+                                                   0.2, 1, 0.1, 0.4,
+                                                   0.5, 0.1, 1, 0.2,
+                                                   0.1, 0.4, 0.2, 1), 4, 4),
+                                   sigma_e = c(0.3, 0.5), alpha = c(0.5, -0.4),
+                                   weibull_shape = 1.2, log_lambda0 = -2.2,
+                                   max_time = 5) {
+  set.seed(seed)
+  D <- diag(sd_b) %*% corr %*% diag(sd_b)
+  b <- matrix(stats::rnorm(n * 4), n, 4) %*% chol(D)
+  age <- stats::rnorm(n)
+  m1 <- function(t, i) (beta1[1] + b[i, 1]) + (beta1[2] + b[i, 2]) * t + beta1[3] * age[i]
+  m2 <- function(t, i) (beta2[1] + b[i, 3]) + (beta2[2] + b[i, 4]) * t
+  H <- function(t, i) {
+    if (t <= 0) return(0)
+    stats::integrate(function(s) weibull_shape * s^(weibull_shape - 1) *
+                       exp(log_lambda0 + alpha[1] * m1(s, i) + alpha[2] * m2(s, i)),
+                     0, t)$value
+  }
+  T_true <- vapply(seq_len(n), function(i) {
+    u <- -log(stats::runif(1))
+    if (H(max_time * 4, i) < u) return(Inf)
+    stats::uniroot(function(t) H(t, i) - u, c(1e-6, max_time * 4))$root
+  }, numeric(1))
+  obs <- pmin(T_true, max_time); event <- as.integer(T_true <= max_time)
+  rows <- lapply(seq_len(n), function(i) {
+    t1 <- seq(0, max_time, by = 0.5); t1 <- t1[t1 <= obs[i]]
+    t2 <- seq(0.25, max_time, by = 1.0); t2 <- t2[t2 <= obs[i]]
+    if (!length(t2)) t2 <- numeric(0)
+    rbind(
+      data.frame(id = i, time = t1, age = age[i], marker = "y1",
+                 y = m1(t1, i) + stats::rnorm(length(t1), 0, sigma_e[1])),
+      if (length(t2)) data.frame(id = i, time = t2, age = age[i], marker = "y2",
+                                 y = m2(t2, i) + stats::rnorm(length(t2), 0, sigma_e[2])))
+  })
+  dl <- do.call(rbind, rows)
+  list(data_long = dl,
+       data_list = list(y1 = dl[dl$marker == "y1", ], y2 = dl[dl$marker == "y2", ]),
+       data_surv = data.frame(id = seq_len(n), time = obs, event = event),
+       truth = list(beta1 = beta1, beta2 = beta2, sd_b = sd_b, corr = corr,
+                    sigma_e = sigma_e, alpha = alpha))
+}

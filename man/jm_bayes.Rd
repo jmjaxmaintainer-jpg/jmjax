@@ -19,7 +19,8 @@ jm_bayes(
   warmup = 500L,
   samples = 1000L,
   seed = NULL,
-  control = list()
+  control = list(),
+  marker_var = NULL
 )
 }
 \arguments{
@@ -127,6 +128,8 @@ CPU devices available.}
 \code{\link{jm_fit}} documents every option in full. Options that only
 the maximum-likelihood path uses (\code{opt_method}, quadrature
 settings, ...) are ignored with a warning.}
+
+\item{marker_var}{See \code{\link{jm_fit}}.}
 }
 \value{
 An object of class \code{"jmjax"}; see \code{\link{jm_fit}}.
@@ -153,6 +156,24 @@ Any number of random effects is supported: \code{random_formula =
 ~ time + I(time^2)} gives a random quadratic, with an LKJ prior on the
 correlation matrix. \code{\link{VarCorr}(fit)} reports their standard
 deviations and correlations.
+
+\strong{Several longitudinal markers.} Give \code{long_formula} as a
+named list, one formula per marker, e.g. \code{list(bili = log(serBilir)
+~ year, alb = albumin ~ year)}, with \code{random_formula} either one
+formula for all markers or a list named the same way, and
+\code{data_long} either a named list of data frames or one data frame
+with a column (named by \code{marker_var}) saying which marker each row
+measures. Markers may be observed at different times. Each marker gets
+its own fixed effects (\code{beta_<marker>_<j>}), residual SD
+(\code{sigma_e_<marker>}) and association parameter
+(\code{alpha_<marker>}); \code{functional_forms} can likewise be a list,
+one per marker (a slope or area form adds \code{alpha_<marker>_<form>}).
+The random effects of all markers are stacked and get a full covariance
+with an LKJ prior on the correlation matrix, which links the markers;
+\code{control$re_structure = "block"} makes it block-diagonal
+(independent markers). A list with one marker gives the same fit as the
+plain formula. Gaussian markers only; \code{predict()} is not yet
+available for these fits.
 }
 \examples{
 \dontshow{if (jmjax_available() && requireNamespace("JM", quietly = TRUE)) withAutoprint(\{ # examplesIf}

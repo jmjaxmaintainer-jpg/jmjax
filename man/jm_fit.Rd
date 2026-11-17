@@ -16,7 +16,8 @@ jm_fit(
   random_formula = NULL,
   functional_forms = NULL,
   init_theta = NULL,
-  control = list()
+  control = list(),
+  marker_var = NULL
 )
 }
 \arguments{
@@ -133,6 +134,11 @@ warm-start a spline or MCMC fit.}
   since the progress bar is off by default.
   \code{options(jmjax.quiet = TRUE)} silences
   them for the whole session.}
+
+\item{marker_var}{With several markers and \code{data_long} given as one
+data frame, the name of its column saying which marker each row
+measures (values matching the names of \code{long_formula}). Not needed
+when \code{data_long} is a named list of data frames, one per marker.}
 }
 \value{
 An object of class \code{"jmjax"} with components including

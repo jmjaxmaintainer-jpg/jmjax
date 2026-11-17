@@ -81,7 +81,9 @@ print.jmjax <- function(x, ...) {
 # somewhere rather than silently vanishing from the printed output.
 .jmjax_param_group <- function(nm) {
   if (grepl("^beta_[0-9]+$", nm) || identical(nm, "sigma_e")) return("Longitudinal")
-  if (nm %in% .jmjax_assoc_candidates) return("Association")
+  # several markers: beta_<marker>_<j>, sigma_e_<marker>, alpha_<marker>[_<form>]
+  if (grepl("^beta_.+_[0-9]+$", nm) || grepl("^sigma_e_.+$", nm)) return("Longitudinal")
+  if (nm %in% .jmjax_assoc_candidates || grepl("^alpha_.+$", nm)) return("Association")
   if (grepl("^gamma_[0-9]+$", nm)) return("Survival (baseline covariates)")
   if (grepl("^W[0-9]+$", nm) || nm %in% c("tau_w", "log_lambda0", "shape")) {
     return("Survival (baseline hazard)")
@@ -94,6 +96,16 @@ print.jmjax <- function(x, ...) {
 
 .print_alpha_headline <- function(x) {
   nm_all <- names(x$estimates)
+  if (isTRUE(x$model_info$multi)) {
+    # One line per marker (and form).
+    cat("\nAssociation of each marker with the hazard (95% credible intervals):\n")
+    for (a in x$model_info$alpha_names) {
+      d <- unlist(x$posterior_samples[[a]])
+      ci <- stats::quantile(d, c(0.025, 0.975), names = FALSE)
+      cat(sprintf("  %s = %.4f [%.4f, %.4f]\n", a, unname(x$estimates[[a]]), ci[1], ci[2]))
+    }
+    return(invisible(NULL))
+  }
   a <- .jmjax_assoc_param(nm_all)
   if (is.na(a)) return(invisible(NULL))
 

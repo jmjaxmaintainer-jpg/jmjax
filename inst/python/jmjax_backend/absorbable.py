@@ -627,3 +627,38 @@ def _apply_reflectors(V, X, transpose=False):
         v = V[:, j:j + 1]
         X = X - 2.0 * (v @ (v.T @ X))
     return X
+
+
+# ---------------------------------------------------------------------------
+# Several longitudinal markers (jmjax 0.5.0; multi_model.py).
+# ---------------------------------------------------------------------------
+def _padded_blockdiag(X, Z, subj, N_sub):
+    """Per-subject padded arrays [N, max_rows, P/Q] from the flat layout,
+    valid rows first, for the absorbable construction."""
+    subj = np.asarray(subj, dtype=int)
+    n_obs = np.bincount(subj, minlength=N_sub)
+    mo = max(int(n_obs.max()), 1)
+    Xp = np.zeros((N_sub, mo, X.shape[1]))
+    Zp = np.zeros((N_sub, mo, Z.shape[1]))
+    pos = np.zeros(N_sub, dtype=int)
+    for r in range(len(subj)):
+        i = subj[r]
+        Xp[i, pos[i]] = X[r]
+        Zp[i, pos[i]] = Z[r]
+        pos[i] += 1
+    return Xp, Zp, n_obs
+
+
+def _absorbable_basis_multi(X, Z, subj, N_sub, XS, ZS, XQ, ZQ):
+    """The joint absorbable construction for several markers: block-diagonal
+    X and Z (as stored), M over every marker's rows, (T) on every channel.
+    Returns (Q, info) as absorbable._absorbable_basis_joint."""
+    X = np.asarray(X, dtype=float)
+    Z = np.asarray(Z, dtype=float)
+    Xp, Zp, n_obs = _padded_blockdiag(X, Z, subj, N_sub)
+    XS = np.asarray(XS, dtype=float); ZS = np.asarray(ZS, dtype=float)
+    XQ = np.asarray(XQ, dtype=float); ZQ = np.asarray(ZQ, dtype=float)
+    extra = [(XS[c], ZS[c], XQ[c], ZQ[c]) for c in range(XS.shape[0])]
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore", RuntimeWarning)
+        return _absorbable_basis_joint(Xp, Zp, n_obs, extra_pairs=extra)

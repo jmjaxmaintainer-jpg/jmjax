@@ -16,7 +16,8 @@ jm_mle(
   random_formula = NULL,
   functional_forms = NULL,
   init_theta = NULL,
-  control = list()
+  control = list(),
+  marker_var = NULL
 )
 }
 \arguments{
@@ -121,6 +122,11 @@ warm-start a spline or MCMC fit.}
 \code{\link{jm_fit}} documents every option in full. Options that only
 the Bayesian path uses (\code{num_chains}, priors, ...) are ignored
 with a warning.}
+
+\item{marker_var}{With several markers and \code{data_long} given as one
+data frame, the name of its column saying which marker each row
+measures (values matching the names of \code{long_formula}). Not needed
+when \code{data_long} is a named list of data frames, one per marker.}
 }
 \value{
 An object of class \code{"jmjax"}; see \code{\link{jm_fit}}.

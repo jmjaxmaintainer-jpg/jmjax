@@ -124,8 +124,12 @@ jm_mle <- function(long_formula, surv_formula, data_long, data_surv,
                    id_var, time_var, baseline = c("weibull", "spline"),
                    random_effects = "intercept", random_formula = NULL,
                    functional_forms = NULL, init_theta = NULL,
-                   control = list()) {
+                   control = list(), marker_var = NULL) {
   baseline <- match.arg(baseline)
+  if (.jmjax_is_multi(long_formula) && length(long_formula) >= 2L) {
+    stop("jm_mle() fits one longitudinal marker; for several, use jm_bayes() ",
+         "(the Bayesian fit supports any number of markers).", call. = FALSE)
+  }
   .jmjax_warn_foreign_controls(control, .jmjax_mcmc_only_controls,
                                "jm_mle", "jm_bayes")
   control <- control[setdiff(names(control), .jmjax_mcmc_only_controls)]
@@ -161,6 +165,25 @@ jm_mle <- function(long_formula, surv_formula, data_long, data_surv,
 #' correlation matrix. \code{\link{VarCorr}(fit)} reports their standard
 #' deviations and correlations.
 #'
+#' \strong{Several longitudinal markers.} Give \code{long_formula} as a
+#' named list, one formula per marker, e.g. \code{list(bili = log(serBilir)
+#' ~ year, alb = albumin ~ year)}, with \code{random_formula} either one
+#' formula for all markers or a list named the same way, and
+#' \code{data_long} either a named list of data frames or one data frame
+#' with a column (named by \code{marker_var}) saying which marker each row
+#' measures. Markers may be observed at different times. Each marker gets
+#' its own fixed effects (\code{beta_<marker>_<j>}), residual SD
+#' (\code{sigma_e_<marker>}) and association parameter
+#' (\code{alpha_<marker>}); \code{functional_forms} can likewise be a list,
+#' one per marker (a slope or area form adds \code{alpha_<marker>_<form>}).
+#' The random effects of all markers are stacked and get a full covariance
+#' with an LKJ prior on the correlation matrix, which links the markers;
+#' \code{control$re_structure = "block"} makes it block-diagonal
+#' (independent markers). A list with one marker gives the same fit as the
+#' plain formula. Gaussian markers only; \code{predict()} is not yet
+#' available for these fits.
+#'
+#' @param marker_var See \code{\link{jm_fit}}.
 #' @inheritParams jm_fit
 #' @param baseline The baseline hazard: \code{"spline"} (default; a
 #'   B-spline on the log-hazard scale) or \code{"weibull"}.
@@ -222,7 +245,8 @@ jm_bayes <- function(long_formula, surv_formula, data_long, data_surv,
                      id_var, time_var, baseline = c("spline", "weibull"),
                      random_effects = "intercept", random_formula = NULL,
                      functional_forms = NULL, chains = 2L, warmup = 500L,
-                     samples = 1000L, seed = NULL, control = list()) {
+                     samples = 1000L, seed = NULL, control = list(),
+                     marker_var = NULL) {
   baseline <- match.arg(baseline)
   .jmjax_warn_foreign_controls(control, .jmjax_mle_only_controls,
                                "jm_bayes", "jm_mle")
@@ -243,7 +267,8 @@ jm_bayes <- function(long_formula, surv_formula, data_long, data_surv,
                 id_var = id_var, time_var = time_var,
                 method = if (baseline == "spline") "spline-PH-mcmc" else "weibull-PH-mcmc",
                 random_effects = random_effects, random_formula = random_formula,
-                functional_forms = functional_forms, control = control)
+                functional_forms = functional_forms, control = control,
+                marker_var = marker_var)
   fit$call <- .jmjax_named_call(match.call(), "jm_bayes")
   fit
 }

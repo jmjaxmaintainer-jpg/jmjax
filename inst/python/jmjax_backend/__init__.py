@@ -106,5 +106,6 @@ def get_precision():
 from . import weibull_model
 from . import spline_model
 from . import mcmc_model
+from . import multi_model
 
-__all__ = ["weibull_model", "spline_model", "mcmc_model", "get_precision"]
+__all__ = ["weibull_model", "spline_model", "mcmc_model", "multi_model", "get_precision"]

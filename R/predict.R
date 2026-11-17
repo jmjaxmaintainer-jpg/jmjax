@@ -118,6 +118,10 @@ predict.jmjax <- function(object, newdata = NULL,
                           times = NULL, t_from = NULL, level = 0.95,
                           return_draws = FALSE, ...) {
   process <- match.arg(process)
+  if (isTRUE(object$model_info$multi)) {
+    stop("predict() is not yet available for fits with several longitudinal ",
+         "markers.", call. = FALSE)
+  }
   if (!.jmjax_is_mcmc(object)) {
     stop("predict() currently supports Bayesian fits (jm_bayes(); the MCMC ",
          "methods only): maximum-likelihood fits do not store per-subject ",
