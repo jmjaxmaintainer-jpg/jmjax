@@ -76,8 +76,15 @@ silently assumes the first columns of \code{X} ARE "intercept" and
 I(time^2)} or \code{y ~ splines::ns(time, 3)}), supply
 \code{random_formula} explicitly so \code{Z} is evaluated
 independently and correctly, the same way \code{X} is evaluated from
-\code{long_formula}. At most two random-effect columns are supported
-(\code{q = 1} or \code{q = 2}); a formula giving more raises an error.}
+\code{long_formula}. The MCMC methods (\code{jm_bayes()}) accept any
+number of random-effect columns, e.g. \code{~ time + I(time^2)} or
+\code{~ splines::ns(time, 2)}; the maximum-likelihood methods
+(\code{jm_mle()}) accept at most two, since adaptive Gauss-Hermite
+quadrature does not scale beyond that. Spline and polynomial bases
+(\code{ns()}, \code{bs()}, \code{poly()}) keep the knots chosen on
+the longitudinal data when evaluated at event times. With more than
+one random effect, \code{\link{VarCorr}(fit)} gives their standard
+deviations, named after these columns, and correlation matrix.}
 
 \item{functional_forms}{Optional one-sided formula selecting which
 features of the longitudinal trajectory enter the hazard, e.g.
@@ -130,7 +137,9 @@ and the Hessian from JAX's automatic differentiation.
 Maximum likelihood is fast and gives AIC/BIC through \code{logLik()},
 but does not estimate individual subjects' random effects, so
 \code{ranef()} and \code{predict()} need a Bayesian fit from
-\code{\link{jm_bayes}()}.
+\code{\link{jm_bayes}()}. It supports at most two random effects (a
+random intercept, or intercept and slope); for more, use
+\code{jm_bayes()}.
 }
 \examples{
 \dontshow{if (jmjax_available() && requireNamespace("JM", quietly = TRUE)) withAutoprint(\{ # examplesIf}

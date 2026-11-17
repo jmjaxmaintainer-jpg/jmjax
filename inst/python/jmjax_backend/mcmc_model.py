@@ -703,7 +703,7 @@ def evaluate_log_density(X_long, y_long, n_obs, X_time_surv, X_time_quad,
                           Z_long, Z_time_surv, Z_time_quad,
                           beta, sigma_e, alpha, W, sigma_b, b_std,
                           L_corr=None, random_effects="intercept_slope",
-                          alpha_prior_sd=2.0):
+                          alpha_prior_sd=2.0, gen_reflectors=None):
     """
     Evaluate the EXACT joint log-density (log-likelihood + log-prior, same
     quantity NUTS's potential energy is built from) at a given, fully
@@ -725,11 +725,22 @@ def evaluate_log_density(X_long, y_long, n_obs, X_time_surv, X_time_quad,
 
     Returns the scalar joint log-density (float) - directly comparable
     between two calls with different parameter values on the SAME data.
+
+    q is read from Z_long, so any number of random effects is accepted
+    (random_effects is kept for backward compatibility and ignored).
+
+    gen_reflectors (optional, [N_sub, k] Householder vectors from
+    absorbable._householder_reflectors): evaluate the ROTATED model of
+    control$rotate_absorbable at the same point instead. b_std (q >= 2) or
+    b (q = 1, passed as b_std) is mapped to the rotated coordinates
+    [b_gen_U; b_gen_V] = H' b_std, so the two calls score the same
+    parameter values and must agree exactly (H orthogonal, Jacobian 1).
     """
     N_sub, max_obs, p = np.asarray(X_long).shape
-    q = 1 if random_effects == "intercept" else 2
+    q = int(np.asarray(Z_long).shape[2])
 
-    model = build_model(p, q, n_splines, max_obs, alpha_prior_sd=alpha_prior_sd)
+    model = build_model(p, q, n_splines, max_obs, alpha_prior_sd=alpha_prior_sd,
+                        gen_reflectors=gen_reflectors)
 
     params = {
         "beta": jnp.array(beta),
@@ -738,13 +749,22 @@ def evaluate_log_density(X_long, y_long, n_obs, X_time_surv, X_time_quad,
         "W": jnp.array(W),
         "sigma_b": jnp.array(sigma_b),
     }
-    if q == 1:
-        params["b"] = jnp.array(b_std)  # for q=1, "b" is sampled directly
-    else:
+    if q >= 2:
         if L_corr is None:
-            raise ValueError("L_corr is required when random_effects != 'intercept'")
+            raise ValueError("L_corr is required when q >= 2")
         params["L_corr"] = jnp.array(L_corr)
-        params["b_std"] = jnp.array(b_std)
+    if gen_reflectors is None:
+        if q == 1:
+            params["b"] = jnp.array(b_std)  # for q=1, "b" is sampled directly
+        else:
+            params["b_std"] = jnp.array(b_std)
+    else:
+        _Vg = np.asarray(gen_reflectors, dtype=float)
+        _kg = int(_Vg.shape[1])
+        _B = np.asarray(b_std, dtype=float).reshape(N_sub, q)
+        _UV = _apply_reflectors(_Vg, _B, transpose=True)
+        params["b_gen_U"] = jnp.array(_UV[:_kg])
+        params["b_gen_V"] = jnp.array(_UV[_kg:])
 
     model_kwargs = dict(
         X_long=jnp.array(X_long), y_long=jnp.array(y_long), n_obs=jnp.array(n_obs),
@@ -774,12 +794,24 @@ def fit_nuts(X_long, y_long, n_obs, X_time_surv, X_time_quad,
              init_theta=None, control=None):
     control = control or {}
     N_sub, max_obs, p = X_long.shape
-    q = 1 if random_effects == "intercept" else 2
-
-    if Z_long is None:
+    # q comes from the random-effects design when it is supplied (jm_fit()
+    # always supplies it), so any number of random effects is accepted:
+    # build_model() is general in q (sigma_b of length q, LKJCholesky(q),
+    # b = b_std @ L.T). random_effects only matters without Z_long, where
+    # it picks the legacy X[:, :q] slice ("intercept" -> 1, otherwise 2).
+    if Z_long is not None:
+        q = int(np.asarray(Z_long).shape[2])
+    else:
+        q = 1 if random_effects == "intercept" else 2
         Z_long = X_long[:, :, :q]
         Z_time_surv = X_time_surv[:, :q]
         Z_time_quad = X_time_quad[:, :, :q]
+    _re_method = control.get("random_effects_method", "nuts")
+    if q > 2 and _re_method in ("wishart_gibbs", "wishart_gibbs_centered"):
+        raise ValueError(
+            "random_effects_method = '%s' supports a random intercept and "
+            "slope (q = 2) only; this model has q = %d random effects. Use "
+            "the default random_effects_method = 'nuts'." % (_re_method, q))
 
     alpha_prior_sd = float(control.get("alpha_prior_sd", 2.0))
     baseline_hazard = control.get("baseline_hazard", "spline")
@@ -2003,16 +2035,25 @@ def fit_nuts(X_long, y_long, n_obs, X_time_surv, X_time_quad,
         samples_by_chain["sigma_b"] = jnp.stack([jnp.array(sigma_b0_bc), jnp.array(sigma_b1_bc)], axis=-1)
         samples_by_chain["rho"] = jnp.array(rho_bc)
     elif "L_corr" in samples:
-        # Existing LKJCholesky-based correlated case - rho was previously
-        # NEVER extracted/reported at all (a genuine pre-existing gap,
-        # found and fixed here rather than left as-is): for a 2x2
-        # correlation Cholesky factor, L_corr[1,0] IS rho directly (no
-        # further transform needed - L_corr @ L_corr.T is the correlation
-        # matrix itself, whose off-diagonal element is rho by definition).
+        # LKJCholesky-based correlated case. For q = 2, L_corr[1,0] IS rho
+        # (L_corr @ L_corr.T is the correlation matrix). For q >= 3 every
+        # pairwise correlation R[i, j] = (L_corr @ L_corr.T)[i, j], i < j,
+        # becomes its own site "rho_i_j" (0-based, matching sigma_b0, ...),
+        # so each gets proper R-hat/ESS and a summary row; R assembles them
+        # into the q x q matrix (VarCorr()).
         L_corr_flat = np.asarray(samples["L_corr"])
-        samples["rho"] = L_corr_flat[:, 1, 0]
         L_corr_bc = np.asarray(samples_by_chain["L_corr"])
-        samples_by_chain["rho"] = jnp.array(L_corr_bc[..., 1, 0])
+        _qc = L_corr_flat.shape[-1]
+        if _qc == 2:
+            samples["rho"] = L_corr_flat[:, 1, 0]
+            samples_by_chain["rho"] = jnp.array(L_corr_bc[..., 1, 0])
+        else:
+            R_flat = np.einsum("dij,dkj->dik", L_corr_flat, L_corr_flat)
+            R_bc = np.einsum("cdij,cdkj->cdik", L_corr_bc, L_corr_bc)
+            for _i in range(_qc):
+                for _j in range(_i + 1, _qc):
+                    samples["rho_%d_%d" % (_i, _j)] = R_flat[:, _i, _j]
+                    samples_by_chain["rho_%d_%d" % (_i, _j)] = jnp.array(R_bc[..., _i, _j])
 
     # LEGACY: "beta_corrected" for the sweep options (sweep.py). A no-op
     # unless orthogonalize_b0/_b swept at least one direction.
@@ -2114,6 +2155,9 @@ def _package_result(samples, diag, p, q, n_splines, N_sub, elapsed,
                          ("alpha_value", 1), ("alpha_delta", 1),
                          ("alpha_area", 1), ("alpha_area_avg", 1),  # only present when the corresponding channel is used (alpha absent in that case)
                          ("gamma", n_gamma)]  # only present when surv_formula has baseline covariates
+    # q >= 3: one site per pairwise correlation, rho_i_j (i < j).
+    population_sites += [(_k, 1) for _k in sorted(samples)
+                         if _k.startswith("rho_") and _k.count("_") == 2]
 
     estimates, se, rhat, ess = {}, {}, {}, {}
 

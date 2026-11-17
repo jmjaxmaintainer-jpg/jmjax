@@ -252,7 +252,7 @@ test_that("MCMC + random_formula correctly fixes recovery for a polynomial long_
   expect_lt(abs(fit$estimates[["sigma_b1"]] - sigma_b1), 3 * fit$se[["sigma_b1"]])
 })
 
-test_that("jm_fit rejects random_formula producing more than 2 random-effects columns", {
+test_that("the MLE methods reject random_formula producing more than 2 random-effects columns", {
   skip_if_no_backend()
   sim <- simulate_joint_data(n = 50, seed = 1)
 
@@ -267,6 +267,6 @@ test_that("jm_fit rejects random_formula producing more than 2 random-effects co
       method = "weibull-PH-aGH",
       random_formula = ~ time + I(time^2)  # 3 columns: intercept, time, time^2
     ),
-    "only q=1 or q=2"
+    "maximum-likelihood methods.*at most 2"
   )
 })

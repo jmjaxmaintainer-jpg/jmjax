@@ -38,6 +38,7 @@ print.jmjax <- function(x, ...) {
     cat("\nEstimates by submodel:\n")
     .print_estimates_compact(x)
   }
+  .print_varcorr(x)
 
   # MCMC methods return loglik = NULL deliberately - a single marginal
   # log-likelihood isn't directly available from posterior samples the way
@@ -85,7 +86,9 @@ print.jmjax <- function(x, ...) {
   if (grepl("^W[0-9]+$", nm) || nm %in% c("tau_w", "log_lambda0", "shape")) {
     return("Survival (baseline hazard)")
   }
-  if (grepl("^sigma_b[0-9]*$", nm) || identical(nm, "rho")) return("Variance components")
+  if (grepl("^sigma_b[0-9]*$", nm) || grepl("^rho(_[0-9]+_[0-9]+)?$", nm)) {
+    return("Variance components")
+  }
   "Other"
 }
 
@@ -406,6 +409,9 @@ summary.jmjax <- function(object, ...) {
   }
 
   class(df) <- c("summary.jmjax", "data.frame")
+  # The random-effects SDs (named after Z's columns) and their correlation
+  # matrix, printed after the grouped tables.
+  attr(df, "varcorr") <- tryCatch(VarCorr.jmjax(object), error = function(e) NULL)
   df
 }
 
@@ -448,7 +454,22 @@ print.summary.jmjax <- function(x, ...) {
     cat("\n")
   }
   if (!any_printed) cat("(no parameter estimates)\n")
+  .vc <- attr(x, "varcorr")
+  if (!is.null(.vc) && length(.vc$sd) >= 2L) {
+    cat("Random effects (", .vc$kind, "s):\n", sep = "")
+    print(.vc)
+  }
   invisible(x)
+}
+
+# Random-effects SD and correlation block for print.jmjax(), shown from
+# two random effects up (with one, sigma_b in the table says it all).
+.print_varcorr <- function(x) {
+  vc <- tryCatch(VarCorr.jmjax(x), error = function(e) NULL)
+  if (is.null(vc) || length(vc$sd) < 2L) return(invisible(NULL))
+  cat("\nRandom effects (", vc$kind, "s):\n", sep = "")
+  print(vc)
+  invisible(NULL)
 }
 
 #' @export

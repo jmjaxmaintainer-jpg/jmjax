@@ -236,12 +236,10 @@ jm_fit_prefit <- function(lme_object,
 
   # q determines the random_effects argument. getVarCov() is the reliable
   # source - its dimension is the number of random effects actually fitted.
+  # q >= 3 is passed on with its random_formula: jm_fit() fits it with the
+  # MCMC methods and stops with a clear message for the MLE methods.
   q <- ncol(nlme::getVarCov(lme_object))
   random_effects <- if (q == 1L) "intercept" else "intercept_slope"
-  if (q > 2L) {
-    stop("lme_object has ", q, " random effects. jmjax supports a random ",
-         "intercept (q=1) or a random intercept and slope (q=2).", call. = FALSE)
-  }
   if (q == 1L) random_formula <- NULL   # jm_fit's default for intercept-only
 
   data_long <- lme_object$data

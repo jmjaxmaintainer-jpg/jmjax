@@ -74,7 +74,9 @@
 #' Maximum likelihood is fast and gives AIC/BIC through \code{logLik()},
 #' but does not estimate individual subjects' random effects, so
 #' \code{ranef()} and \code{predict()} need a Bayesian fit from
-#' \code{\link{jm_bayes}()}.
+#' \code{\link{jm_bayes}()}. It supports at most two random effects (a
+#' random intercept, or intercept and slope); for more, use
+#' \code{jm_bayes()}.
 #'
 #' @inheritParams jm_fit
 #' @param baseline The baseline hazard: \code{"weibull"} (default) or
@@ -153,6 +155,11 @@ jm_mle <- function(long_formula, surv_formula, data_long, data_surv,
 #' \code{nlme::lme()} fit, as in \code{JMbayes2}. Time and covariates are
 #' rescaled internally where that helps the sampler, and every result is
 #' reported on the original scale.
+#'
+#' Any number of random effects is supported: \code{random_formula =
+#' ~ time + I(time^2)} gives a random quadratic, with an LKJ prior on the
+#' correlation matrix. \code{\link{VarCorr}(fit)} reports their standard
+#' deviations and correlations.
 #'
 #' @inheritParams jm_fit
 #' @param baseline The baseline hazard: \code{"spline"} (default; a

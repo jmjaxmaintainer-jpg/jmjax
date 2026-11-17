@@ -1,7 +1,7 @@
 # predict() for jmjax fits - phase 1.
 #
 # Scope: MCMC fits, subjects that were in the fitted data, the "value"
-# association, q = 1 or 2, spline or Weibull baseline hazard, baseline
+# association, any number of random effects, spline or Weibull baseline hazard, baseline
 # survival covariates. Everything is computed per posterior draw from
 # fit$posterior_samples, which jm_fit() has already put back on the
 # original scale (standardized covariates and scale_time undone), and the
@@ -169,19 +169,21 @@ predict.jmjax <- function(object, newdata = NULL,
   ps <- object$posterior_samples
   beta <- .jmjax_site_matrix(ps, "beta")
   S <- nrow(beta)
-  q <- ncol(stats::model.matrix(stats::delete.response(stats::terms(mi$random_formula)),
-                                stats::setNames(data.frame(0), time_var)))
+  # Knot-fixed terms from the fit (older fits: the plain formulas).
+  lt <- mi$long_terms %||% mi$long_formula
+  rt <- mi$random_terms %||% mi$random_formula
+  q <- ncol(build_time_design(rt, time_var, 0))
 
   X_at <- function(i, t) {
     bc <- if (is.null(bcl)) NULL else bcl[rep(i, length(t)), , drop = FALSE]
-    X <- build_time_design(mi$long_formula, time_var, t, bc)
+    X <- build_time_design(lt, time_var, t, bc)
     if (ncol(X) != ncol(beta)) {
       stop("internal: rebuilt design has ", ncol(X), " columns but beta has ",
            ncol(beta), call. = FALSE)
     }
     X
   }
-  Z_at <- function(t) build_time_design(mi$random_formula, time_var, t)
+  Z_at <- function(t) build_time_design(rt, time_var, t)
   m_draws <- function(i, t, bi) {          # [S x length(t)]
     beta %*% t(X_at(i, t)) + bi %*% t(Z_at(t))
   }

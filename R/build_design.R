@@ -447,3 +447,23 @@ build_area_channel <- function(long_formula, time_var, T_surv, t_quad, gk_weight
 
   list(X_area_surv = X_area_surv, X_area_quad = X_area_quad)
 }
+
+# Internal: terms for `formula` with data-dependent bases fixed on `data`.
+#
+# ns(), bs() and poly() choose their knots (or orthogonalization) from the
+# data they are evaluated on. build_time_design() evaluates the formula on
+# synthetic times - event times, each column of quadrature nodes - so with
+# plain terms() every call chose different knots, and the survival
+# submodel used a different trajectory from the longitudinal one. The
+# terms of a model frame built on the longitudinal data carry "predvars"
+# with the knots fixed; model.matrix() on new data then reuses them, and
+# stats::terms() on a terms object returns it unchanged, so the design
+# builders can take these in place of the formula. For plain variables
+# (time, I(time^2), covariates) predvars are the variables themselves and
+# nothing changes.
+.jmjax_fixed_terms <- function(formula, data) {
+  tt <- stats::terms(formula)
+  mf <- tryCatch(stats::model.frame(tt, data = data), error = function(e) NULL)
+  if (is.null(mf)) return(tt)
+  attr(mf, "terms")
+}

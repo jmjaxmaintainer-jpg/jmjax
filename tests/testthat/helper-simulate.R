@@ -341,3 +341,55 @@ simulate_joint_data_re2_channel <- function(channel = c("delta", "area", "area_a
                  rho = rho, sigma_e = sigma_e, alpha_value = alpha_value, alpha_extra = alpha_extra)
   )
 }
+
+#' Simulate a joint model with a random quadratic in time (q = 3) and a
+#' subject-level covariate x.
+#'
+#' m_i(t) = (b0 + b_i0) + (b1 + b_i1) t + (b2 + b_i2) t^2 + bx x_i, with
+#' b_i ~ N(0, D), D = diag(sd) R diag(sd); hazard
+#' h(t) = shape t^(shape - 1) exp(log_lambda0 + alpha m_i(t)). Visits every
+#' 0.5 up to the event or censoring time (max_time); a subject with an
+#' early event keeps its baseline visit only.
+simulate_joint_data_q3 <- function(n = 300, seed = 1,
+                                   beta = c(2.0, 0.5, -0.05), beta_x = 0.4,
+                                   sd_b = c(0.8, 0.25, 0.05),
+                                   corr = matrix(c(1, 0.3, -0.2,
+                                                   0.3, 1, 0.25,
+                                                   -0.2, 0.25, 1), 3, 3),
+                                   sigma_e = 0.3, weibull_shape = 1.2,
+                                   log_lambda0 = -2.5, alpha = 0.5,
+                                   max_time = 5, visit_times = seq(0, 5, by = 0.5)) {
+  set.seed(seed)
+  D <- diag(sd_b) %*% corr %*% diag(sd_b)
+  b <- matrix(stats::rnorm(n * 3), n, 3) %*% chol(D)
+  x <- stats::rnorm(n)
+
+  m_fun <- function(t, i) {
+    (beta[1] + b[i, 1]) + (beta[2] + b[i, 2]) * t + (beta[3] + b[i, 3]) * t^2 + beta_x * x[i]
+  }
+  cum_hazard <- function(t, i) {
+    if (t <= 0) return(0)
+    stats::integrate(function(s) weibull_shape * s^(weibull_shape - 1) *
+                       exp(log_lambda0 + alpha * m_fun(s, i)),
+                     lower = 0, upper = t)$value
+  }
+  T_true <- vapply(seq_len(n), function(i) {
+    target <- -log(stats::runif(1))
+    ub <- max_time * 4
+    if (cum_hazard(ub, i) < target) return(Inf)
+    stats::uniroot(function(t) cum_hazard(t, i) - target, lower = 1e-6, upper = ub)$root
+  }, numeric(1))
+  obs_time <- pmin(T_true, max_time)
+  event <- as.integer(T_true <= max_time)
+
+  data_long <- do.call(rbind, lapply(seq_len(n), function(i) {
+    vt <- visit_times[visit_times <= obs_time[i]]
+    if (!length(vt)) vt <- 0
+    data.frame(id = i, time = vt, x = x[i],
+               y = m_fun(vt, i) + stats::rnorm(length(vt), 0, sigma_e))
+  }))
+  list(data_long = data_long,
+       data_surv = data.frame(id = seq_len(n), time = obs_time, event = event, x = x),
+       truth = list(beta = beta, beta_x = beta_x, sd_b = sd_b, corr = corr,
+                    sigma_e = sigma_e, alpha = alpha))
+}

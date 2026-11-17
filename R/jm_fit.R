@@ -72,8 +72,15 @@
 #'   I(time^2)} or \code{y ~ splines::ns(time, 3)}), supply
 #'   \code{random_formula} explicitly so \code{Z} is evaluated
 #'   independently and correctly, the same way \code{X} is evaluated from
-#'   \code{long_formula}. At most two random-effect columns are supported
-#'   (\code{q = 1} or \code{q = 2}); a formula giving more raises an error.
+#'   \code{long_formula}. The MCMC methods (\code{jm_bayes()}) accept any
+#'   number of random-effect columns, e.g. \code{~ time + I(time^2)} or
+#'   \code{~ splines::ns(time, 2)}; the maximum-likelihood methods
+#'   (\code{jm_mle()}) accept at most two, since adaptive Gauss-Hermite
+#'   quadrature does not scale beyond that. Spline and polynomial bases
+#'   (\code{ns()}, \code{bs()}, \code{poly()}) keep the knots chosen on
+#'   the longitudinal data when evaluated at event times. With more than
+#'   one random effect, \code{\link{VarCorr}(fit)} gives their standard
+#'   deviations, named after these columns, and correlation matrix.
 #' @param init_theta Optional named list of initial values, e.g. from a
 #'   prior \code{method = "weibull-PH-aGH"} fit's \code{$estimates}, used to
 #'   warm-start a spline or MCMC fit.
@@ -1112,6 +1119,9 @@ jm_fit <- function(long_formula,
   # Verified before doing this: the slice and the formula path agree to
   # 1e-12 on Z_long, Z_time_surv and Z_time_quad across all 389 tests.
   .rf_user_supplied <- !is.null(random_formula)
+  # Which lme() covariance structure the pre-fits used (R/prefit.R); goes
+  # into fit$convergence$prefit.
+  .prefit_report <- list()
   if (!.rf_user_supplied) {
     random_formula <- if (identical(random_effects, "intercept")) ~ 1 else
                       stats::as.formula(paste0("~", time_var))
@@ -1311,6 +1321,10 @@ jm_fit <- function(long_formula,
   }
 
   long_arr <- build_long_arrays(long_formula, data_long, id_var)
+  # Knots of ns()/bs()/poly() fixed on the longitudinal data, so the
+  # designs at event times and quadrature nodes use the same basis as the
+  # longitudinal rows (see .jmjax_fixed_terms() in R/build_design.R).
+  .lf_terms <- .jmjax_fixed_terms(long_formula, data_long)
   surv_arr <- build_surv_arrays(surv_formula, data_surv, long_arr$subj_ids, id_var,
                                  gk_order = control$gk_order %||% 10)
 
@@ -1367,9 +1381,9 @@ jm_fit <- function(long_formula,
   # for the shared m_i(t) = X(t) %*% beta + b_i term (see build_time_design()
   # docs re: v1 scope - time_var-only formulas, now extended to also
   # support baseline covariates via baseline_covariates_long above).
-  X_time_surv <- build_time_design(long_formula, time_var, surv_arr$T_surv,
+  X_time_surv <- build_time_design(.lf_terms, time_var, surv_arr$T_surv,
                                     baseline_covariates_long)   # [N_sub, p]
-  X_time_quad <- build_time_design(long_formula, time_var, surv_arr$t_quad,
+  X_time_quad <- build_time_design(.lf_terms, time_var, surv_arr$t_quad,
                                     baseline_covariates_long)   # [N_sub, n_quad, p]
 
   # --- Centralized random-effects design (Z) construction ---
@@ -1387,8 +1401,9 @@ jm_fit <- function(long_formula,
   if (!is.null(random_formula)) {
     Z_long <- build_random_long_array(random_formula, data_long, id_var,
                                        long_arr$subj_ids, max(long_arr$n_obs))
-    Z_time_surv <- build_time_design(random_formula, time_var, surv_arr$T_surv)
-    Z_time_quad <- build_time_design(random_formula, time_var, surv_arr$t_quad)
+    .rf_terms <- .jmjax_fixed_terms(random_formula, data_long)
+    Z_time_surv <- build_time_design(.rf_terms, time_var, surv_arr$T_surv)
+    Z_time_quad <- build_time_design(.rf_terms, time_var, surv_arr$t_quad)
     q <- dim(Z_time_surv)[2]
   }
   # The `else` branch that took Z as X[, 1:q] is gone. random_formula is
@@ -1397,18 +1412,24 @@ jm_fit <- function(long_formula,
   # Before removal, the two paths were asserted identical to 1e-12 on
   # Z_long, Z_time_surv and Z_time_quad across all 389 tests.
 
-  if (q > 2L) {
-    # The q=2 Python machinery (2D adaptive-GH tensor-product quadrature,
-    # sigma_b0/sigma_b1/rho parameterization, 2x2 LKJCholesky/bivariate-
-    # normal priors) is hardcoded for EXACTLY 2 random effects - it does
-    # not generalize to q>=3 just because random_formula happens to
-    # produce more columns. Guarded explicitly here rather than allowing
-    # a confusing shape-mismatch failure deeper in the Python backend.
-    stop("random_formula produced ", q, " random-effects columns - only ",
-         "q=1 or q=2 are currently supported (the underlying adaptive-GH/",
-         "NUTS machinery is specifically built for these two cases, not ",
-         "arbitrary q). Simplify random_formula to at most 2 terms ",
-         "(e.g. ~ 1 or ~ time).")
+  if (q > 2L && method %in% c("weibull-PH-aGH", "spline-PH-aGH")) {
+    # The MLE methods integrate the random effects out with tensor-product
+    # adaptive Gauss-Hermite quadrature, whose cost grows as n_nodes^q, and
+    # their parameterization (sigma_b0, sigma_b1, rho) is written for q <= 2.
+    # The MCMC methods sample the random effects instead and accept any q
+    # (sigma_b of length q, LKJ prior on the q x q correlation matrix).
+    stop("random_formula produced ", q, " random-effects columns. The ",
+         "maximum-likelihood methods (jm_mle(), method = '", method, "') ",
+         "support at most 2 (adaptive Gauss-Hermite quadrature does not scale ",
+         "to more). Use jm_bayes() (method = 'spline-PH-mcmc' or ",
+         "'weibull-PH-mcmc'), which supports any number of random effects.",
+         call. = FALSE)
+  }
+  if (q > 2L && isTRUE(control$random_effects_method %in%
+                       c("wishart_gibbs", "wishart_gibbs_centered"))) {
+    stop("control$random_effects_method = '", control$random_effects_method,
+         "' supports q = 2 random effects only; random_formula produced ", q,
+         ". Use the default random_effects_method = 'nuts'.", call. = FALSE)
   }
 
   if (n_gamma > 0) {
@@ -1461,7 +1482,7 @@ jm_fit <- function(long_formula,
   # behaviour change: users who were relying on the error will get it
   # until the NEWS entry has circulated. Removing it makes `y ~ x + time`
   # at q=2 fit correctly rather than error.
-  if (!is.null(baseline_covariates_long) && q == 2L &&
+  if (!is.null(baseline_covariates_long) && q >= 2L &&
       !isTRUE(.rf_user_supplied)) {
     # Baseline covariates in the LONGITUDINAL submodel at q=2: unlike the
     # survival-side case, this DOES interact with how Z is constructed.
@@ -1479,11 +1500,8 @@ jm_fit <- function(long_formula,
          "default column-slicing convention for Z is ambiguous once long_formula ",
          "has covariates beyond time_var, depending on their column order.")
   }
-  if (!is.null(baseline_covariates_long) && q > 2L) {
-    stop("Baseline covariates in long_formula combined with q > 2 are not ",
-         "supported (q = ", q, ") - the underlying adaptive-GH machinery is ",
-         "hardcoded for q=1 or q=2.")
-  }
+  # (q > 2 with baseline covariates is fine for the MCMC methods; the MLE
+  # methods were already stopped above for any q > 2.)
 
 
 
@@ -1527,7 +1545,7 @@ jm_fit <- function(long_formula,
   # t -> "b*t"; area_avg's is 1 -> "plain b") - confirming those were all
   # special cases of one general rule, not three different ones.
   if ("delta" %in% assoc_types) {
-    delta_channel <- build_delta_channel(long_formula, time_var, X_time_surv, X_time_quad)
+    delta_channel <- build_delta_channel(.lf_terms, time_var, X_time_surv, X_time_quad)
     backend_args$X_delta_surv <- delta_channel$X_delta_surv
     backend_args$X_delta_quad <- delta_channel$X_delta_quad
     if (q > 1L) {
@@ -1539,7 +1557,7 @@ jm_fit <- function(long_formula,
         # be WRONG here (X's zero-row has the wrong number of columns to
         # match a sliced Z, and more fundamentally Z's own basis functions
         # may differ entirely from X's).
-        z_delta <- build_delta_channel(random_formula, time_var, Z_time_surv, Z_time_quad)
+        z_delta <- build_delta_channel(.rf_terms, time_var, Z_time_surv, Z_time_quad)
         backend_args$Z_delta_surv <- z_delta$X_delta_surv
         backend_args$Z_delta_quad <- z_delta$X_delta_quad
       }
@@ -1547,13 +1565,13 @@ jm_fit <- function(long_formula,
   }
 
   if ("area" %in% assoc_types) {
-    area_channel <- build_area_channel(long_formula, time_var, surv_arr$T_surv,
+    area_channel <- build_area_channel(.lf_terms, time_var, surv_arr$T_surv,
                                         surv_arr$t_quad, surv_arr$gk_weights)
     backend_args$X_area_surv <- area_channel$X_area_surv
     backend_args$X_area_quad <- area_channel$X_area_quad
     if (q > 1L) {
       if (!is.null(random_formula)) {
-        z_area <- build_area_channel(random_formula, time_var, surv_arr$T_surv,
+        z_area <- build_area_channel(.rf_terms, time_var, surv_arr$T_surv,
                                       surv_arr$t_quad, surv_arr$gk_weights)
         backend_args$Z_area_surv <- z_area$X_area_surv
         backend_args$Z_area_quad <- z_area$X_area_quad
@@ -1568,7 +1586,7 @@ jm_fit <- function(long_formula,
     # build_design.R's parse_functional_forms docs for the full story).
     # Reuses build_area_channel()'s already-validated raw integral rather
     # than duplicating the nested-quadrature logic.
-    raw_area <- build_area_channel(long_formula, time_var, surv_arr$T_surv,
+    raw_area <- build_area_channel(.lf_terms, time_var, surv_arr$T_surv,
                                     surv_arr$t_quad, surv_arr$gk_weights)
     X_area_avg_surv <- raw_area$X_area_surv / surv_arr$T_surv
 
@@ -1587,7 +1605,7 @@ jm_fit <- function(long_formula,
     backend_args$X_area_avg_quad <- X_area_avg_quad
     if (q > 1L) {
       if (!is.null(random_formula)) {
-        z_raw_area <- build_area_channel(random_formula, time_var, surv_arr$T_surv,
+        z_raw_area <- build_area_channel(.rf_terms, time_var, surv_arr$T_surv,
                                           surv_arr$t_quad, surv_arr$gk_weights)
         Z_area_avg_surv <- z_raw_area$X_area_surv / surv_arr$T_surv
         Z_area_avg_quad <- array(0, dim = dim(z_raw_area$X_area_quad))
@@ -1793,7 +1811,10 @@ jm_fit <- function(long_formula,
     # random_effects argument directly, since q may come from
     # random_formula instead when that's supplied. fit_nuts()'s own logic
     # only checks equality to "intercept", so any other string is fine.
-    backend_args$random_effects <- if (q == 1L) "intercept" else "intercept_slope"
+    # q >= 3 is "general": the backend reads q from Z_long's shape (below),
+    # and this string only matters for its legacy no-Z fallback.
+    backend_args$random_effects <- if (q == 1L) "intercept" else
+                                   if (q == 2L) "intercept_slope" else "general"
 
     # fit_nuts() already accepts Z_long/Z_time_surv/Z_time_quad as
     # optional overrides, falling back to its own internal X[:, :q]
@@ -1878,11 +1899,20 @@ jm_fit <- function(long_formula,
       } else {
         stats::as.formula(paste0("~", time_var, " | ", id_var))
       }
-      lme_prefit <- tryCatch(
-        nlme::lme(long_formula, random = random_form, data = data_long,
-                  control = nlme::lmeControl(opt = "optim")),
-        error = function(e) NULL
-      )
+      # random_form above is kept for readability; the helper builds the
+      # same "~ terms | id" formula, and for q >= 3 falls back to a
+      # diagonal covariance when the unstructured one fails (R/prefit.R).
+      .pf <- .jmjax_lme_prefit(long_formula, random_formula,
+                               id_var, data_long,
+                               nlme::lmeControl(opt = "optim"))
+      lme_prefit <- .pf$fit
+      .prefit_report$priors <- .pf$structure
+      if (identical(.pf$structure, "diagonal")) {
+        message("empirical-Bayes priors: the lme() pre-fit with an ",
+                "unstructured random-effects covariance did not converge (",
+                .pf$message, "); a diagonal covariance (pdDiag) was used. ",
+                "The correlations keep their LKJ prior.")
+      }
       if (!is.null(lme_prefit)) {
         # A user-supplied value takes precedence (as documented); before
         # 0.4.0 the pre-fit silently overwrote it.
@@ -2044,17 +2074,17 @@ jm_fit <- function(long_formula,
       is.null(control$init_values)) {
     .ws <- tryCatch({
       .lme_ws <- if (inherits(control$.lme_object, "lme")) {
+        .prefit_report$warm_start <- "supplied lme"
         control$.lme_object
       } else {
-        .rfw <- if (!is.null(random_formula)) {
-          stats::as.formula(paste(deparse(random_formula), "|", id_var))
-        } else {
-          stats::as.formula(paste0("~1 | ", id_var))
-        }
-        nlme::lme(long_formula, random = .rfw, data = data_long,
-                  control = nlme::lmeControl(opt = "optim", msMaxIter = 200,
-                                             niterEM = 100, msMaxEval = 500,
-                                             returnObject = TRUE))
+        .pfw <- .jmjax_lme_prefit(long_formula, random_formula %||% ~ 1,
+                                  id_var, data_long,
+                                  nlme::lmeControl(opt = "optim", msMaxIter = 200,
+                                                   niterEM = 100, msMaxEval = 500,
+                                                   returnObject = TRUE))
+        .prefit_report$warm_start <- .pfw$structure
+        if (is.null(.pfw$fit)) stop(.pfw$message)
+        .pfw$fit
       }
 
       .Dw <- as.matrix(nlme::getVarCov(.lme_ws))
@@ -3057,6 +3087,11 @@ jm_fit <- function(long_formula,
         .cv <- py_result$convergence
         if (is.null(.cv)) .cv <- list()
         .cv$precision <- .backend_precision()
+        # Which lme() covariance the pre-fits used ("unstructured",
+        # "diagonal", or "none" = data-free priors); NULL when no pre-fit
+        # ran (MLE methods, or empirical_bayes_prior = FALSE and no warm
+        # start).
+        .cv$prefit <- if (length(.prefit_report)) .prefit_report else NULL
         .cv
       }),
       # Opt-in and purely ADDITIVE: control$return_backend_data = TRUE
@@ -3101,6 +3136,18 @@ jm_fit <- function(long_formula,
         id_var = id_var, time_var = time_var,
         long_formula = .pred_orig$long_formula,
         random_formula = .pred_orig$random_formula,
+        # The same formulas with ns()/bs()/poly() knots fixed on the data
+        # they were fitted to, for predict() (.jmjax_fixed_terms()).
+        long_terms = .jmjax_fixed_terms(.pred_orig$long_formula, .pred_orig$data_long),
+        random_terms = .jmjax_fixed_terms(.pred_orig$random_formula, .pred_orig$data_long),
+        # Column names of Z on the user's scale ("(Intercept)", "time",
+        # "I(time^2)", ...), used to label sigma_b and the correlation
+        # matrix (VarCorr(), print(), summary()).
+        re_names = tryCatch(
+          colnames(stats::model.matrix(
+            stats::delete.response(stats::terms(.pred_orig$random_formula)),
+            data = .pred_orig$data_long)),
+          error = function(e) NULL),
         surv_formula = surv_formula,
         assoc_types = assoc_types,
         subj_ids = long_arr$subj_ids,
