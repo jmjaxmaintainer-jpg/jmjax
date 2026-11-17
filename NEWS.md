@@ -1,3 +1,69 @@
+# jmjax 0.5.0
+
+## Any number of random effects for one marker (MCMC)
+
+* `jm_bayes()` now fits any number of random effects per subject, e.g.
+  `random_formula = ~ year + I(year^2)` or `~ splines::ns(year, 2)`. The
+  random-effects correlation matrix gets an LKJ prior; `summary()` reports
+  `sigma_b0`, `sigma_b1`, ... and `rho_i_j` (0-based, `i < j`) for three or
+  more. `jm_mle()` still fits at most two (adaptive Gauss-Hermite), and says
+  so when asked for more.
+* New `VarCorr()` method: the random-effects standard deviations, named
+  after the columns of the random-effects design (`(Intercept)`, `year`,
+  `I(year^2)`), with their correlation and covariance matrices.
+* The rotation (`control$rotate_absorbable`) applies at every `q`; its
+  dense mass-matrix block is `p + k q`.
+* The empirical-Bayes `lme()` pre-fit falls back to a diagonal
+  random-effects covariance when the unstructured one fails, then to
+  data-free priors, and reports which it used (`fit$convergence$prefit`).
+* `random_effects_method = "wishart_gibbs"` stays at `q = 2` and now gives
+  a clear error above that.
+
+## Several longitudinal markers (MCMC)
+
+* `jm_bayes()` fits two or more Gaussian markers: give `long_formula` as a
+  named list (`list(bili = log(serBilir) ~ year, alb = albumin ~ year)`),
+  `random_formula` as one formula or a list named the same way, and
+  `data_long` as a named list of data frames or one data frame with a
+  marker column (`marker_var`). Markers may be observed at different
+  times.
+* Each marker gets its own fixed effects (`beta_<marker>_<j>`), residual SD
+  (`sigma_e_<marker>`) and association (`alpha_<marker>`, plus
+  `alpha_<marker>_<form>` for `delta`, `area` or `area_avg` forms given
+  per marker in `functional_forms`). The hazard is `h0(t) exp(gamma'w + sum_k alpha_k
+  m_ik(t))`.
+* The random effects of all markers are stacked with a full covariance and
+  an LKJ prior on its correlation, which links the markers;
+  `control$re_structure = "block"` makes it block-diagonal (independent
+  markers).
+* The rotation needs no change in method: with block-diagonal `X` and `Z`
+  and stacked `beta`, the joint absorbable construction of 0.4.0 applies
+  as it is, with ONE basis for the union over markers. (Per-marker bases
+  are exact only for a block-diagonal covariance; under a full covariance
+  they are not, while the union basis is - see
+  `tests/testthat/python/check_multi_marker_construction.py`.)
+* A one-marker list gives the same fit as the plain formula.
+* Not supported for several markers: `jm_mle()` (it says so) and
+  `predict()` (planned).
+
+## Bug fixes
+
+* Spline and polynomial time bases in `long_formula` or `random_formula`
+  (`ns()`, `bs()`, `poly()`) kept the knots computed from the
+  longitudinal times only at those times. At event times and quadrature
+  nodes they were recomputed from those points, so the trajectory in the
+  hazard was not the fitted one. The knots are now fixed from the
+  longitudinal data everywhere (`predict()` too). Linear-in-time designs,
+  including all those in the vignettes and the methods paper, were not
+  affected.
+
+## Benchmarks
+
+* `dev/bench_multi_pbc2.R` (against `JMbayes2` on `pbc2` at `q = 4` and
+  `q = 6`) and `dev/bench_multi_sim.R` (two and three markers, sparse and
+  dense visits), with one ESS estimator for every sampler; see
+  `vignette("jmjax-validation")`.
+
 # jmjax 0.4.0
 
 ## The absorbable directions are defined jointly across random-effect columns

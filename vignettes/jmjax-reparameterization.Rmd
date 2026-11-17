@@ -1463,10 +1463,11 @@ quantity.
     Monte Carlo SEs), with coverage $0.92$ and $\mathrm{sd\_ratio}$
     $0.955$.
 - **Scope.** The rotation is implemented under the default NUTS sampler
-  for $q = 1$, and for $q = 2$ with correlated random effects (jmjax fits
-  at most two random effects). Elsewhere the default
-  leaves it off, and an explicit `rotate_absorbable = TRUE` raises an
-  informative error. The simulation evidence is one design
+  for $q = 1$, for $q \ge 2$ with correlated random effects, and, from
+  version 0.5.0, for several longitudinal markers (one basis for the
+  union over markers; `vignette("jmjax-validation")` has the benchmark).
+  Elsewhere the default leaves it off, and an explicit
+  `rotate_absorbable = TRUE` raises an informative error. The simulation evidence is one design
   family (Section 6.1), with a spline baseline hazard; the earlier sweep
   pilots also covered a Weibull hazard.
 - **Near-collinearity.** The basis construction's rank decision is a
@@ -1503,9 +1504,11 @@ quantity.
   carries over to any model whose random effects enter through a linear
   predictor, including generalized linear mixed models; crossed random
   effects would need one basis per grouping factor, each rotating that
-  factor's own index. More than two random effects per subject ($q \ge 3$)
-  is not supported by `jmjax`'s fitting code, although the construction of
-  Section 4 is (it is tested at $q = 3$).
+  factor's own index. From version 0.5.0 `jmjax` fits more than two
+  random effects per subject ($q \ge 3$, MCMC only) with the construction
+  of Section 4 unchanged, and several longitudinal markers, where
+  block-diagonal $X$ and $Z$ with stacked $\beta$ reduce to the same
+  construction with one basis for the union over markers.
 
 ## 10. Related work summary
 

@@ -244,6 +244,65 @@ default). On the coefficients `JMbayes2` hierarchically centres, the
 unrotated fit trailed it by a factor of 17-33 and the rotated fit is at
 parity (0.88x-0.98x); see that vignette's Section 8.
 
+## Several markers: benchmark (0.5.0)
+
+From 0.5.0 `jm_bayes()` fits several longitudinal markers (see
+`vignette("jmjax-introduction")`). The benchmark scripts
+`dev/bench_multi_pbc2.R` and `dev/bench_multi_sim.R` compare three
+samplers on the same models: jmjax without the rotation (A), jmjax with
+it (R, the default) and `JMbayes2` (J). ESS comes from ONE estimator for
+every sampler (`posterior::ess_bulk` on the raw draws of `beta`, `alpha`
+and the random-effects covariance `D`, all on the reported scale); ESS/sec
+divides by wall time (jmjax: NUTS warm-up and sampling, JAX compilation
+included; `JMbayes2`: the whole `jm()` call). Each cell is the smallest
+ESS/sec in the block, as a geometric mean over 3 seeds; 4 chains x 1000
+draws after 1000 warm-up for jmjax, 4 x 12000 after 4000 burn-in for
+`JMbayes2`. Full tables, medians and per-parameter rows are in
+`multi_pbc2_tables.md` and `multi_sim_tables.md` (written by the scripts).
+
+**`pbc2`**, random intercept and slope in `year` for every marker;
+`log(serBilir) ~ year + age` and `albumin ~ year` (q = 4), plus
+`prothrombin ~ year` (q = 6); spline baseline hazard; `drug` in the
+survival submodel:
+
+| | sec | beta | alpha | D |
+|---|---:|---:|---:|---:|
+| q = 4, jmjax unrotated | 31 | 18.1 | 95.7 | 19.6 |
+| q = 4, jmjax rotated | 34 | 110.9 | 123.3 | 22.9 |
+| q = 4, `JMbayes2` | 31 | 23.1 | 18.0 | 9.2 |
+| q = 6, jmjax unrotated | 56 | 8.1 | 38.4 | 8.5 |
+| q = 6, jmjax rotated | 61 | 48.5 | 43.8 | 9.7 |
+| q = 6, `JMbayes2` | 46 | 13.3 | 12.2 | 6.1 |
+
+Rotated jmjax against `JMbayes2`: 4.8x (`beta`), 6.9x (`alpha`) and 2.5x
+(`D`) at q = 4; 3.7x, 3.6x and 1.6x at q = 6. The rotation itself
+multiplies the slowest `beta`'s ESS/sec by about 6 at both sizes (with one
+basis of k = 2 directions for the union over markers; dense block 13 and
+19) and changes `alpha` and `D` by 1.1x-1.3x. Max R-hat at most 1.024 for
+every sampler, no divergences, and the posterior means of the three agree.
+
+**Simulations** (`n = 300`, two or three markers with a full
+cross-marker correlation, markers observed at different times; "dense"
+visits every 0.5, "sparse" every 1.5, follow-up to 5), rotated against
+unrotated, ratio of the smallest ESS/sec per block:
+
+| | q | beta | alpha | D |
+|---|---:|---:|---:|---:|
+| 2 markers, dense | 4 | 8.3x | 0.87x | 0.92x |
+| 2 markers, sparse | 4 | 3.7x | 0.82x | 0.93x |
+| 3 markers, dense | 6 | 7.2x | 1.11x | 1.20x |
+| 3 markers, sparse | 6 | 3.2x | 0.68x | 0.63x |
+
+The gain on `beta` holds in every design. On `alpha` and `D` the rotation
+is roughly neutral in the dense designs and costs up to a third in the
+sparse three-marker design, where the rotated fit's max R-hat was also the
+highest seen (1.045; at most 1.019 elsewhere). Divergences were rare (at
+most 5 in 12 000 draws, two-marker designs only, with and without the
+rotation). Both samplers recover the truth equally well (same bias; 95%
+interval coverage from 3 replicates per design, so only a coarse check).
+The rotation is exact either way, so `control$rotate_absorbable = FALSE`
+remains a sound choice when `alpha` or `D` matters more than `beta`.
+
 ## Performance tuning
 
 A subsequent, thorough performance investigation - triggered by a
@@ -575,6 +634,8 @@ Done since the first version of this list:
   `vignette("jmjax-reparameterization")`, Sections 7-8).
 - Automatic rescaling of `time_var` for the MCMC methods
   (`control$scale_time`).
+- More than two random effects per subject (`q >= 3`) for the MCMC
+  methods, and several longitudinal markers (0.5.0; benchmark above).
 
 Natural next steps, not yet done:
 
@@ -593,8 +654,8 @@ Natural next steps, not yet done:
 - Predictions for new subjects, whose random effects have to be estimated
   from their own history (`predict()` currently covers subjects in the
   fitted data).
-- More than two random effects per subject (`q >= 3`), which the fitting
-  code does not support.
+- More than two random effects per subject for maximum likelihood, and
+  several markers for maximum likelihood and `predict()`.
 - Construct a simulation design with a genuinely non-collinear
   `value`/`area_avg` relationship (see the identifiability discussion
   above) to get a fully decisive individual-parameter cross-validation,

@@ -8,7 +8,7 @@
 #   u_i ~ N(0, D), D = diag(sd) R diag(sd) with a FULL correlation R
 #   (within-marker 0.2, cross-marker intercepts 0.4, cross-marker slopes 0.3,
 #   other cross pairs 0.1), so the markers are linked.
-#   hazard: 1.2 t^0.2 exp(-2.2 - 0.3 w_i + sum_k alpha_k m_k(t)), w_i ~ Bern(0.5)
+#   hazard: 1.2 t^0.2 exp(-3.7 - 0.3 w_i + sum_k alpha_k m_k(t)), w_i ~ Bern(0.5)
 #   visits: dense  every 0.5 (marker k offset by 0.1 (k - 1))
 #           sparse every 1.5 (marker k offset by 0.4 (k - 1)), +-0.1 jitter
 #   so the markers are observed at different times in both designs.
@@ -58,7 +58,7 @@ TRUTH <- list(
   beta = list(c(2.0, 0.4, 0.3), c(-1.0, 0.2), c(0.5, -0.3)),
   sd_b = list(c(0.7, 0.2), c(0.6, 0.15), c(0.5, 0.1)),
   sigma_e = c(0.3, 0.5, 0.4), alpha = c(0.5, -0.4, 0.3),
-  gamma = -0.3, shape = 1.2, log_lambda0 = -2.2)
+  gamma = -0.3, shape = 1.2, log_lambda0 = -3.7)
 corr_K <- function(K) {
   Q <- 2L * K; R <- diag(Q)
   for (i in 1:Q) for (j in 1:Q) if (i != j) {

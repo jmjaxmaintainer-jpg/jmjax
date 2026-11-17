@@ -76,7 +76,18 @@ Both take the same model arguments: a random intercept or a correlated
 random intercept and slope, baseline covariates in both submodels, and
 `functional_forms` to choose how the marker enters the hazard -
 `value(y)`, `delta(y)`, `area(y)` or `area_avg(y)`, with JMbayes2's
-syntax. Each documents only its own options. `jm_fit()`, which both call,
+syntax. `jm_bayes()` also fits more random effects (e.g.
+`random_formula = ~ year + I(year^2)`; see `VarCorr()`) and several
+markers at once:
+
+```r
+fit_m <- jm_bayes(list(bili = log_bili ~ year, alb = albumin ~ year),
+                  survival::Surv(years, status2) ~ drug,
+                  data_long = list(bili = pbc2, alb = pbc2), data_surv = pbc2.id,
+                  id_var = "id", time_var = "year", random_formula = ~ year)
+```
+
+Each documents only its own options. `jm_fit()`, which both call,
 remains available as the general interface with every option; `?jm_fit`
 also lists the combinations each method supports.
 
@@ -94,9 +105,11 @@ and, for `jm_bayes()` fits, `ranef()` and `predict()`.
 
 ## Status
 
-Version 0.4.0. `predict()` currently covers `jm_bayes()` fits, subjects in
-the fitted data and the `value` association; dynamic prediction for new
-subjects is planned. See `NEWS.md` for the changes in this release.
+Version 0.5.0. `jm_bayes()` fits any number of random effects and several
+longitudinal markers; `jm_mle()` fits one marker with one or two random
+effects. `predict()` currently covers one-marker `jm_bayes()` fits,
+subjects in the fitted data and the `value` association; dynamic
+prediction for new subjects is planned. See `NEWS.md` for the changes in this release.
 
 ## Development
 

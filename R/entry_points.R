@@ -175,7 +175,8 @@ jm_mle <- function(long_formula, surv_formula, data_long, data_surv,
 #' its own fixed effects (\code{beta_<marker>_<j>}), residual SD
 #' (\code{sigma_e_<marker>}) and association parameter
 #' (\code{alpha_<marker>}); \code{functional_forms} can likewise be a list,
-#' one per marker (a slope or area form adds \code{alpha_<marker>_<form>}).
+#' one per marker (a \code{delta}, \code{area} or \code{area_avg} form adds
+#' \code{alpha_<marker>_<form>}).
 #' The random effects of all markers are stacked and get a full covariance
 #' with an LKJ prior on the correlation matrix, which links the markers;
 #' \code{control$re_structure = "block"} makes it block-diagonal

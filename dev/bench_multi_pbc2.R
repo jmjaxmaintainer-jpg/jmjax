@@ -8,8 +8,9 @@
 # Survival: Surv(years, death or transplant) ~ drug, as in the paper's
 # single-marker pbc2 study; spline baseline (5 interior knots, penalized,
 # JMbayes2: cubic B-splines on 6 segments). Value association per marker.
-# Each marker uses its own complete rows (prothrombin has missing values),
-# so the markers are observed at different times.
+# Each marker uses its own complete rows. In JMbayes2's pbc2 all three are
+# measured at every visit (1945 rows each); the unequal-visit case is
+# covered by dev/bench_multi_sim.R.
 #
 # ARMS: A jmjax unrotated | R jmjax rotated + dense (beta, b_gen_U) block |
 #       J JMbayes2 (full D across markers, its default).

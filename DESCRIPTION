@@ -1,18 +1,19 @@
 Package: jmjax
 Type: Package
 Title: Joint Models for Longitudinal and Survival Data via 'JAX'
-Version: 0.4.0
+Version: 0.5.0
 Authors@R: person("Changbin", "Guo", email = "jmjaxmaintainer@gmail.com",
                   role = c("aut", "cre", "cph"))
 Description: Fits shared-parameter joint models (linear mixed-effects
     longitudinal submodel + relative-risk survival submodel with Weibull or
     spline-approximated baseline hazard) using a 'JAX'/'NumPyro' backend for
     maximum likelihood (adaptive Gauss-Hermite quadrature) and full Bayesian
-    (NUTS) estimation. R provides the formula interface, design-matrix
-    construction, and summary/reporting; 'Python' (via 'reticulate') provides
-    the numerical fitting. Cross-validated against the 'JM' and 'JMbayes2'
-    packages; see the package vignettes for methodology and benchmark
-    results.
+    (NUTS) estimation. Bayesian fits also allow any number of random effects
+    and several longitudinal markers. R provides the formula interface,
+    design-matrix construction, and summary/reporting; 'Python' (via
+    'reticulate') provides the numerical fitting. Cross-validated against
+    the 'JM' and 'JMbayes2' packages; see the package vignettes for
+    methodology and benchmark results.
 License: MIT + file LICENSE
 URL: https://github.com/jmjaxmaintainer-jpg/jmjax,
     https://doi.org/10.5281/zenodo.22950083

@@ -92,14 +92,40 @@ compile_time_jx <- function(forms, rforms, dls, ds, surv_formula, time_var, arm,
 }
 
 # ---- JMbayes2 ------------------------------------------------------------------
-# Mixed_objects: one lme() per marker, each on its own data (markers may be
-# observed at different times). Draws from jb$mcmc, chains concatenated.
+# JMbayes2 needs every lme() fitted to the SAME data frame. The markers are
+# observed at different times, so build one frame over the union of (id,
+# time) rows with one response column per marker (named after the marker,
+# NA where that marker was not measured) and the subject-level covariates;
+# each lme() drops its own NA rows (na.exclude), as in the JMbayes2 docs.
+jb_common_data <- function(forms, dls, time_var) {
+  W <- NULL; covs <- NULL
+  for (m in names(forms)) {
+    d <- dls[[m]]; resp <- all.vars(forms[[m]])[1]
+    x <- data.frame(id = d$id, t = d[[time_var]], v = d[[resp]])
+    names(x) <- c("id", time_var, m)
+    W <- if (is.null(W)) x else merge(W, x, by = c("id", time_var), all = TRUE)
+    cv <- setdiff(all.vars(forms[[m]][[3]]), time_var)
+    if (length(cv)) {
+      s <- d[!duplicated(d$id), c("id", cv), drop = FALSE]
+      covs <- if (is.null(covs)) s else merge(covs, s[, c("id", setdiff(cv, names(covs))), drop = FALSE],
+                                              by = "id", all = TRUE)
+    }
+  }
+  if (!is.null(covs)) W <- merge(W, covs, by = "id", all.x = TRUE)
+  W <- W[order(W$id, W[[time_var]]), , drop = FALSE]
+  rownames(W) <- NULL
+  W
+}
+
+# Mixed_objects: one lme() per marker on the common frame. Draws from
+# jb$mcmc, chains concatenated.
 fit_jb <- function(forms, rforms, dls, ds, surv_formula, time_var, seed, chains,
                    n_iter, n_burnin) {
+  W <- jb_common_data(forms, dls, time_var)
   lmes <- lapply(names(forms), function(m) {
-    d <- dls[[m]]
     rf <- stats::as.formula(paste("~", paste(deparse(rforms[[m]][[2]]), collapse = ""), "| id"))
-    do.call(nlme::lme, list(fixed = forms[[m]], random = rf, data = d,
+    fx <- stats::as.formula(paste(m, "~", paste(deparse(forms[[m]][[3]]), collapse = "")))
+    do.call(nlme::lme, list(fixed = fx, random = rf, data = W,
                             na.action = stats::na.exclude,
                             control = nlme::lmeControl(opt = "optim", msMaxIter = 200,
                                                        niterEM = 100)))
