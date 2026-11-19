@@ -172,7 +172,11 @@ one per marker (a \code{delta}, \code{area} or \code{area_avg} form adds
 The random effects of all markers are stacked and get a full covariance
 with an LKJ prior on the correlation matrix, which links the markers;
 \code{control$re_structure = "block"} makes it block-diagonal
-(independent markers). A list with one marker gives the same fit as the
+(independent markers). \code{control$center_absorbable = TRUE}
+(experimental) samples the rotated absorbable block centred,
+\eqn{W = U L'}, so the dense \code{(beta, W)} mass-matrix block no longer
+depends on the sampled covariance; the model and posterior are unchanged.
+A list with one marker gives the same fit as the
 plain formula. Gaussian markers only; \code{predict()} is not yet
 available for these fits.
 }

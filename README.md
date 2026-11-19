@@ -105,7 +105,7 @@ and, for `jm_bayes()` fits, `ranef()` and `predict()`.
 
 ## Status
 
-Version 0.5.0. `jm_bayes()` fits any number of random effects and several
+Version 0.5.1. `jm_bayes()` fits any number of random effects and several
 longitudinal markers; `jm_mle()` fits one marker with one or two random
 effects. `predict()` currently covers one-marker `jm_bayes()` fits,
 subjects in the fitted data and the `value` association; dynamic

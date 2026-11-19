@@ -150,7 +150,31 @@ test_that("the multi-marker rotation is exact (full and block covariance)", {
     expect_true(is.finite(ld0))
     expect_lt(abs(ld0 - ld1), 1e-10 * max(1, abs(ld0)),
               label = sprintf("%s: |%.12f - %.12f|", st, ld0, ld1))
+    # Partially centred: a density in (W, V) with W = U L', so it differs
+    # from the unrotated one by exactly -k log|det L| (L = diag(sigma_b) L_corr).
+    ld2 <- do.call(be$multi_model$evaluate_log_density_multi,
+                   c(args, list(gen_reflectors = V, center_absorbable = TRUE)))
+    k <- ncol(V)
+    logdetL <- sum(log(args$sigma_b)) + sum(log(diag(args$L_corr)))
+    expect_lt(abs(ld2 + k * logdetL - ld0), 1e-10 * max(1, abs(ld0)),
+              label = sprintf("%s centred: |%.12f + %d * %.12f - %.12f|",
+                              st, ld2, k, logdetL, ld0))
   }
+})
+
+test_that("center_absorbable = TRUE fits, with W in the dense block", {
+  skip_if_no_backend()
+  sim <- simulate_joint_data_2m(n = 100, seed = 7)
+  fit <- mm_fit(sim, control = mm_ctrl(center_absorbable = TRUE))
+  rot <- fit$convergence$orthogonalize$rotation
+  expect_true(isTRUE(rot$applied))
+  expect_true(isTRUE(rot$center_absorbable))
+  expect_identical(as.integer(rot$dense_block_size), 13L)
+  expect_false(is.null(fit$posterior_samples$b_gen_W))
+  expect_true(all(is.finite(fit$estimates[c("alpha_y1", "alpha_y2", "rho_0_2")])))
+  expect_error(mm_fit(sim, control = mm_ctrl(center_absorbable = TRUE,
+                                             rotate_absorbable = FALSE)),
+               "center_absorbable")
 })
 
 test_that("two markers: recovery of beta, sigma_e, alpha and the cross-marker covariance", {

@@ -1,3 +1,34 @@
+# jmjax 0.5.1
+
+## Paper-grade multi-marker benchmarks
+
+* `dev/bench_m1_pbc2.R` and `dev/bench_m1_sim.R` rerun the 0.5.0
+  comparisons to a fixed bar (every reported parameter: rank-normalized
+  R-hat < 1.01, bulk and tail ESS > 400, draws doubled until met), with 10
+  seeds on `pbc2`, 20 replicates per simulated design for efficiency and 100
+  for coverage, medians and IQRs, the JAX compilation time reported
+  separately and the hardware recorded. The rotation multiplies the slowest
+  fixed effect's ESS/sec by 4-8; on `alpha` and the random-effects
+  covariance it is 0.91-1.00x the unrotated fit in the simulations
+  (medians) and 0.78-0.98x on `pbc2`. The larger losses the 0.5.0
+  development runs suggested (0.63-0.68x) did not replicate. See `vignette("jmjax-validation")`.
+
+## New experimental option
+
+* `control$center_absorbable = TRUE` (several markers) samples the rotated
+  absorbable block centred, `W = U L'`, so the dense `(beta, W)` mass-matrix
+  block no longer depends on the sampled covariance. Exact (tested against
+  the unrotated log density to 1e-10, up to the Jacobian), but no
+  consistent gain over the default in the benchmarks; off by default.
+* `control$return_b_draws = FALSE` (several markers) drops the per-subject
+  random-effect draws from `posterior_samples` for long runs.
+
+## Documentation
+
+* `?jm_fit` (`rotate_absorbable`): the automatic default applies at
+  `q >= 2` with correlated random effects, and to fits with several
+  markers.
+
 # jmjax 0.5.0
 
 ## Any number of random effects for one marker (MCMC)

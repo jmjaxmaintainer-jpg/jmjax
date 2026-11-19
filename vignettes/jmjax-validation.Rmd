@@ -244,64 +244,98 @@ default). On the coefficients `JMbayes2` hierarchically centres, the
 unrotated fit trailed it by a factor of 17-33 and the rotated fit is at
 parity (0.88x-0.98x); see that vignette's Section 8.
 
-## Several markers: benchmark (0.5.0)
+## Several markers: benchmark
 
 From 0.5.0 `jm_bayes()` fits several longitudinal markers (see
-`vignette("jmjax-introduction")`). The benchmark scripts
-`dev/bench_multi_pbc2.R` and `dev/bench_multi_sim.R` compare three
-samplers on the same models: jmjax without the rotation (A), jmjax with
-it (R, the default) and `JMbayes2` (J). ESS comes from ONE estimator for
-every sampler (`posterior::ess_bulk` on the raw draws of `beta`, `alpha`
-and the random-effects covariance `D`, all on the reported scale); ESS/sec
-divides by wall time (jmjax: NUTS warm-up and sampling, JAX compilation
-included; `JMbayes2`: the whole `jm()` call). Each cell is the smallest
-ESS/sec in the block, as a geometric mean over 3 seeds; 4 chains x 1000
-draws after 1000 warm-up for jmjax, 4 x 12000 after 4000 burn-in for
-`JMbayes2`. Full tables, medians and per-parameter rows are in
-`multi_pbc2_tables.md` and `multi_sim_tables.md` (written by the scripts).
+`vignette("jmjax-introduction")`). `dev/bench_m1_pbc2.R` and
+`dev/bench_m1_sim.R` compare four samplers on the same models: jmjax
+without the rotation (A), with it (R, the default), with it and the
+absorbable block sampled centred (C, `control$center_absorbable = TRUE`,
+see below), and `JMbayes2` (J, `pbc2` only).
 
-**`pbc2`**, random intercept and slope in `year` for every marker;
+**Protocol.** 4 chains, run in parallel on one core each (jmjax: 4 XLA CPU
+devices; `JMbayes2`: `cores = 4`), on an Apple M5 Pro (15 cores: 5
+performance, 10 efficiency). jmjax: 2000 warm-up and 4000 draws per chain;
+`JMbayes2`: 4000 burn-in and 12000 kept iterations per chain. A run counts
+only if every reported parameter (`beta`, `alpha`, the random-effects
+covariance `D`, `sigma_e`) has rank-normalized R-hat below 1.01 and bulk
+and tail ESS above 400; a run that misses is repeated with twice the draws.
+Every jmjax run met the bar at the first attempt (largest R-hat 1.0086,
+smallest bulk ESS 734); every `JMbayes2` run needed at least one
+doubling (24000 kept iterations per chain, 12 of 20 runs) and some two
+(48000, 8 runs), and its time is that of the run that met the bar. ESS is `posterior::ess_bulk` on the raw draws for
+every sampler; ESS/sec divides the smallest ESS in a block by wall time
+(jmjax: warm-up and sampling with JAX compilation included, which was 5-6
+seconds per fit; `JMbayes2`: the whole `jm()` call). Cells are the median
+[interquartile range] over 10 seeds (`pbc2`) or 20 simulated replicates,
+with ratios paired by seed or replicate. Full tables, including ESS/sec
+net of compilation, are written by the scripts.
+
+**`pbc2`**: random intercept and slope in `year` for every marker;
 `log(serBilir) ~ year + age` and `albumin ~ year` (q = 4), plus
 `prothrombin ~ year` (q = 6); spline baseline hazard; `drug` in the
-survival submodel:
+survival submodel. Smallest ESS/sec per block:
 
-| | sec | beta | alpha | D |
+| | sec | `beta` | `alpha` | `D` |
 |---|---:|---:|---:|---:|
-| q = 4, jmjax unrotated | 31 | 18.1 | 95.7 | 19.6 |
-| q = 4, jmjax rotated | 34 | 110.9 | 123.3 | 22.9 |
-| q = 4, `JMbayes2` | 31 | 23.1 | 18.0 | 9.2 |
-| q = 6, jmjax unrotated | 56 | 8.1 | 38.4 | 8.5 |
-| q = 6, jmjax rotated | 61 | 48.5 | 43.8 | 9.7 |
-| q = 6, `JMbayes2` | 46 | 13.3 | 12.2 | 6.1 |
+| q = 4, A unrotated | 79 | 25.7 [21.6, 32.4] | 161 [129, 187] | 33.6 [29.2, 43.0] |
+| q = 4, R rotated | 84 | 145 [131, 153] | 144 [124, 161] | 27.5 [22.5, 28.8] |
+| q = 4, C centred | 84 | 161 [141, 167] | 162 [145, 180] | 29.4 [27.6, 35.0] |
+| q = 4, J `JMbayes2` | 56 | 23.2 [20.9, 25.2] | 21.4 [21.3, 21.7] | 9.8 [9.6, 10.2] |
+| q = 6, A unrotated | 137 | 14.4 [13.2, 14.8] | 66.3 [61.0, 69.7] | 16.1 [15.1, 17.1] |
+| q = 6, R rotated | 143 | 85.1 [80.2, 88.5] | 65.8 [60.3, 70.5] | 14.9 [13.8, 15.8] |
+| q = 6, C centred | 143 | 81.1 [76.2, 86.5] | 63.1 [60.4, 65.6] | 14.7 [14.2, 15.1] |
+| q = 6, J `JMbayes2` | 117 | 14.8 [13.8, 15.1] | 14.6 [14.2, 15.6] | 6.6 [6.2, 6.9] |
 
-Rotated jmjax against `JMbayes2`: 4.8x (`beta`), 6.9x (`alpha`) and 2.5x
-(`D`) at q = 4; 3.7x, 3.6x and 1.6x at q = 6. The rotation itself
-multiplies the slowest `beta`'s ESS/sec by about 6 at both sizes (with one
-basis of k = 2 directions for the union over markers; dense block 13 and
-19) and changes `alpha` and `D` by 1.1x-1.3x. Max R-hat at most 1.024 for
-every sampler, no divergences, and the posterior means of the three agree.
+Paired ratios: R/J is 6.1 / 6.6 / 2.8 (`beta` / `alpha` / `D`) at q = 4 and
+6.0 / 4.5 / 2.2 at q = 6; R/A is 5.4 / 0.96 / 0.78 and 6.0 / 0.98 / 0.92.
+No jmjax run had a divergence. The posterior means of the four samplers
+agree to a fraction of a posterior SD (the largest gap is `alpha` for
+albumin, -2.52 for jmjax against -2.62 for `JMbayes2` at q = 4, with a
+posterior SD of about 0.24).
 
-**Simulations** (`n = 300`, two or three markers with a full
-cross-marker correlation, markers observed at different times; "dense"
-visits every 0.5, "sparse" every 1.5, follow-up to 5), rotated against
-unrotated, ratio of the smallest ESS/sec per block:
+**Simulations** (`n = 300`; two or three markers with a full
+cross-marker correlation, observed at different times; visits every 0.5,
+"dense", or every 1.5, "sparse"; follow-up to 5; 41-58% events), paired
+ratios of the smallest ESS/sec per block over 20 replicates:
 
-| | q | beta | alpha | D |
-|---|---:|---:|---:|---:|
-| 2 markers, dense | 4 | 8.3x | 0.87x | 0.92x |
-| 2 markers, sparse | 4 | 3.7x | 0.82x | 0.93x |
-| 3 markers, dense | 6 | 7.2x | 1.11x | 1.20x |
-| 3 markers, sparse | 6 | 3.2x | 0.68x | 0.63x |
+| | q | R/A `beta` | R/A `alpha` | R/A `D` | C/R `beta` | C/R `alpha` | C/R `D` |
+|---|---:|---:|---:|---:|---:|---:|---:|
+| 2 markers, dense | 4 | 7.5 [7.1, 8.5] | 0.97 [0.92, 1.02] | 0.97 [0.92, 1.02] | 0.97 [0.94, 1.01] | 0.99 [0.95, 1.01] | 0.99 [0.96, 1.01] |
+| 2 markers, sparse | 4 | 5.0 [4.1, 5.9] | 0.91 [0.80, 1.01] | 0.92 [0.83, 0.97] | 1.01 [0.90, 1.15] | 1.05 [0.90, 1.16] | 1.02 [0.90, 1.06] |
+| 3 markers, dense | 6 | 8.1 [7.1, 8.9] | 1.00 [0.92, 1.08] | 0.99 [0.93, 1.12] | 0.99 [0.98, 1.06] | 1.01 [0.92, 1.05] | 0.99 [0.96, 1.05] |
+| 3 markers, sparse | 6 | 4.2 [3.2, 5.2] | 0.95 [0.86, 1.07] | 0.99 [0.83, 1.07] | 0.96 [0.87, 1.11] | 0.94 [0.87, 1.02] | 0.93 [0.86, 1.08] |
 
-The gain on `beta` holds in every design. On `alpha` and `D` the rotation
-is roughly neutral in the dense designs and costs up to a third in the
-sparse three-marker design, where the rotated fit's max R-hat was also the
-highest seen (1.045; at most 1.019 elsewhere). Divergences were rare (at
-most 5 in 12 000 draws, two-marker designs only, with and without the
-rotation). Both samplers recover the truth equally well (same bias; 95%
-interval coverage from 3 replicates per design, so only a coarse check).
-The rotation is exact either way, so `control$rotate_absorbable = FALSE`
-remains a sound choice when `alpha` or `D` matters more than `beta`.
+The rotation multiplies the slowest `beta`'s ESS/sec by 4-8 in every
+design and leaves `alpha` and `D` within about 10% of the unrotated fit
+(medians 0.91-1.00). The 0.5.0 development runs (3 seeds, 1000 draws, R-hat
+up to 1.045) had suggested a loss on `alpha` and `D` growing with q under
+sparse visits (0.68x and 0.63x at three markers); it did not replicate at
+this length. Divergences were rare in every arm: at most 80 divergent draws
+in 320 000 per design and arm.
+
+**Centring the absorbable block (arm C).** In the rotated coordinates
+`(beta, U)` a shift of the fixed effects is offset along a direction that
+depends on the sampled covariance factor L, so a dense metric adapted at
+one L could mismatch as L moves. Arm C samples `W = U L'` instead, which
+makes that direction free of L. It is exact (the log density differs from
+the unrotated one by exactly the Jacobian `-k log|det L|`, checked to
+1e-10 in the tests), but it made no consistent difference: C/R is
+1.09-1.17 on `pbc2` at q = 4, 0.96-0.99 at q = 6, and 0.93-1.05 in the
+simulations, with every interquartile range but one containing 1. `D` is
+the slowest block in every arm and barely moves between A, R and C, so its
+mixing is limited by something other than the fixed-effects ridge.
+`center_absorbable` stays an experimental option, off by default.
+
+**Coverage** of 95% equal-tailed credible intervals, rotated sampler,
+100 replicates: two markers dense, mean coverage over parameters 0.960
+(`beta`), 0.955 (`alpha`), 0.961 (`D`), 0.950 (`sigma_e`); three markers
+sparse, 0.943, 0.943, 0.944, 0.953. With 100 replicates one coverage has
+a Monte Carlo SE of about 0.022; the lowest of the 53 were 0.88 (a
+three-marker sparse slope variance and covariance, and one slope). In the
+three-marker sparse design `alpha` is biased away from zero by about 0.05
+for the two markers with the weakest association (true -0.4 and 0.3),
+with coverage 0.93-0.95.
 
 ## Performance tuning
 

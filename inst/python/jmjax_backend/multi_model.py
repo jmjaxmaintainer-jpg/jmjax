@@ -35,6 +35,20 @@ covariates) and passes the exact linear maps back to the user's scale:
 beta_orig = A beta (A = beta_transform, P x P) and b_orig = B b
 (B = re_transform, Q x Q, block-diagonal), so Sigma_orig = B Sigma B'. Every
 reported draw is transformed before summaries and diagnostics.
+
+PARTIAL CENTERING (control$center_absorbable = TRUE; experimental, 0.5.1).
+The rotated model samples b_std = H [U; V] with U [k, Q], V [N - k, Q] iid
+N(0, 1) and b = b_std L'. In (beta, U) a shift d of the fixed effects is
+offset by U -> U + Q' Delta(d) (L')^{-1}, which moves with the sampled L,
+so a dense metric adapted at one L mismatches as L moves. Centering only
+the absorbable block samples W = U L' instead (rows ~ N(0, L L')), keeping
+V non-centred: b = H [W; V L'] = Q W + Q_perp V L'. The ridge in
+(beta, W) is W -> W + Q' Delta(d), free of L, so one fixed dense block over
+(beta, W) fits it at every L. The prior is written on W directly (a
+multivariate normal with scale_tril L), so no Jacobian term is needed; the
+funnel this brings back involves only the k rows of W. Same model, same
+posterior of every model quantity; only the coordinates NUTS moves in
+change. Sample site: b_gen_W; dense block ("beta", "b_gen_W").
 """
 import time
 import warnings
@@ -72,7 +86,8 @@ def build_model_multi(P, Q, n_splines, block_sizes, baseline_hazard="spline",
                       sigma_b_prior_mean=None, sigma_b_prior_shape=5.0,
                       lkj_concentration=3.0, alpha_prior_sd=2.0,
                       gamma_prior_sd=2.0, spline_penalty_shape=5.0,
-                      spline_penalty_rate=0.5, gen_reflectors=None):
+                      spline_penalty_rate=0.5, gen_reflectors=None,
+                      center_absorbable=False):
     """Return the NumPyro model for K = len(block_sizes) markers."""
     K = len(block_sizes)
 
@@ -142,16 +157,27 @@ def build_model_multi(P, Q, n_splines, block_sizes, baseline_hazard="spline",
         else:
             L_corr = numpyro.sample("L_corr", dist.LKJCholesky(Q, concentration=lkj_concentration))
         L = sigma_b[:, None] * L_corr
-        if gen_reflectors is not None:
+        if gen_reflectors is not None and center_absorbable:
+            # b = H [W; V L'], W rows ~ N(0, L L') (centred), V iid N(0, 1)
+            Vh = jnp.asarray(gen_reflectors)
+            kg = int(gen_reflectors.shape[1])
+            Wc = numpyro.sample("b_gen_W", dist.MultivariateNormal(
+                jnp.zeros(Q), scale_tril=L).expand([kg]).to_event(1))
+            Vr = numpyro.sample("b_gen_V", dist.Normal(0.0, 1.0)
+                                .expand([int(gen_reflectors.shape[0]) - kg, Q]).to_event(2))
+            b = numpyro.deterministic("b", _apply_reflectors(
+                Vh, jnp.concatenate([Wc, Vr @ L.T], axis=0)))
+        elif gen_reflectors is not None:
             Vh = jnp.asarray(gen_reflectors)
             kg = int(gen_reflectors.shape[1])
             U = numpyro.sample("b_gen_U", dist.Normal(0.0, 1.0).expand([kg, Q]).to_event(2))
             Vr = numpyro.sample("b_gen_V", dist.Normal(0.0, 1.0)
                                 .expand([int(gen_reflectors.shape[0]) - kg, Q]).to_event(2))
             b_std = _apply_reflectors(Vh, jnp.concatenate([U, Vr], axis=0))
+            b = numpyro.deterministic("b", b_std @ L.T)
         else:
             b_std = numpyro.sample("b_std", dist.Normal(0.0, 1.0).expand([N_sub, Q]).to_event(2))
-        b = numpyro.deterministic("b", b_std @ L.T)
+            b = numpyro.deterministic("b", b_std @ L.T)
 
         # ---- longitudinal likelihood (flat over markers) --------------
         mu = X @ beta + jnp.sum(Z * b[subj], axis=-1)
@@ -222,6 +248,10 @@ def fit_nuts_multi(y, X, Z, subj, marker, XS, ZS, XQ, ZQ, T_surv, event,
         raise ValueError("control$re_structure must be 'full' or 'block'")
     baseline_hazard = str(control.get("baseline_hazard", "spline"))
     spline_prior = str(control.get("spline_prior", "independent"))
+    center_absorbable = bool(control.get("center_absorbable", False))
+    if center_absorbable and control.get("rotate_absorbable", True) is False:
+        raise ValueError("control$center_absorbable = TRUE needs the rotation "
+                         "(rotate_absorbable = FALSE was given)")
 
     # ---- rotation: one Q for the union over markers ------------------
     gen_reflectors = None
@@ -245,6 +275,7 @@ def fit_nuts_multi(y, X, Z, subj, marker, XS, ZS, XQ, ZQ, T_surv, event,
             "condition_s_residual": float(info["condition_s_residual"]),
             "n_rejected_condition_s": int(info["n_rejected_s"]),
             "dense_block_size": None,
+            "center_absorbable": bool(center_absorbable and gen_reflectors is not None),
         }
 
     def _opt(name):
@@ -264,11 +295,11 @@ def fit_nuts_multi(y, X, Z, subj, marker, XS, ZS, XQ, ZQ, T_surv, event,
         gamma_prior_sd=float(control.get("gamma_prior_sd", 2.0)),
         spline_penalty_shape=float(control.get("spline_penalty_shape", 5.0)),
         spline_penalty_rate=float(control.get("spline_penalty_rate", 0.5)),
-        gen_reflectors=gen_reflectors)
+        gen_reflectors=gen_reflectors, center_absorbable=center_absorbable)
 
     dense_blocks = []
     if gen_reflectors is not None and control.get("dense_mass_generator_beta", True) is not False:
-        dense_blocks.append(("beta", "b_gen_U"))
+        dense_blocks.append(("beta", "b_gen_W" if center_absorbable else "b_gen_U"))
         if rot_report is not None:
             rot_report["dense_block_size"] = int(P + gen_reflectors.shape[1] * Q)
     if baseline_hazard == "spline" and spline_prior == "penalized" and \
@@ -375,10 +406,14 @@ def fit_nuts_multi(y, X, Z, subj, marker, XS, ZS, XQ, ZQ, T_surv, event,
     posterior_samples = {nm: np.asarray(v).tolist() for nm, v in named.items()}
     posterior_samples["beta"] = tr["beta"].tolist()
     posterior_samples["sigma_b"] = tr["sigma_b"].tolist()
-    posterior_samples["b"] = tr["b"].tolist()
+    # The per-subject draws [S, N, Q] are the bulk of the result; long
+    # benchmark runs drop them (control$return_b_draws = FALSE).
+    if control.get("return_b_draws", True) is not False:
+        posterior_samples["b"] = tr["b"].tolist()
     posterior_samples["corr"] = tr["R"].tolist()
-    if "b_gen_U" in raw:
-        posterior_samples["b_gen_U"] = np.asarray(raw["b_gen_U"]).tolist()
+    for _g in ("b_gen_U", "b_gen_W"):
+        if _g in raw:
+            posterior_samples[_g] = np.asarray(raw[_g]).tolist()
 
     return {
         "estimates": estimates, "se": se, "vcov": None, "loglik": None,
@@ -386,6 +421,9 @@ def fit_nuts_multi(y, X, Z, subj, marker, XS, ZS, XQ, ZQ, T_surv, event,
                         "sampling_time_sec": elapsed, "mean_num_steps": mean_steps,
                         "max_num_steps": max_steps, "n_divergences": n_div,
                         "divergence_rate": div_rate, "warm_start": None,
+                        "num_devices": int(jax.local_device_count()),
+                        "chain_method": ("parallel" if jax.local_device_count() >= nc
+                                         else "sequential"),
                         "orthogonalize": None if rot_report is None else
                         {"requested": "none", "columns": [], "any_applied": False,
                          "rotation": rot_report}},
@@ -399,17 +437,22 @@ def evaluate_log_density_multi(y, X, Z, subj, marker, XS, ZS, XQ, ZQ, T_surv,
                                event, t_quad, gk_weights, B_T, B_quad,
                                n_splines, block_sizes, beta, sigma_e, alpha, W,
                                sigma_b, L_corr, b_std, gen_reflectors=None,
-                               re_structure="full"):
-    """Joint log density of the multi-marker model at one point, unrotated
-    or (gen_reflectors given) rotated with b_std mapped to H' b_std. For the
-    exactness test: the two must agree. Default (data-free) priors."""
+                               re_structure="full", center_absorbable=False):
+    """Joint log density of the multi-marker model at one point: unrotated,
+    rotated (gen_reflectors given; b_std mapped to H' b_std), or partially
+    centred (also center_absorbable=True; W = U L', so b is the same).
+    For the exactness tests the unrotated and rotated values must agree; the
+    partially centred one is a density in (W, V) rather than (U, V), so it
+    differs from them by exactly -k log|det L| (the Jacobian of U -> U L'),
+    and nothing else. Default (data-free) priors."""
     from numpyro.infer.util import log_density
     block_sizes = [int(v) for v in np.atleast_1d(block_sizes)]
     X = np.asarray(X, float); Z = np.asarray(Z, float)
     P, Q = X.shape[1], Z.shape[1]
     N_sub = int(np.asarray(T_surv).shape[0])
     model = build_model_multi(P, Q, int(n_splines), block_sizes,
-                              re_structure=re_structure, gen_reflectors=gen_reflectors)
+                              re_structure=re_structure, gen_reflectors=gen_reflectors,
+                              center_absorbable=bool(center_absorbable))
     params = {"beta": jnp.asarray(beta, dtype=float),
               "sigma_e": jnp.atleast_1d(jnp.asarray(sigma_e, dtype=float)),
               "alpha": jnp.atleast_1d(jnp.asarray(alpha, dtype=float)),
@@ -431,7 +474,12 @@ def evaluate_log_density_multi(y, X, Z, subj, marker, XS, ZS, XQ, ZQ, T_surv,
         Vg = np.asarray(gen_reflectors, float)
         kg = int(Vg.shape[1])
         UV = _apply_reflectors(Vg, Bs, transpose=True)
-        params["b_gen_U"] = jnp.asarray(UV[:kg]); params["b_gen_V"] = jnp.asarray(UV[kg:])
+        if center_absorbable:
+            Lfull = np.asarray(sigma_b, float)[:, None] * Lc
+            params["b_gen_W"] = jnp.asarray(UV[:kg] @ Lfull.T)
+        else:
+            params["b_gen_U"] = jnp.asarray(UV[:kg])
+        params["b_gen_V"] = jnp.asarray(UV[kg:])
     kw = dict(y=jnp.asarray(np.asarray(y, float)), X=jnp.asarray(X), Z=jnp.asarray(Z),
               subj=jnp.asarray(np.asarray(subj, int).reshape(-1)),
               marker=jnp.asarray(np.asarray(marker, int).reshape(-1)),

@@ -445,9 +445,11 @@ interface: every option of both approaches is documented here in full.
     \item{\code{rotate_absorbable}, \code{dense_mass_generator_beta}}{Both
       logical, default \code{NULL} (automatic), which means \strong{on}
       wherever the rotation applies: \code{random_effects_method =
-      "nuts"}, \code{random_effects_corr = TRUE} when \code{q = 2}
+      "nuts"}, \code{random_effects_corr = TRUE} when \code{q >= 2}
       (any \code{q = 1} random-intercept model qualifies), and no legacy
-      sweep option requested. Elsewhere the
+      sweep option requested; fits with several longitudinal markers are
+      always in scope (one basis for the union over markers, see
+      \code{\link{jm_bayes}}). Elsewhere the
       automatic default is silently off. \code{TRUE} insists and raises
       an error outside that scope; \code{FALSE} opts out and gives the
       unrotated fit. \code{dense_mass_generator_beta} likewise defaults
